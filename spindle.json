@@ -1,12 +1,11 @@
 {
-  "version": "0.1.0",
+  "version": "0.2.0",
   "name": "Bionic-style Reading",
   "identifier": "bionic_style_reading",
   "author": "patatasbravasch-arch",
   "github": "https://github.com/patatasbravasch-arch/bionic",
   "homepage": "https://github.com/patatasbravasch-arch/bionic",
-  "description": "Adds an unofficial Bionic-style fixation effect to rendered Lumiverse chat prose without changing stored messages.",
-  "permissions": ["chat_mutation"],
-  "entry_backend": "dist/backend.js",
+  "description": "Adds Bionic-style reading directly to rendered Lumiverse messages.",
+  "permissions": [],
   "entry_frontend": "dist/frontend.js"
 }
