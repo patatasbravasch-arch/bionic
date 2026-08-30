@@ -1,6 +1,7 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.6'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.7'
+  const LEGACY_SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.6'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const DEFAULTS = {
@@ -21,6 +22,11 @@ export function setup(ctx) {
     scopeAll: false,
 
     justifyMessages: false,
+    hyphenateMessages: false,
+    readingWidth: 'full',
+    paragraphSpacing: 0,
+    letterSpacing: 0,
+    wordSpacing: 0,
     textSize: 100,
     lineHeight: 1.55,
   }
@@ -37,6 +43,14 @@ export function setup(ctx) {
     ['"Atkinson Hyperlegible", sans-serif', 'Atkinson Hyperlegible'],
     ['"OpenDyslexic", sans-serif', 'OpenDyslexic'],
     ['custom', 'Custom font / CSS stack'],
+  ]
+
+  const WIDTH_OPTIONS = [
+    ['full', 'Full width'],
+    ['55ch', '55 characters — narrow'],
+    ['65ch', '65 characters — comfortable'],
+    ['75ch', '75 characters — relaxed'],
+    ['85ch', '85 characters — wide'],
   ]
 
   const BIONIC_SKIP_SELECTOR = [
@@ -80,7 +94,12 @@ export function setup(ctx) {
 
   function loadSettings() {
     try {
-      const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')
+      const raw =
+        localStorage.getItem(SETTINGS_KEY) ||
+        localStorage.getItem(LEGACY_SETTINGS_KEY) ||
+        '{}'
+
+      const saved = JSON.parse(raw)
 
       return {
         ...DEFAULTS,
@@ -147,6 +166,37 @@ export function setup(ctx) {
           typeof saved.justifyMessages === 'boolean'
             ? saved.justifyMessages
             : DEFAULTS.justifyMessages,
+
+        hyphenateMessages:
+          typeof saved.hyphenateMessages === 'boolean'
+            ? saved.hyphenateMessages
+            : DEFAULTS.hyphenateMessages,
+
+        readingWidth:
+          WIDTH_OPTIONS.some(([value]) => value === saved.readingWidth)
+            ? saved.readingWidth
+            : DEFAULTS.readingWidth,
+
+        paragraphSpacing: clamp(
+          saved.paragraphSpacing,
+          0,
+          1.5,
+          DEFAULTS.paragraphSpacing
+        ),
+
+        letterSpacing: clamp(
+          saved.letterSpacing,
+          -0.03,
+          0.12,
+          DEFAULTS.letterSpacing
+        ),
+
+        wordSpacing: clamp(
+          saved.wordSpacing,
+          -0.05,
+          0.3,
+          DEFAULTS.wordSpacing
+        ),
 
         textSize: clamp(saved.textSize, 80, 140, DEFAULTS.textSize),
         lineHeight: clamp(saved.lineHeight, 1.1, 2.2, DEFAULTS.lineHeight),
@@ -337,6 +387,66 @@ export function setup(ctx) {
       text-align: initial !important;
     }
 
+    ${MESSAGE_SELECTOR}.lumibionic-hyphens,
+    ${MESSAGE_SELECTOR}.lumibionic-hyphens p,
+    ${MESSAGE_SELECTOR}.lumibionic-hyphens li,
+    ${MESSAGE_SELECTOR}.lumibionic-hyphens blockquote {
+      hyphens: auto !important;
+      -webkit-hyphens: auto !important;
+    }
+
+    ${MESSAGE_SELECTOR}.lumibionic-hyphens pre,
+    ${MESSAGE_SELECTOR}.lumibionic-hyphens code,
+    ${MESSAGE_SELECTOR}.lumibionic-hyphens table {
+      hyphens: none !important;
+      -webkit-hyphens: none !important;
+    }
+
+    ${MESSAGE_SELECTOR}.lumibionic-reading-width {
+      max-width: var(--lumibionic-reading-width) !important;
+    }
+
+    ${MESSAGE_SELECTOR}.lumibionic-paragraph-spacing p {
+      margin-block-start: 0 !important;
+      margin-block-end: var(--lumibionic-paragraph-spacing) !important;
+    }
+
+    ${MESSAGE_SELECTOR}.lumibionic-paragraph-spacing p:last-child {
+      margin-block-end: 0 !important;
+    }
+
+    ${MESSAGE_SELECTOR}.lumibionic-letter-spacing,
+    ${MESSAGE_SELECTOR}.lumibionic-letter-spacing p,
+    ${MESSAGE_SELECTOR}.lumibionic-letter-spacing li,
+    ${MESSAGE_SELECTOR}.lumibionic-letter-spacing blockquote,
+    ${MESSAGE_SELECTOR}.lumibionic-letter-spacing a,
+    ${MESSAGE_SELECTOR}.lumibionic-letter-spacing span,
+    ${MESSAGE_SELECTOR}.lumibionic-letter-spacing em,
+    ${MESSAGE_SELECTOR}.lumibionic-letter-spacing strong {
+      letter-spacing: var(--lumibionic-letter-spacing) !important;
+    }
+
+    ${MESSAGE_SELECTOR}.lumibionic-word-spacing,
+    ${MESSAGE_SELECTOR}.lumibionic-word-spacing p,
+    ${MESSAGE_SELECTOR}.lumibionic-word-spacing li,
+    ${MESSAGE_SELECTOR}.lumibionic-word-spacing blockquote,
+    ${MESSAGE_SELECTOR}.lumibionic-word-spacing a,
+    ${MESSAGE_SELECTOR}.lumibionic-word-spacing span,
+    ${MESSAGE_SELECTOR}.lumibionic-word-spacing em,
+    ${MESSAGE_SELECTOR}.lumibionic-word-spacing strong {
+      word-spacing: var(--lumibionic-word-spacing) !important;
+    }
+
+    ${MESSAGE_SELECTOR}.lumibionic-letter-spacing code,
+    ${MESSAGE_SELECTOR}.lumibionic-letter-spacing pre {
+      letter-spacing: normal !important;
+    }
+
+    ${MESSAGE_SELECTOR}.lumibionic-word-spacing code,
+    ${MESSAGE_SELECTOR}.lumibionic-word-spacing pre {
+      word-spacing: normal !important;
+    }
+
     [data-lumibionic-fix] {
       font-weight: var(--lumibionic-weight, 600) !important;
     }
@@ -448,6 +558,10 @@ export function setup(ctx) {
       font-family: var(--lumibionic-preview-font, inherit) !important;
       font-size: var(--lumibionic-text-size, 100%);
       line-height: var(--lumibionic-line-height, 1.55);
+      letter-spacing: var(--lumibionic-preview-letter-spacing, normal);
+      word-spacing: var(--lumibionic-preview-word-spacing, normal);
+      hyphens: var(--lumibionic-preview-hyphens, manual);
+      -webkit-hyphens: var(--lumibionic-preview-hyphens, manual);
     }
 
     .lumibionic-preview * {
@@ -474,13 +588,15 @@ export function setup(ctx) {
     title: 'Reading & Fonts',
     shortName: 'Reading',
     headerTitle: 'Reading & Fonts',
-    description: 'Bionic reading, font reach, and typography',
+    description: 'Bionic reading, font reach, and long-form typography',
     keywords: [
       'bionic',
       'reading',
       'font',
       'typography',
       'justify',
+      'hyphenation',
+      'spacing',
       'accessibility',
     ],
   })
@@ -587,6 +703,31 @@ export function setup(ctx) {
       settings.justifyMessages
     )
 
+    root.classList.toggle(
+      'lumibionic-hyphens',
+      settings.hyphenateMessages
+    )
+
+    root.classList.toggle(
+      'lumibionic-reading-width',
+      settings.readingWidth !== 'full'
+    )
+
+    root.classList.toggle(
+      'lumibionic-paragraph-spacing',
+      settings.paragraphSpacing > 0.001
+    )
+
+    root.classList.toggle(
+      'lumibionic-letter-spacing',
+      Math.abs(settings.letterSpacing) > 0.0001
+    )
+
+    root.classList.toggle(
+      'lumibionic-word-spacing',
+      Math.abs(settings.wordSpacing) > 0.0001
+    )
+
     if (!settings.bionicEnabled) return
 
     const walker =
@@ -618,7 +759,14 @@ export function setup(ctx) {
     root
       .querySelectorAll(MESSAGE_SELECTOR)
       .forEach(el => {
-        el.classList.remove('lumibionic-justify')
+        el.classList.remove(
+          'lumibionic-justify',
+          'lumibionic-hyphens',
+          'lumibionic-reading-width',
+          'lumibionic-paragraph-spacing',
+          'lumibionic-letter-spacing',
+          'lumibionic-word-spacing'
+        )
         el.normalize()
       })
   }
@@ -688,6 +836,49 @@ export function setup(ctx) {
     root.style.setProperty(
       '--lumibionic-line-height',
       String(settings.lineHeight)
+    )
+
+    root.style.setProperty(
+      '--lumibionic-reading-width',
+      settings.readingWidth === 'full'
+        ? 'none'
+        : settings.readingWidth
+    )
+
+    root.style.setProperty(
+      '--lumibionic-paragraph-spacing',
+      `${settings.paragraphSpacing}em`
+    )
+
+    root.style.setProperty(
+      '--lumibionic-letter-spacing',
+      `${settings.letterSpacing}em`
+    )
+
+    root.style.setProperty(
+      '--lumibionic-word-spacing',
+      `${settings.wordSpacing}em`
+    )
+
+    root.style.setProperty(
+      '--lumibionic-preview-letter-spacing',
+      Math.abs(settings.letterSpacing) > 0.0001
+        ? `${settings.letterSpacing}em`
+        : 'normal'
+    )
+
+    root.style.setProperty(
+      '--lumibionic-preview-word-spacing',
+      Math.abs(settings.wordSpacing) > 0.0001
+        ? `${settings.wordSpacing}em`
+        : 'normal'
+    )
+
+    root.style.setProperty(
+      '--lumibionic-preview-hyphens',
+      settings.hyphenateMessages
+        ? 'auto'
+        : 'manual'
     )
 
     applyRootClasses()
@@ -956,7 +1147,7 @@ export function setup(ctx) {
       <div class="lumibionic-section">
 
         <div class="lumibionic-section-title">
-          Message layout
+          Long-form reading
         </div>
 
         <label class="lumibionic-check">
@@ -964,49 +1155,73 @@ export function setup(ctx) {
           <span>Justify message prose</span>
         </label>
 
+        <label class="lumibionic-check">
+          <input id="lb-hyphens" type="checkbox">
+          <span>Automatic hyphenation</span>
+        </label>
+
         <div class="lumibionic-muted">
-          Applies text justification to prose while leaving
-          code blocks and tables alone.
+          Hyphenation depends on browser support and the
+          language information available on the page.
+        </div>
+
+        <div class="lumibionic-control">
+          <label for="lb-reading-width">Reading width</label>
+          <select id="lb-reading-width"></select>
+          <div class="lumibionic-muted">
+            Limits long lines. “ch” is roughly one character wide.
+          </div>
         </div>
 
         <div class="lumibionic-control">
           <div class="lumibionic-row">
-            <label for="lb-size">
-              Message text size
-            </label>
-            <span
-              class="lumibionic-value"
-              id="lb-size-value"
-            ></span>
+            <label for="lb-paragraph-spacing">Paragraph spacing</label>
+            <span class="lumibionic-value" id="lb-paragraph-spacing-value"></span>
           </div>
-
-          <input
-            id="lb-size"
-            type="range"
-            min="80"
-            max="140"
-            step="5"
-          >
+          <input id="lb-paragraph-spacing" type="range" min="0" max="1.5" step="0.1">
+          <div class="lumibionic-muted">0 uses the theme default.</div>
         </div>
 
         <div class="lumibionic-control">
           <div class="lumibionic-row">
-            <label for="lb-line">
-              Message line spacing
-            </label>
-            <span
-              class="lumibionic-value"
-              id="lb-line-value"
-            ></span>
+            <label for="lb-letter-spacing">Letter spacing</label>
+            <span class="lumibionic-value" id="lb-letter-spacing-value"></span>
           </div>
+          <input id="lb-letter-spacing" type="range" min="-0.03" max="0.12" step="0.005">
+          <div class="lumibionic-muted">0 uses normal theme spacing.</div>
+        </div>
 
-          <input
-            id="lb-line"
-            type="range"
-            min="1.1"
-            max="2.2"
-            step="0.05"
-          >
+        <div class="lumibionic-control">
+          <div class="lumibionic-row">
+            <label for="lb-word-spacing">Word spacing</label>
+            <span class="lumibionic-value" id="lb-word-spacing-value"></span>
+          </div>
+          <input id="lb-word-spacing" type="range" min="-0.05" max="0.3" step="0.01">
+          <div class="lumibionic-muted">Useful when justified text feels too cramped or airy.</div>
+        </div>
+
+      </div>
+
+      <div class="lumibionic-section">
+
+        <div class="lumibionic-section-title">
+          Message typography
+        </div>
+
+        <div class="lumibionic-control">
+          <div class="lumibionic-row">
+            <label for="lb-size">Message text size</label>
+            <span class="lumibionic-value" id="lb-size-value"></span>
+          </div>
+          <input id="lb-size" type="range" min="80" max="140" step="5">
+        </div>
+
+        <div class="lumibionic-control">
+          <div class="lumibionic-row">
+            <label for="lb-line">Message line spacing</label>
+            <span class="lumibionic-value" id="lb-line-value"></span>
+          </div>
+          <input id="lb-line" type="range" min="1.1" max="2.2" step="0.05">
         </div>
 
       </div>
@@ -1059,6 +1274,14 @@ export function setup(ctx) {
   const scopeAll = $('#lb-scope-all')
 
   const justify = $('#lb-justify')
+  const hyphens = $('#lb-hyphens')
+  const readingWidth = $('#lb-reading-width')
+  const paragraphSpacing = $('#lb-paragraph-spacing')
+  const paragraphSpacingValue = $('#lb-paragraph-spacing-value')
+  const letterSpacing = $('#lb-letter-spacing')
+  const letterSpacingValue = $('#lb-letter-spacing-value')
+  const wordSpacing = $('#lb-word-spacing')
+  const wordSpacingValue = $('#lb-word-spacing-value')
   const size = $('#lb-size')
   const sizeValue = $('#lb-size-value')
   const line = $('#lb-line')
@@ -1072,6 +1295,18 @@ export function setup(ctx) {
     option.value = value
     option.textContent = label
     font.appendChild(option)
+  }
+
+  for (const [value, label] of WIDTH_OPTIONS) {
+    const option = document.createElement('option')
+    option.value = value
+    option.textContent = label
+    readingWidth.appendChild(option)
+  }
+
+  function formatEm(value, digits = 2) {
+    if (Math.abs(value) < 0.0001) return 'Theme'
+    return `${Number(value).toFixed(digits)}em`
   }
 
   function syncControls() {
@@ -1124,6 +1359,17 @@ export function setup(ctx) {
     }
 
     justify.checked = settings.justifyMessages
+    hyphens.checked = settings.hyphenateMessages
+    readingWidth.value = settings.readingWidth
+
+    paragraphSpacing.value = String(settings.paragraphSpacing)
+    paragraphSpacingValue.textContent = formatEm(settings.paragraphSpacing, 1)
+
+    letterSpacing.value = String(settings.letterSpacing)
+    letterSpacingValue.textContent = formatEm(settings.letterSpacing, 3)
+
+    wordSpacing.value = String(settings.wordSpacing)
+    wordSpacingValue.textContent = formatEm(settings.wordSpacing, 2)
 
     size.value = String(settings.textSize)
     sizeValue.textContent = `${settings.textSize}%`
@@ -1139,6 +1385,11 @@ export function setup(ctx) {
       'lb-preview-justify',
       settings.justifyMessages
     )
+
+    preview.style.maxWidth =
+      settings.readingWidth === 'full'
+        ? ''
+        : settings.readingWidth
 
     const sample =
       document.createTextNode(
@@ -1322,6 +1573,46 @@ export function setup(ctx) {
     )
   )
 
+  hyphens.addEventListener(
+    'change',
+    () => updateSetting(
+      'hyphenateMessages',
+      hyphens.checked
+    )
+  )
+
+  readingWidth.addEventListener(
+    'change',
+    () => updateSetting(
+      'readingWidth',
+      readingWidth.value
+    )
+  )
+
+  paragraphSpacing.addEventListener(
+    'input',
+    () => updateSetting(
+      'paragraphSpacing',
+      Number(paragraphSpacing.value)
+    )
+  )
+
+  letterSpacing.addEventListener(
+    'input',
+    () => updateSetting(
+      'letterSpacing',
+      Number(letterSpacing.value)
+    )
+  )
+
+  wordSpacing.addEventListener(
+    'input',
+    () => updateSetting(
+      'wordSpacing',
+      Number(wordSpacing.value)
+    )
+  )
+
   size.addEventListener(
     'input',
     () => updateSetting(
@@ -1405,6 +1696,13 @@ export function setup(ctx) {
       '--lumibionic-preview-font',
       '--lumibionic-text-size',
       '--lumibionic-line-height',
+      '--lumibionic-reading-width',
+      '--lumibionic-paragraph-spacing',
+      '--lumibionic-letter-spacing',
+      '--lumibionic-word-spacing',
+      '--lumibionic-preview-letter-spacing',
+      '--lumibionic-preview-word-spacing',
+      '--lumibionic-preview-hyphens',
     ]) {
       root.style.removeProperty(property)
     }
