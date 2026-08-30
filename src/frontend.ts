@@ -1,16 +1,26 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.5'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.6'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const DEFAULTS = {
     bionicEnabled: true,
-    fontEnabled: false,
     density: 'balanced',
     fixation: 35,
     weight: 600,
+
+    fontEnabled: false,
     font: 'inherit',
     customFont: '',
+
+    scopeMessages: true,
+    scopeBubble: false,
+    scopeComposer: false,
+    scopeMenus: false,
+    scopeNavigation: false,
+    scopeAll: false,
+
+    justifyMessages: false,
     textSize: 100,
     lineHeight: 1.55,
   }
@@ -29,7 +39,7 @@ export function setup(ctx) {
     ['custom', 'Custom font / CSS stack'],
   ]
 
-  const SKIP_SELECTOR = [
+  const BIONIC_SKIP_SELECTOR = [
     'code',
     'pre',
     'kbd',
@@ -52,6 +62,14 @@ export function setup(ctx) {
 
   let loadedFontFace = null
   let loadedFontUrl = null
+  let settings = loadSettings()
+  let scheduled = false
+  let rebuilding = false
+
+  const segmenter =
+    typeof Intl.Segmenter === 'function'
+      ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+      : null
 
   function clamp(value, min, max, fallback) {
     const n = Number(value)
@@ -62,39 +80,28 @@ export function setup(ctx) {
 
   function loadSettings() {
     try {
-      const saved = JSON.parse(
-        localStorage.getItem(SETTINGS_KEY) || '{}'
-      )
+      const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')
 
       return {
+        ...DEFAULTS,
+
         bionicEnabled:
           typeof saved.bionicEnabled === 'boolean'
             ? saved.bionicEnabled
             : DEFAULTS.bionicEnabled,
-
-        fontEnabled:
-          typeof saved.fontEnabled === 'boolean'
-            ? saved.fontEnabled
-            : DEFAULTS.fontEnabled,
 
         density:
           ['light', 'balanced', 'full'].includes(saved.density)
             ? saved.density
             : DEFAULTS.density,
 
-        fixation: clamp(
-          saved.fixation,
-          20,
-          70,
-          DEFAULTS.fixation
-        ),
+        fixation: clamp(saved.fixation, 20, 70, DEFAULTS.fixation),
+        weight: clamp(saved.weight, 500, 900, DEFAULTS.weight),
 
-        weight: clamp(
-          saved.weight,
-          500,
-          900,
-          DEFAULTS.weight
-        ),
+        fontEnabled:
+          typeof saved.fontEnabled === 'boolean'
+            ? saved.fontEnabled
+            : DEFAULTS.fontEnabled,
 
         font:
           typeof saved.font === 'string'
@@ -106,35 +113,54 @@ export function setup(ctx) {
             ? saved.customFont
             : DEFAULTS.customFont,
 
-        textSize: clamp(
-          saved.textSize,
-          80,
-          140,
-          DEFAULTS.textSize
-        ),
+        scopeMessages:
+          typeof saved.scopeMessages === 'boolean'
+            ? saved.scopeMessages
+            : DEFAULTS.scopeMessages,
 
-        lineHeight: clamp(
-          saved.lineHeight,
-          1.1,
-          2.2,
-          DEFAULTS.lineHeight
-        ),
+        scopeBubble:
+          typeof saved.scopeBubble === 'boolean'
+            ? saved.scopeBubble
+            : DEFAULTS.scopeBubble,
+
+        scopeComposer:
+          typeof saved.scopeComposer === 'boolean'
+            ? saved.scopeComposer
+            : DEFAULTS.scopeComposer,
+
+        scopeMenus:
+          typeof saved.scopeMenus === 'boolean'
+            ? saved.scopeMenus
+            : DEFAULTS.scopeMenus,
+
+        scopeNavigation:
+          typeof saved.scopeNavigation === 'boolean'
+            ? saved.scopeNavigation
+            : DEFAULTS.scopeNavigation,
+
+        scopeAll:
+          typeof saved.scopeAll === 'boolean'
+            ? saved.scopeAll
+            : DEFAULTS.scopeAll,
+
+        justifyMessages:
+          typeof saved.justifyMessages === 'boolean'
+            ? saved.justifyMessages
+            : DEFAULTS.justifyMessages,
+
+        textSize: clamp(saved.textSize, 80, 140, DEFAULTS.textSize),
+        lineHeight: clamp(saved.lineHeight, 1.1, 2.2, DEFAULTS.lineHeight),
       }
     } catch {
       return { ...DEFAULTS }
     }
   }
 
-  let settings = loadSettings()
-  let scheduled = false
-  let rebuilding = false
-
-  const segmenter =
-    typeof Intl.Segmenter === 'function'
-      ? new Intl.Segmenter(undefined, {
-          granularity: 'grapheme',
-        })
-      : null
+  function saveSettings() {
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
+    } catch {}
+  }
 
   function graphemes(value) {
     if (!segmenter) return Array.from(value)
@@ -151,22 +177,15 @@ export function setup(ctx) {
     }
 
     if (settings.font === 'custom') {
-      const value = settings.customFont.trim()
-      return value || 'inherit'
+      return settings.customFont.trim() || 'inherit'
     }
 
     return settings.font || 'inherit'
   }
 
   function shouldEmphasize(length) {
-    if (settings.density === 'light') {
-      return length >= 6
-    }
-
-    if (settings.density === 'balanced') {
-      return length >= 4
-    }
-
+    if (settings.density === 'light') return length >= 6
+    if (settings.density === 'balanced') return length >= 4
     return length >= 2
   }
 
@@ -180,77 +199,146 @@ export function setup(ctx) {
 
     let base
 
-    if (length <= 5) {
-      base = 1
-    } else if (length <= 8) {
-      base = 2
-    } else if (length <= 11) {
-      base = 3
-    } else {
-      base = 4
-    }
+    if (length <= 5) base = 1
+    else if (length <= 8) base = 2
+    else if (length <= 11) base = 3
+    else base = 4
 
     const multiplier = settings.fixation / 35
     let cut = Math.round(base * multiplier)
 
     cut = Math.max(
       1,
-      Math.min(
-        cut,
-        4,
-        length - 1
-      )
+      Math.min(cut, 4, length - 1)
     )
 
     return { chars, cut }
   }
 
   const removeStyle = ctx.dom.addStyle(`
-    ${MESSAGE_SELECTOR}.lumibionic-typography {
-      font-family:
-        var(--lumibionic-font-family, inherit)
-        !important;
+    /*
+     * Font reach is controlled by classes placed on <html>.
+     * The broad rules intentionally use !important so custom themes
+     * cannot silently win the font-family cascade.
+     */
 
-      font-size:
-        var(--lumibionic-text-size, 100%)
-        !important;
-
-      line-height:
-        var(--lumibionic-line-height, 1.55)
-        !important;
+    html.lb-font-messages ${MESSAGE_SELECTOR},
+    html.lb-font-messages ${MESSAGE_SELECTOR} * {
+      font-family: var(--lumibionic-font-family, inherit) !important;
     }
 
-    html body ${MESSAGE_SELECTOR}.lumibionic-font-override,
-    html body ${MESSAGE_SELECTOR}.lumibionic-font-override
-      *:not(
-        code,
-        code *,
-        pre,
-        pre *,
-        kbd,
-        kbd *,
-        samp,
-        samp *,
-        button,
-        button *,
-        input,
-        textarea,
-        select,
-        option,
-        svg,
-        svg *,
-        math,
-        math *
-      ) {
+    html.lb-font-bubble .lumibionic-bubble-scope,
+    html.lb-font-bubble .lumibionic-bubble-scope * {
+      font-family: var(--lumibionic-font-family, inherit) !important;
+    }
+
+    html.lb-font-composer textarea,
+    html.lb-font-composer input,
+    html.lb-font-composer [contenteditable="true"],
+    html.lb-font-composer form button,
+    html.lb-font-composer form button * {
+      font-family: var(--lumibionic-font-family, inherit) !important;
+    }
+
+    html.lb-font-menus [role="menu"],
+    html.lb-font-menus [role="menu"] *,
+    html.lb-font-menus [role="menuitem"],
+    html.lb-font-menus [role="menuitem"] *,
+    html.lb-font-menus [role="listbox"],
+    html.lb-font-menus [role="listbox"] *,
+    html.lb-font-menus [role="option"],
+    html.lb-font-menus [role="option"] *,
+    html.lb-font-menus [role="dialog"],
+    html.lb-font-menus [role="dialog"] *,
+    html.lb-font-menus [data-radix-popper-content-wrapper],
+    html.lb-font-menus [data-radix-popper-content-wrapper] *,
+    html.lb-font-menus [data-floating-ui-portal],
+    html.lb-font-menus [data-floating-ui-portal] * {
+      font-family: var(--lumibionic-font-family, inherit) !important;
+    }
+
+    html.lb-font-navigation nav,
+    html.lb-font-navigation nav *,
+    html.lb-font-navigation aside,
+    html.lb-font-navigation aside *,
+    html.lb-font-navigation header,
+    html.lb-font-navigation header *,
+    html.lb-font-navigation [role="navigation"],
+    html.lb-font-navigation [role="navigation"] *,
+    html.lb-font-navigation [role="tablist"],
+    html.lb-font-navigation [role="tablist"] *,
+    html.lb-font-navigation [role="tab"],
+    html.lb-font-navigation [role="tab"] * {
+      font-family: var(--lumibionic-font-family, inherit) !important;
+    }
+
+    html.lb-font-all body,
+    html.lb-font-all body * {
+      font-family: var(--lumibionic-font-family, inherit) !important;
+    }
+
+    /*
+     * Preserve code readability even when "Entire interface" is enabled.
+     */
+    html.lb-font-messages ${MESSAGE_SELECTOR} code,
+    html.lb-font-messages ${MESSAGE_SELECTOR} code *,
+    html.lb-font-messages ${MESSAGE_SELECTOR} pre,
+    html.lb-font-messages ${MESSAGE_SELECTOR} pre *,
+    html.lb-font-bubble .lumibionic-bubble-scope code,
+    html.lb-font-bubble .lumibionic-bubble-scope code *,
+    html.lb-font-bubble .lumibionic-bubble-scope pre,
+    html.lb-font-bubble .lumibionic-bubble-scope pre *,
+    html.lb-font-all code,
+    html.lb-font-all code *,
+    html.lb-font-all pre,
+    html.lb-font-all pre *,
+    html.lb-font-all kbd,
+    html.lb-font-all samp {
       font-family:
-        var(--lumibionic-font-family, inherit)
-        !important;
+        "SF Mono",
+        "Fira Code",
+        "JetBrains Mono",
+        "Menlo",
+        "Consolas",
+        monospace !important;
+    }
+
+    /*
+     * Do not let font overrides interfere with SVG icon internals.
+     */
+    html.lb-font-all svg,
+    html.lb-font-all svg * {
+      font-family: initial !important;
+    }
+
+    ${MESSAGE_SELECTOR} {
+      font-size: var(--lumibionic-text-size, 100%) !important;
+      line-height: var(--lumibionic-line-height, 1.55) !important;
+    }
+
+    ${MESSAGE_SELECTOR}.lumibionic-justify {
+      text-align: justify !important;
+      text-justify: inter-word;
+    }
+
+    ${MESSAGE_SELECTOR}.lumibionic-justify p,
+    ${MESSAGE_SELECTOR}.lumibionic-justify li,
+    ${MESSAGE_SELECTOR}.lumibionic-justify blockquote {
+      text-align: justify !important;
+      text-justify: inter-word;
+    }
+
+    ${MESSAGE_SELECTOR}.lumibionic-justify pre,
+    ${MESSAGE_SELECTOR}.lumibionic-justify code,
+    ${MESSAGE_SELECTOR}.lumibionic-justify table,
+    ${MESSAGE_SELECTOR}.lumibionic-justify th,
+    ${MESSAGE_SELECTOR}.lumibionic-justify td,
+    ${MESSAGE_SELECTOR}.lumibionic-justify button {
+      text-align: initial !important;
     }
 
     [data-lumibionic-fix] {
-      font-weight:
-        var(--lumibionic-weight, 600)
-        !important;
+      font-weight: var(--lumibionic-weight, 600) !important;
     }
 
     .lumibionic-settings {
@@ -273,7 +361,7 @@ export function setup(ctx) {
     }
 
     .lumibionic-section + .lumibionic-section {
-      border-top: 1px solid rgba(127,127,127,0.2);
+      border-top: 1px solid rgba(127, 127, 127, 0.2);
       padding-top: 18px;
     }
 
@@ -299,6 +387,25 @@ export function setup(ctx) {
       align-items: center;
       justify-content: space-between;
       gap: 12px;
+    }
+
+    .lumibionic-checks {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .lumibionic-check {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 32px;
+      font-size: 13px;
+    }
+
+    .lumibionic-check input {
+      width: auto !important;
+      flex: 0 0 auto;
     }
 
     .lumibionic-control label {
@@ -337,24 +444,19 @@ export function setup(ctx) {
     .lumibionic-preview {
       padding: 14px;
       border-radius: 8px;
-      background:
-        rgba(127,127,127,0.08);
-
-      font-family:
-        var(--lumibionic-preview-font, inherit)
-        !important;
-
-      font-size:
-        var(--lumibionic-text-size, 100%);
-
-      line-height:
-        var(--lumibionic-line-height, 1.55);
+      background: rgba(127, 127, 127, 0.08);
+      font-family: var(--lumibionic-preview-font, inherit) !important;
+      font-size: var(--lumibionic-text-size, 100%);
+      line-height: var(--lumibionic-line-height, 1.55);
     }
 
     .lumibionic-preview * {
-      font-family:
-        var(--lumibionic-preview-font, inherit)
-        !important;
+      font-family: var(--lumibionic-preview-font, inherit) !important;
+    }
+
+    .lumibionic-preview.lb-preview-justify {
+      text-align: justify;
+      text-justify: inter-word;
     }
 
     .lumibionic-hidden {
@@ -372,13 +474,13 @@ export function setup(ctx) {
     title: 'Reading & Fonts',
     shortName: 'Reading',
     headerTitle: 'Reading & Fonts',
-    description:
-      'Bionic reading and font overrides',
+    description: 'Bionic reading, font reach, and typography',
     keywords: [
       'bionic',
       'reading',
       'font',
       'typography',
+      'justify',
       'accessibility',
     ],
   })
@@ -388,8 +490,7 @@ export function setup(ctx) {
 
     const parent = node.parentElement
     if (!parent) return
-
-    if (parent.closest(SKIP_SELECTOR)) return
+    if (parent.closest(BIONIC_SKIP_SELECTOR)) return
 
     const text = node.nodeValue || ''
     if (!/\p{L}/u.test(text)) return
@@ -403,59 +504,31 @@ export function setup(ctx) {
     for (const match of text.matchAll(WORD_RE)) {
       const word = match[0]
       const index = match.index ?? 0
-
-      const { chars, cut } =
-        fixationCut(word)
+      const { chars, cut } = fixationCut(word)
 
       if (!cut) continue
 
       if (index > lastIndex) {
         fragment.appendChild(
-          doc.createTextNode(
-            text.slice(
-              lastIndex,
-              index
-            )
-          )
+          doc.createTextNode(text.slice(lastIndex, index))
         )
       }
 
-      const wrapper =
-        doc.createElement('span')
+      const wrapper = doc.createElement('span')
+      wrapper.setAttribute('data-lumibionic-word', '')
 
-      wrapper.setAttribute(
-        'data-lumibionic-word',
-        ''
-      )
-
-      const fix =
-        doc.createElement('span')
-
-      fix.setAttribute(
-        'data-lumibionic-fix',
-        ''
-      )
-
-      fix.textContent =
-        chars
-          .slice(0, cut)
-          .join('')
+      const fix = doc.createElement('span')
+      fix.setAttribute('data-lumibionic-fix', '')
+      fix.textContent = chars.slice(0, cut).join('')
 
       wrapper.appendChild(fix)
-
       wrapper.appendChild(
-        doc.createTextNode(
-          chars
-            .slice(cut)
-            .join('')
-        )
+        doc.createTextNode(chars.slice(cut).join(''))
       )
 
       fragment.appendChild(wrapper)
 
-      lastIndex =
-        index + word.length
-
+      lastIndex = index + word.length
       changed = true
     }
 
@@ -463,32 +536,56 @@ export function setup(ctx) {
 
     if (lastIndex < text.length) {
       fragment.appendChild(
-        doc.createTextNode(
-          text.slice(lastIndex)
-        )
+        doc.createTextNode(text.slice(lastIndex))
       )
     }
 
-    node.parentNode?.replaceChild(
-      fragment,
-      node
-    )
+    node.parentNode?.replaceChild(fragment, node)
   }
 
-  function applyMessageClasses(root) {
-    root.classList.toggle(
-      'lumibionic-typography',
-      settings.fontEnabled
-    )
+  function findMessageShell(content) {
+    let node = content.parentElement
+    let best = node
 
-    root.classList.toggle(
-      'lumibionic-font-override',
-      settings.fontEnabled
-    )
+    for (let depth = 0; node && depth < 5; depth++) {
+      const count = node.querySelectorAll(MESSAGE_SELECTOR).length
+
+      if (count !== 1) break
+
+      best = node
+      node = node.parentElement
+    }
+
+    return best
+  }
+
+  function refreshBubbleScopes() {
+    document
+      .querySelectorAll('.lumibionic-bubble-scope')
+      .forEach(el => {
+        el.classList.remove('lumibionic-bubble-scope')
+      })
+
+    if (!settings.fontEnabled || !settings.scopeBubble || settings.scopeAll) {
+      return
+    }
+
+    document
+      .querySelectorAll(MESSAGE_SELECTOR)
+      .forEach(content => {
+        const shell = findMessageShell(content)
+
+        if (shell) {
+          shell.classList.add('lumibionic-bubble-scope')
+        }
+      })
   }
 
   function processMessage(root) {
-    applyMessageClasses(root)
+    root.classList.toggle(
+      'lumibionic-justify',
+      settings.justifyMessages
+    )
 
     if (!settings.bionicEnabled) return
 
@@ -511,68 +608,60 @@ export function setup(ctx) {
 
   function unwrap(root = document) {
     root
-      .querySelectorAll(
-        '[data-lumibionic-word]'
-      )
+      .querySelectorAll('[data-lumibionic-word]')
       .forEach(el => {
         el.replaceWith(
-          document.createTextNode(
-            el.textContent || ''
-          )
+          document.createTextNode(el.textContent || '')
         )
       })
 
     root
-      .querySelectorAll(
-        MESSAGE_SELECTOR
-      )
+      .querySelectorAll(MESSAGE_SELECTOR)
       .forEach(el => {
-        el.classList.remove(
-          'lumibionic-typography',
-          'lumibionic-font-override'
-        )
-
+        el.classList.remove('lumibionic-justify')
         el.normalize()
       })
   }
 
-  function processAll() {
-    if (rebuilding) return
+  function applyRootClasses() {
+    const root = document.documentElement
 
-    document
-      .querySelectorAll(
-        MESSAGE_SELECTOR
-      )
-      .forEach(processMessage)
-  }
+    const enabled = settings.fontEnabled
 
-  function rebuildAll() {
-    rebuilding = true
-    unwrap()
-    rebuilding = false
-    processAll()
-  }
+    root.classList.toggle(
+      'lb-font-messages',
+      enabled && settings.scopeMessages && !settings.scopeAll
+    )
 
-  function scheduleProcess() {
-    if (
-      scheduled ||
-      rebuilding
-    ) return
+    root.classList.toggle(
+      'lb-font-bubble',
+      enabled && settings.scopeBubble && !settings.scopeAll
+    )
 
-    scheduled = true
+    root.classList.toggle(
+      'lb-font-composer',
+      enabled && settings.scopeComposer && !settings.scopeAll
+    )
 
-    requestAnimationFrame(() => {
-      scheduled = false
-      processAll()
-    })
+    root.classList.toggle(
+      'lb-font-menus',
+      enabled && settings.scopeMenus && !settings.scopeAll
+    )
+
+    root.classList.toggle(
+      'lb-font-navigation',
+      enabled && settings.scopeNavigation && !settings.scopeAll
+    )
+
+    root.classList.toggle(
+      'lb-font-all',
+      enabled && settings.scopeAll
+    )
   }
 
   function applyCssSettings() {
-    const root =
-      document.documentElement
-
-    const font =
-      currentFont()
+    const root = document.documentElement
+    const fontFamily = currentFont()
 
     root.style.setProperty(
       '--lumibionic-weight',
@@ -581,13 +670,13 @@ export function setup(ctx) {
 
     root.style.setProperty(
       '--lumibionic-font-family',
-      font
+      fontFamily
     )
 
     root.style.setProperty(
       '--lumibionic-preview-font',
       settings.fontEnabled
-        ? font
+        ? fontFamily
         : 'inherit'
     )
 
@@ -600,22 +689,42 @@ export function setup(ctx) {
       '--lumibionic-line-height',
       String(settings.lineHeight)
     )
+
+    applyRootClasses()
+    refreshBubbleScopes()
   }
 
-  function saveSettings() {
-    try {
-      localStorage.setItem(
-        SETTINGS_KEY,
-        JSON.stringify(settings)
-      )
-    } catch {}
+  function processAll() {
+    if (rebuilding) return
+
+    document
+      .querySelectorAll(MESSAGE_SELECTOR)
+      .forEach(processMessage)
+
+    refreshBubbleScopes()
   }
 
-  function updateSetting(
-    key,
-    value,
-    rebuild = false
-  ) {
+  function rebuildAll() {
+    rebuilding = true
+    unwrap()
+    rebuilding = false
+
+    applyCssSettings()
+    processAll()
+  }
+
+  function scheduleProcess() {
+    if (scheduled || rebuilding) return
+
+    scheduled = true
+
+    requestAnimationFrame(() => {
+      scheduled = false
+      processAll()
+    })
+  }
+
+  function updateSetting(key, value, rebuild = false) {
     settings = {
       ...settings,
       [key]: value,
@@ -639,11 +748,9 @@ export function setup(ctx) {
 
       <div>
         <h2>Reading & Fonts</h2>
-
         <div class="lumibionic-muted">
-          Use Bionic-style emphasis, replace
-          Lumiverse's message font, or use
-          either feature independently.
+          Use Bionic emphasis, change typography,
+          and choose exactly how far the font override reaches.
         </div>
       </div>
 
@@ -675,11 +782,9 @@ export function setup(ctx) {
               <option value="light">
                 Light — longer words only
               </option>
-
               <option value="balanced">
                 Balanced — recommended
               </option>
-
               <option value="full">
                 Full — classic effect
               </option>
@@ -687,18 +792,14 @@ export function setup(ctx) {
           </div>
 
           <div class="lumibionic-control">
-
             <div class="lumibionic-row">
-
               <label for="lb-fixation">
                 Fixation strength
               </label>
-
               <span
                 class="lumibionic-value"
                 id="lb-fixation-value"
               ></span>
-
             </div>
 
             <input
@@ -708,22 +809,17 @@ export function setup(ctx) {
               max="70"
               step="5"
             >
-
           </div>
 
           <div class="lumibionic-control">
-
             <div class="lumibionic-row">
-
               <label for="lb-weight">
                 Emphasis weight
               </label>
-
               <span
                 class="lumibionic-value"
                 id="lb-weight-value"
               ></span>
-
             </div>
 
             <input
@@ -733,11 +829,9 @@ export function setup(ctx) {
               max="900"
               step="100"
             >
-
           </div>
 
         </div>
-
       </div>
 
       <div class="lumibionic-section">
@@ -747,41 +841,28 @@ export function setup(ctx) {
         </div>
 
         <div class="lumibionic-row">
-
           <label for="lb-font-enabled">
-            Override message font
+            Enable font override
           </label>
-
           <input
             id="lb-font-enabled"
             type="checkbox"
           >
-
-        </div>
-
-        <div class="lumibionic-muted">
-          Forces the selected font on message
-          text even when the Lumiverse theme
-          declares another font.
         </div>
 
         <div id="lb-font-options">
 
           <div class="lumibionic-control">
-
             <label for="lb-font">
               Font
             </label>
-
             <select id="lb-font"></select>
-
           </div>
 
           <div
             class="lumibionic-control"
             id="lb-custom-font-wrap"
           >
-
             <label for="lb-custom-font">
               Custom font name / CSS stack
             </label>
@@ -794,15 +875,12 @@ export function setup(ctx) {
             >
 
             <div class="lumibionic-muted">
-              Enter any font installed on your
-              device, or a normal CSS
-              font-family stack.
+              Use a font installed on this device,
+              or enter a normal CSS font-family stack.
             </div>
-
           </div>
 
           <div class="lumibionic-control">
-
             <label for="lb-font-file">
               Load a local font file
             </label>
@@ -817,11 +895,9 @@ export function setup(ctx) {
               class="lumibionic-file-status"
               id="lb-font-file-status"
             >
-              Optional. Local font files apply
-              until this Lumiverse tab is closed
-              or refreshed.
+              Optional. The selected file lasts until
+              the Lumiverse tab is refreshed.
             </div>
-
           </div>
 
           <button
@@ -831,29 +907,77 @@ export function setup(ctx) {
             Stop using loaded font file
           </button>
 
-        </div>
+          <div class="lumibionic-control">
+            <label>Font reach</label>
 
+            <div class="lumibionic-checks">
+
+              <label class="lumibionic-check">
+                <input id="lb-scope-messages" type="checkbox">
+                <span>Message text</span>
+              </label>
+
+              <label class="lumibionic-check">
+                <input id="lb-scope-bubble" type="checkbox">
+                <span>Message bubble, names & controls</span>
+              </label>
+
+              <label class="lumibionic-check">
+                <input id="lb-scope-composer" type="checkbox">
+                <span>Composer & text inputs</span>
+              </label>
+
+              <label class="lumibionic-check">
+                <input id="lb-scope-menus" type="checkbox">
+                <span>Menus, popovers & dialogs</span>
+              </label>
+
+              <label class="lumibionic-check">
+                <input id="lb-scope-navigation" type="checkbox">
+                <span>Navigation, tabs & panels</span>
+              </label>
+
+              <label class="lumibionic-check">
+                <input id="lb-scope-all" type="checkbox">
+                <span><strong>Entire Lumiverse interface</strong></span>
+              </label>
+
+            </div>
+
+            <div class="lumibionic-muted">
+              “Entire interface” takes priority over the
+              individual reach checkboxes. Code blocks remain monospace.
+            </div>
+          </div>
+
+        </div>
       </div>
 
       <div class="lumibionic-section">
 
         <div class="lumibionic-section-title">
-          Typography
+          Message layout
+        </div>
+
+        <label class="lumibionic-check">
+          <input id="lb-justify" type="checkbox">
+          <span>Justify message prose</span>
+        </label>
+
+        <div class="lumibionic-muted">
+          Applies text justification to prose while leaving
+          code blocks and tables alone.
         </div>
 
         <div class="lumibionic-control">
-
           <div class="lumibionic-row">
-
             <label for="lb-size">
-              Text size
+              Message text size
             </label>
-
             <span
               class="lumibionic-value"
               id="lb-size-value"
             ></span>
-
           </div>
 
           <input
@@ -863,22 +987,17 @@ export function setup(ctx) {
             max="140"
             step="5"
           >
-
         </div>
 
         <div class="lumibionic-control">
-
           <div class="lumibionic-row">
-
             <label for="lb-line">
-              Line spacing
+              Message line spacing
             </label>
-
             <span
               class="lumibionic-value"
               id="lb-line-value"
             ></span>
-
           </div>
 
           <input
@@ -888,26 +1007,18 @@ export function setup(ctx) {
             max="2.2"
             step="0.05"
           >
-
         </div>
 
       </div>
 
       <div class="lumibionic-section">
-
         <div class="lumibionic-control">
-
-          <label>
-            Preview
-          </label>
-
+          <label>Preview</label>
           <div
             class="lumibionic-preview"
             id="lb-preview"
           ></div>
-
         </div>
-
       </div>
 
       <button
@@ -923,144 +1034,115 @@ export function setup(ctx) {
   const $ = selector =>
     tab.root.querySelector(selector)
 
-  const bionicEnabled =
-    $('#lb-bionic-enabled')
+  const bionicEnabled = $('#lb-bionic-enabled')
+  const bionicOptions = $('#lb-bionic-options')
+  const density = $('#lb-density')
+  const fixation = $('#lb-fixation')
+  const fixationValue = $('#lb-fixation-value')
+  const weight = $('#lb-weight')
+  const weightValue = $('#lb-weight-value')
 
-  const bionicOptions =
-    $('#lb-bionic-options')
+  const fontEnabled = $('#lb-font-enabled')
+  const fontOptions = $('#lb-font-options')
+  const font = $('#lb-font')
+  const customFontWrap = $('#lb-custom-font-wrap')
+  const customFont = $('#lb-custom-font')
+  const fontFile = $('#lb-font-file')
+  const fontFileStatus = $('#lb-font-file-status')
+  const clearFontFile = $('#lb-clear-font-file')
 
-  const density =
-    $('#lb-density')
+  const scopeMessages = $('#lb-scope-messages')
+  const scopeBubble = $('#lb-scope-bubble')
+  const scopeComposer = $('#lb-scope-composer')
+  const scopeMenus = $('#lb-scope-menus')
+  const scopeNavigation = $('#lb-scope-navigation')
+  const scopeAll = $('#lb-scope-all')
 
-  const fixation =
-    $('#lb-fixation')
+  const justify = $('#lb-justify')
+  const size = $('#lb-size')
+  const sizeValue = $('#lb-size-value')
+  const line = $('#lb-line')
+  const lineValue = $('#lb-line-value')
 
-  const fixationValue =
-    $('#lb-fixation-value')
+  const preview = $('#lb-preview')
+  const reset = $('#lb-reset')
 
-  const weight =
-    $('#lb-weight')
-
-  const weightValue =
-    $('#lb-weight-value')
-
-  const fontEnabled =
-    $('#lb-font-enabled')
-
-  const fontOptions =
-    $('#lb-font-options')
-
-  const font =
-    $('#lb-font')
-
-  const customFontWrap =
-    $('#lb-custom-font-wrap')
-
-  const customFont =
-    $('#lb-custom-font')
-
-  const fontFile =
-    $('#lb-font-file')
-
-  const fontFileStatus =
-    $('#lb-font-file-status')
-
-  const clearFontFile =
-    $('#lb-clear-font-file')
-
-  const size =
-    $('#lb-size')
-
-  const sizeValue =
-    $('#lb-size-value')
-
-  const line =
-    $('#lb-line')
-
-  const lineValue =
-    $('#lb-line-value')
-
-  const preview =
-    $('#lb-preview')
-
-  const reset =
-    $('#lb-reset')
-
-  for (
-    const [value, label]
-    of FONT_OPTIONS
-  ) {
-    const option =
-      document.createElement('option')
-
+  for (const [value, label] of FONT_OPTIONS) {
+    const option = document.createElement('option')
     option.value = value
     option.textContent = label
-
     font.appendChild(option)
   }
 
   function syncControls() {
-    bionicEnabled.checked =
-      settings.bionicEnabled
+    bionicEnabled.checked = settings.bionicEnabled
 
     bionicOptions.classList.toggle(
       'lumibionic-hidden',
       !settings.bionicEnabled
     )
 
-    density.value =
-      settings.density
+    density.value = settings.density
+    fixation.value = String(settings.fixation)
+    fixationValue.textContent = `${settings.fixation}%`
 
-    fixation.value =
-      String(settings.fixation)
+    weight.value = String(settings.weight)
+    weightValue.textContent = String(settings.weight)
 
-    fixationValue.textContent =
-      `${settings.fixation}%`
-
-    weight.value =
-      String(settings.weight)
-
-    weightValue.textContent =
-      String(settings.weight)
-
-    fontEnabled.checked =
-      settings.fontEnabled
+    fontEnabled.checked = settings.fontEnabled
 
     fontOptions.classList.toggle(
       'lumibionic-hidden',
       !settings.fontEnabled
     )
 
-    font.value =
-      settings.font
-
-    customFont.value =
-      settings.customFont
+    font.value = settings.font
+    customFont.value = settings.customFont
 
     customFontWrap.classList.toggle(
       'lumibionic-hidden',
       settings.font !== 'custom'
     )
 
-    size.value =
-      String(settings.textSize)
+    scopeMessages.checked = settings.scopeMessages
+    scopeBubble.checked = settings.scopeBubble
+    scopeComposer.checked = settings.scopeComposer
+    scopeMenus.checked = settings.scopeMenus
+    scopeNavigation.checked = settings.scopeNavigation
+    scopeAll.checked = settings.scopeAll
 
-    sizeValue.textContent =
-      `${settings.textSize}%`
+    const individualScopes = [
+      scopeMessages,
+      scopeBubble,
+      scopeComposer,
+      scopeMenus,
+      scopeNavigation,
+    ]
 
-    line.value =
-      String(settings.lineHeight)
+    for (const input of individualScopes) {
+      input.disabled = settings.scopeAll
+    }
 
-    lineValue.textContent =
-      settings.lineHeight.toFixed(2)
+    justify.checked = settings.justifyMessages
+
+    size.value = String(settings.textSize)
+    sizeValue.textContent = `${settings.textSize}%`
+
+    line.value = String(settings.lineHeight)
+    lineValue.textContent = settings.lineHeight.toFixed(2)
   }
 
   function renderPreview() {
     preview.replaceChildren()
 
+    preview.classList.toggle(
+      'lb-preview-justify',
+      settings.justifyMessages
+    )
+
     const sample =
       document.createTextNode(
-        'A dry mocking chuckle shook his chest as he leaned closer toward the doorway.'
+        'A dry mocking chuckle shook his chest as he leaned closer toward the doorway. The longer line makes justified spacing easier to judge.'
       )
 
     preview.appendChild(sample)
@@ -1073,29 +1155,10 @@ export function setup(ctx) {
   async function loadLocalFont(file) {
     if (!file) return
 
-    if (
-      loadedFontFace &&
-      document.fonts
-    ) {
-      try {
-        document.fonts.delete(
-          loadedFontFace
-        )
-      } catch {}
-    }
-
-    if (loadedFontUrl) {
-      URL.revokeObjectURL(
-        loadedFontUrl
-      )
-    }
-
-    loadedFontFace = null
-    loadedFontUrl = null
+    unloadLocalFont(false)
 
     try {
-      const url =
-        URL.createObjectURL(file)
+      const url = URL.createObjectURL(file)
 
       const face =
         new FontFace(
@@ -1104,7 +1167,6 @@ export function setup(ctx) {
         )
 
       await face.load()
-
       document.fonts.add(face)
 
       loadedFontFace = face
@@ -1120,159 +1182,166 @@ export function setup(ctx) {
       syncControls()
       processAll()
       renderPreview()
+
     } catch (error) {
       fontFileStatus.textContent =
         'Could not load that font file.'
 
       console.error(
-        '[Bionic Reading] Font load failed:',
+        '[Reading & Fonts] Font load failed:',
         error
       )
     }
   }
 
-  function unloadLocalFont() {
-    if (
-      loadedFontFace &&
-      document.fonts
-    ) {
+  function unloadLocalFont(refresh = true) {
+    if (loadedFontFace && document.fonts) {
       try {
-        document.fonts.delete(
-          loadedFontFace
-        )
+        document.fonts.delete(loadedFontFace)
       } catch {}
     }
 
     if (loadedFontUrl) {
-      URL.revokeObjectURL(
-        loadedFontUrl
-      )
+      URL.revokeObjectURL(loadedFontUrl)
     }
 
     loadedFontFace = null
     loadedFontUrl = null
 
-    fontFile.value = ''
+    if (fontFile) {
+      fontFile.value = ''
+    }
 
-    fontFileStatus.textContent =
-      'No local font file loaded.'
+    if (fontFileStatus) {
+      fontFileStatus.textContent =
+        'No local font file loaded.'
+    }
 
-    applyCssSettings()
-    processAll()
-    renderPreview()
+    if (refresh) {
+      applyCssSettings()
+      processAll()
+      renderPreview()
+    }
   }
 
   bionicEnabled.addEventListener(
     'change',
-    () => {
-      updateSetting(
-        'bionicEnabled',
-        bionicEnabled.checked,
-        true
-      )
-    }
+    () => updateSetting(
+      'bionicEnabled',
+      bionicEnabled.checked,
+      true
+    )
   )
 
   density.addEventListener(
     'change',
-    () => {
-      updateSetting(
-        'density',
-        density.value,
-        true
-      )
-    }
+    () => updateSetting(
+      'density',
+      density.value,
+      true
+    )
   )
 
   fixation.addEventListener(
     'input',
-    () => {
-      updateSetting(
-        'fixation',
-        Number(fixation.value),
-        true
-      )
-    }
+    () => updateSetting(
+      'fixation',
+      Number(fixation.value),
+      true
+    )
   )
 
   weight.addEventListener(
     'input',
-    () => {
-      updateSetting(
-        'weight',
-        Number(weight.value)
-      )
-    }
+    () => updateSetting(
+      'weight',
+      Number(weight.value)
+    )
   )
 
   fontEnabled.addEventListener(
     'change',
-    () => {
-      updateSetting(
-        'fontEnabled',
-        fontEnabled.checked
-      )
-    }
+    () => updateSetting(
+      'fontEnabled',
+      fontEnabled.checked
+    )
   )
 
   font.addEventListener(
     'change',
-    () => {
-      updateSetting(
-        'font',
-        font.value
-      )
-    }
+    () => updateSetting(
+      'font',
+      font.value
+    )
   )
 
   customFont.addEventListener(
     'input',
-    () => {
-      updateSetting(
-        'customFont',
-        customFont.value
-      )
-    }
+    () => updateSetting(
+      'customFont',
+      customFont.value
+    )
   )
 
   fontFile.addEventListener(
     'change',
-    () => {
-      loadLocalFont(
-        fontFile.files?.[0]
-      )
-    }
+    () => loadLocalFont(
+      fontFile.files?.[0]
+    )
   )
 
   clearFontFile.addEventListener(
     'click',
-    unloadLocalFont
+    () => unloadLocalFont(true)
+  )
+
+  const scopeBindings = [
+    [scopeMessages, 'scopeMessages'],
+    [scopeBubble, 'scopeBubble'],
+    [scopeComposer, 'scopeComposer'],
+    [scopeMenus, 'scopeMenus'],
+    [scopeNavigation, 'scopeNavigation'],
+    [scopeAll, 'scopeAll'],
+  ]
+
+  for (const [input, key] of scopeBindings) {
+    input.addEventListener(
+      'change',
+      () => updateSetting(
+        key,
+        input.checked
+      )
+    )
+  }
+
+  justify.addEventListener(
+    'change',
+    () => updateSetting(
+      'justifyMessages',
+      justify.checked
+    )
   )
 
   size.addEventListener(
     'input',
-    () => {
-      updateSetting(
-        'textSize',
-        Number(size.value)
-      )
-    }
+    () => updateSetting(
+      'textSize',
+      Number(size.value)
+    )
   )
 
   line.addEventListener(
     'input',
-    () => {
-      updateSetting(
-        'lineHeight',
-        Number(line.value)
-      )
-    }
+    () => updateSetting(
+      'lineHeight',
+      Number(line.value)
+    )
   )
 
   reset.addEventListener(
     'click',
     () => {
-      unloadLocalFont()
+      unloadLocalFont(false)
 
       settings = {
         ...DEFAULTS,
@@ -1309,33 +1378,39 @@ export function setup(ctx) {
     observer.disconnect()
 
     unwrap()
-    unloadLocalFont()
+    unloadLocalFont(false)
+
+    document
+      .querySelectorAll('.lumibionic-bubble-scope')
+      .forEach(el => {
+        el.classList.remove('lumibionic-bubble-scope')
+      })
+
+    const root = document.documentElement
+
+    for (const className of [
+      'lb-font-messages',
+      'lb-font-bubble',
+      'lb-font-composer',
+      'lb-font-menus',
+      'lb-font-navigation',
+      'lb-font-all',
+    ]) {
+      root.classList.remove(className)
+    }
+
+    for (const property of [
+      '--lumibionic-weight',
+      '--lumibionic-font-family',
+      '--lumibionic-preview-font',
+      '--lumibionic-text-size',
+      '--lumibionic-line-height',
+    ]) {
+      root.style.removeProperty(property)
+    }
 
     tab.destroy()
     removeStyle()
     ctx.dom.cleanup()
-
-    const root =
-      document.documentElement
-
-    root.style.removeProperty(
-      '--lumibionic-weight'
-    )
-
-    root.style.removeProperty(
-      '--lumibionic-font-family'
-    )
-
-    root.style.removeProperty(
-      '--lumibionic-preview-font'
-    )
-
-    root.style.removeProperty(
-      '--lumibionic-text-size'
-    )
-
-    root.style.removeProperty(
-      '--lumibionic-line-height'
-    )
   }
 }
