@@ -1,10 +1,11 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.7'
-  const LEGACY_SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.6'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.8'
+  const LEGACY_SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.7'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const DEFAULTS = {
+    preset: 'custom',
     bionicEnabled: true,
     density: 'balanced',
     fixation: 35,
@@ -52,6 +53,56 @@ export function setup(ctx) {
     ['75ch', '75 characters — relaxed'],
     ['85ch', '85 characters — wide'],
   ]
+
+  const PRESETS = {
+    clean: {
+      bionicEnabled: false,
+      justifyMessages: false,
+      hyphenateMessages: false,
+      readingWidth: 'full',
+      paragraphSpacing: 0,
+      letterSpacing: 0,
+      wordSpacing: 0,
+      textSize: 100,
+      lineHeight: 1.55,
+    },
+    comfortable: {
+      bionicEnabled: false,
+      justifyMessages: true,
+      hyphenateMessages: true,
+      readingWidth: '65ch',
+      paragraphSpacing: 0.6,
+      letterSpacing: 0.01,
+      wordSpacing: 0.02,
+      textSize: 105,
+      lineHeight: 1.6,
+    },
+    mobile: {
+      bionicEnabled: false,
+      justifyMessages: true,
+      hyphenateMessages: true,
+      readingWidth: 'full',
+      paragraphSpacing: 0.5,
+      letterSpacing: 0.005,
+      wordSpacing: 0.01,
+      textSize: 105,
+      lineHeight: 1.6,
+    },
+    bionicLight: {
+      bionicEnabled: true,
+      density: 'light',
+      fixation: 30,
+      weight: 600,
+      justifyMessages: true,
+      hyphenateMessages: true,
+      readingWidth: '65ch',
+      paragraphSpacing: 0.5,
+      letterSpacing: 0.005,
+      wordSpacing: 0.01,
+      textSize: 100,
+      lineHeight: 1.6,
+    },
+  }
 
   const BIONIC_SKIP_SELECTOR = [
     'code',
@@ -103,6 +154,11 @@ export function setup(ctx) {
 
       return {
         ...DEFAULTS,
+
+        preset:
+          ['custom', 'clean', 'comfortable', 'mobile', 'bionicLight'].includes(saved.preset)
+            ? saved.preset
+            : 'custom',
 
         bionicEnabled:
           typeof saved.bionicEnabled === 'boolean'
@@ -551,6 +607,49 @@ export function setup(ctx) {
       cursor: pointer;
     }
 
+    .lumibionic-stepper {
+      display: none;
+      grid-template-columns: 44px minmax(72px, 1fr) 44px 44px;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .lumibionic-stepper button,
+    .lumibionic-stepper input {
+      min-height: 44px;
+      box-sizing: border-box;
+    }
+
+    .lumibionic-stepper button {
+      width: auto !important;
+      padding: 0 8px !important;
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    .lumibionic-stepper input {
+      width: 100% !important;
+      padding: 8px !important;
+      text-align: center;
+      font: inherit;
+      font-size: 16px;
+      border-radius: 8px;
+    }
+
+    .lumibionic-stepper-reset {
+      font-size: 16px !important;
+    }
+
+    @media (hover: none), (pointer: coarse) {
+      .lumibionic-mobile-safe-range {
+        display: none !important;
+      }
+
+      .lumibionic-stepper {
+        display: grid;
+      }
+    }
+
     .lumibionic-preview {
       padding: 14px;
       border-radius: 8px;
@@ -915,10 +1014,11 @@ export function setup(ctx) {
     })
   }
 
-  function updateSetting(key, value, rebuild = false) {
+  function updateSetting(key, value, rebuild = false, markCustom = true) {
     settings = {
       ...settings,
       [key]: value,
+      ...(markCustom ? { preset: 'custom' } : {}),
     }
 
     saveSettings()
@@ -934,6 +1034,30 @@ export function setup(ctx) {
     renderPreview()
   }
 
+  function applyPreset(name) {
+    if (name === 'custom') {
+      settings = { ...settings, preset: 'custom' }
+      saveSettings()
+      syncControls()
+      return
+    }
+
+    const values = PRESETS[name]
+    if (!values) return
+
+    settings = {
+      ...settings,
+      ...values,
+      preset: name,
+    }
+
+    saveSettings()
+    applyCssSettings()
+    syncControls()
+    rebuildAll()
+    renderPreview()
+  }
+
   tab.root.innerHTML = `
     <div class="lumibionic-settings">
 
@@ -943,6 +1067,29 @@ export function setup(ctx) {
           Use Bionic emphasis, change typography,
           and choose exactly how far the font override reaches.
         </div>
+      </div>
+
+      <div class="lumibionic-section">
+
+        <div class="lumibionic-section-title">
+          Preset
+        </div>
+
+        <div class="lumibionic-control">
+          <label for="lb-preset">Reading preset</label>
+          <select id="lb-preset">
+            <option value="custom">Custom</option>
+            <option value="clean">Clean — minimal changes</option>
+            <option value="comfortable">Comfortable — long-form</option>
+            <option value="mobile">Mobile — touch-friendly reading</option>
+            <option value="bionicLight">Bionic Light</option>
+          </select>
+          <div class="lumibionic-muted">
+            Presets change reading controls but leave your font and font reach alone.
+            Any manual adjustment switches back to Custom.
+          </div>
+        </div>
+
       </div>
 
       <div class="lumibionic-section">
@@ -1249,6 +1396,7 @@ export function setup(ctx) {
   const $ = selector =>
     tab.root.querySelector(selector)
 
+  const preset = $('#lb-preset')
   const bionicEnabled = $('#lb-bionic-enabled')
   const bionicOptions = $('#lb-bionic-options')
   const density = $('#lb-density')
@@ -1310,6 +1458,7 @@ export function setup(ctx) {
   }
 
   function syncControls() {
+    preset.value = settings.preset || 'custom'
     bionicEnabled.checked = settings.bionicEnabled
 
     bionicOptions.classList.toggle(
@@ -1376,7 +1525,87 @@ export function setup(ctx) {
 
     line.value = String(settings.lineHeight)
     lineValue.textContent = settings.lineHeight.toFixed(2)
+
+    for (const sync of mobileStepperSyncers) sync()
   }
+
+  const mobileStepperSyncers = []
+
+  function createMobileStepper(range, key, { rebuild = false, resetValue = DEFAULTS[key] } = {}) {
+    if (!range) return
+
+    range.classList.add('lumibionic-mobile-safe-range')
+
+    const min = Number(range.min)
+    const max = Number(range.max)
+    const step = Number(range.step) || 1
+    const stepText = String(range.step || '1')
+    const decimals = stepText.includes('.') ? stepText.split('.')[1].length : 0
+
+    const wrap = document.createElement('div')
+    wrap.className = 'lumibionic-stepper'
+
+    const minus = document.createElement('button')
+    minus.type = 'button'
+    minus.textContent = '−'
+    minus.setAttribute('aria-label', `Decrease ${key}`)
+
+    const exact = document.createElement('input')
+    exact.type = 'number'
+    exact.inputMode = 'decimal'
+    exact.min = String(min)
+    exact.max = String(max)
+    exact.step = String(step)
+    exact.setAttribute('aria-label', `Exact ${key} value`)
+
+    const plus = document.createElement('button')
+    plus.type = 'button'
+    plus.textContent = '+'
+    plus.setAttribute('aria-label', `Increase ${key}`)
+
+    const resetOne = document.createElement('button')
+    resetOne.type = 'button'
+    resetOne.textContent = '↶'
+    resetOne.className = 'lumibionic-stepper-reset'
+    resetOne.setAttribute('aria-label', `Reset ${key}`)
+
+    wrap.append(minus, exact, plus, resetOne)
+    range.insertAdjacentElement('afterend', wrap)
+
+    function normalized(raw) {
+      let value = Number(raw)
+      if (!Number.isFinite(value)) value = Number(settings[key])
+      value = Math.min(max, Math.max(min, value))
+      value = min + Math.round((value - min) / step) * step
+      return Number(value.toFixed(decimals))
+    }
+
+    function commit(raw) {
+      const value = normalized(raw)
+      exact.value = String(value)
+      updateSetting(key, value, rebuild)
+    }
+
+    minus.addEventListener('click', () => commit(Number(settings[key]) - step))
+    plus.addEventListener('click', () => commit(Number(settings[key]) + step))
+    exact.addEventListener('change', () => commit(exact.value))
+    exact.addEventListener('keydown', event => {
+      if (event.key === 'Enter') exact.blur()
+    })
+    resetOne.addEventListener('click', () => commit(resetValue))
+
+    mobileStepperSyncers.push(() => {
+      exact.value = String(settings[key])
+    })
+  }
+
+  createMobileStepper(fixation, 'fixation', { rebuild: true, resetValue: DEFAULTS.fixation })
+  createMobileStepper(weight, 'weight', { resetValue: DEFAULTS.weight })
+  createMobileStepper(paragraphSpacing, 'paragraphSpacing', { resetValue: DEFAULTS.paragraphSpacing })
+  createMobileStepper(letterSpacing, 'letterSpacing', { resetValue: DEFAULTS.letterSpacing })
+  createMobileStepper(wordSpacing, 'wordSpacing', { resetValue: DEFAULTS.wordSpacing })
+  createMobileStepper(size, 'textSize', { resetValue: DEFAULTS.textSize })
+  createMobileStepper(line, 'lineHeight', { resetValue: DEFAULTS.lineHeight })
 
   function renderPreview() {
     preview.replaceChildren()
@@ -1474,6 +1703,11 @@ export function setup(ctx) {
       renderPreview()
     }
   }
+
+  preset.addEventListener(
+    'change',
+    () => applyPreset(preset.value)
+  )
 
   bionicEnabled.addEventListener(
     'change',
