@@ -1,14 +1,16 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.4'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.5'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const DEFAULTS = {
-    enabled: true,
+    bionicEnabled: true,
+    fontEnabled: false,
     density: 'balanced',
     fixation: 35,
     weight: 600,
     font: 'inherit',
+    customFont: '',
     textSize: 100,
     lineHeight: 1.55,
   }
@@ -22,6 +24,9 @@ export function setup(ctx) {
     ['"Trebuchet MS", sans-serif', 'Trebuchet MS'],
     ['Georgia, serif', 'Georgia'],
     ['"Times New Roman", serif', 'Times New Roman'],
+    ['"Atkinson Hyperlegible", sans-serif', 'Atkinson Hyperlegible'],
+    ['"OpenDyslexic", sans-serif', 'OpenDyslexic'],
+    ['custom', 'Custom font / CSS stack'],
   ]
 
   const SKIP_SELECTOR = [
@@ -45,6 +50,9 @@ export function setup(ctx) {
     '[data-lumibionic-word]',
   ].join(',')
 
+  let loadedFontFace = null
+  let loadedFontUrl = null
+
   function clamp(value, min, max, fallback) {
     const n = Number(value)
     return Number.isFinite(n)
@@ -59,10 +67,15 @@ export function setup(ctx) {
       )
 
       return {
-        enabled:
-          typeof saved.enabled === 'boolean'
-            ? saved.enabled
-            : DEFAULTS.enabled,
+        bionicEnabled:
+          typeof saved.bionicEnabled === 'boolean'
+            ? saved.bionicEnabled
+            : DEFAULTS.bionicEnabled,
+
+        fontEnabled:
+          typeof saved.fontEnabled === 'boolean'
+            ? saved.fontEnabled
+            : DEFAULTS.fontEnabled,
 
         density:
           ['light', 'balanced', 'full'].includes(saved.density)
@@ -87,6 +100,11 @@ export function setup(ctx) {
           typeof saved.font === 'string'
             ? saved.font
             : DEFAULTS.font,
+
+        customFont:
+          typeof saved.customFont === 'string'
+            ? saved.customFont
+            : DEFAULTS.customFont,
 
         textSize: clamp(
           saved.textSize,
@@ -127,6 +145,19 @@ export function setup(ctx) {
     )
   }
 
+  function currentFont() {
+    if (loadedFontFace) {
+      return '"LumibionicCustomFile", sans-serif'
+    }
+
+    if (settings.font === 'custom') {
+      const value = settings.customFont.trim()
+      return value || 'inherit'
+    }
+
+    return settings.font || 'inherit'
+  }
+
   function shouldEmphasize(length) {
     if (settings.density === 'light') {
       return length >= 6
@@ -159,11 +190,8 @@ export function setup(ctx) {
       base = 4
     }
 
-    const multiplier =
-      settings.fixation / 35
-
-    let cut =
-      Math.round(base * multiplier)
+    const multiplier = settings.fixation / 35
+    let cut = Math.round(base * multiplier)
 
     cut = Math.max(
       1,
@@ -178,7 +206,7 @@ export function setup(ctx) {
   }
 
   const removeStyle = ctx.dom.addStyle(`
-    [data-component="MessageContent"].lumibionic-message {
+    ${MESSAGE_SELECTOR}.lumibionic-typography {
       font-family:
         var(--lumibionic-font-family, inherit)
         !important;
@@ -192,6 +220,29 @@ export function setup(ctx) {
         !important;
     }
 
+    ${MESSAGE_SELECTOR}.lumibionic-font-override
+      *:not(code)
+      :not(pre)
+      :not(kbd)
+      :not(samp)
+      :not(button)
+      :not(input)
+      :not(textarea)
+      :not(select)
+      :not(option)
+      :not(svg)
+      :not(math) {
+      font-family:
+        var(--lumibionic-font-family, inherit)
+        !important;
+    }
+
+    ${MESSAGE_SELECTOR}.lumibionic-font-override {
+      font-family:
+        var(--lumibionic-font-family, inherit)
+        !important;
+    }
+
     [data-lumibionic-fix] {
       font-weight:
         var(--lumibionic-weight, 600)
@@ -202,12 +253,29 @@ export function setup(ctx) {
       padding: 16px;
       display: flex;
       flex-direction: column;
-      gap: 18px;
+      gap: 20px;
     }
 
     .lumibionic-settings h2 {
       margin: 0;
       font-size: 17px;
+    }
+
+    .lumibionic-section {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding-top: 6px;
+    }
+
+    .lumibionic-section + .lumibionic-section {
+      border-top: 1px solid rgba(127,127,127,0.2);
+      padding-top: 18px;
+    }
+
+    .lumibionic-section-title {
+      font-size: 14px;
+      font-weight: 700;
     }
 
     .lumibionic-muted {
@@ -243,12 +311,15 @@ export function setup(ctx) {
 
     .lumibionic-settings input[type="range"],
     .lumibionic-settings select,
+    .lumibionic-settings input[type="text"],
+    .lumibionic-settings input[type="file"],
     .lumibionic-settings button {
       width: 100%;
       box-sizing: border-box;
     }
 
     .lumibionic-settings select,
+    .lumibionic-settings input[type="text"],
     .lumibionic-settings button {
       padding: 9px 10px;
       border-radius: 8px;
@@ -262,10 +333,12 @@ export function setup(ctx) {
     .lumibionic-preview {
       padding: 14px;
       border-radius: 8px;
-      background: rgba(127,127,127,0.08);
+      background:
+        rgba(127,127,127,0.08);
 
       font-family:
-        var(--lumibionic-font-family, inherit);
+        var(--lumibionic-preview-font, inherit)
+        !important;
 
       font-size:
         var(--lumibionic-text-size, 100%);
@@ -273,42 +346,52 @@ export function setup(ctx) {
       line-height:
         var(--lumibionic-line-height, 1.55);
     }
+
+    .lumibionic-preview * {
+      font-family:
+        var(--lumibionic-preview-font, inherit)
+        !important;
+    }
+
+    .lumibionic-hidden {
+      display: none !important;
+    }
+
+    .lumibionic-file-status {
+      font-size: 12px;
+      opacity: 0.75;
+    }
   `)
 
   const tab = ctx.ui.registerDrawerTab({
     id: 'bionic-reading',
-    title: 'Bionic Reading',
-    shortName: 'Bionic',
-    headerTitle: 'Bionic Reading',
-
+    title: 'Reading & Fonts',
+    shortName: 'Reading',
+    headerTitle: 'Reading & Fonts',
     description:
-      'Customize reading emphasis and typography',
-
+      'Bionic reading and font overrides',
     keywords: [
       'bionic',
       'reading',
       'font',
+      'typography',
       'accessibility',
     ],
   })
 
   function processTextNode(node) {
+    if (!settings.bionicEnabled) return
+
     const parent = node.parentElement
     if (!parent) return
 
-    if (parent.closest(SKIP_SELECTOR)) {
-      return
-    }
+    if (parent.closest(SKIP_SELECTOR)) return
 
     const text = node.nodeValue || ''
-
-    if (!/\p{L}/u.test(text)) {
-      return
-    }
+    if (!/\p{L}/u.test(text)) return
 
     const doc = node.ownerDocument
-    const fragment =
-      doc.createDocumentFragment()
+    const fragment = doc.createDocumentFragment()
 
     let lastIndex = 0
     let changed = false
@@ -325,7 +408,10 @@ export function setup(ctx) {
       if (index > lastIndex) {
         fragment.appendChild(
           doc.createTextNode(
-            text.slice(lastIndex, index)
+            text.slice(
+              lastIndex,
+              index
+            )
           )
         )
       }
@@ -347,13 +433,17 @@ export function setup(ctx) {
       )
 
       fix.textContent =
-        chars.slice(0, cut).join('')
+        chars
+          .slice(0, cut)
+          .join('')
 
       wrapper.appendChild(fix)
 
       wrapper.appendChild(
         doc.createTextNode(
-          chars.slice(cut).join('')
+          chars
+            .slice(cut)
+            .join('')
         )
       )
 
@@ -381,12 +471,22 @@ export function setup(ctx) {
     )
   }
 
-  function processMessage(root) {
-    if (!settings.enabled) return
-
-    root.classList.add(
-      'lumibionic-message'
+  function applyMessageClasses(root) {
+    root.classList.toggle(
+      'lumibionic-typography',
+      settings.fontEnabled
     )
+
+    root.classList.toggle(
+      'lumibionic-font-override',
+      settings.fontEnabled
+    )
+  }
+
+  function processMessage(root) {
+    applyMessageClasses(root)
+
+    if (!settings.bionicEnabled) return
 
     const walker =
       document.createTreeWalker(
@@ -420,11 +520,12 @@ export function setup(ctx) {
 
     root
       .querySelectorAll(
-        `${MESSAGE_SELECTOR}.lumibionic-message`
+        MESSAGE_SELECTOR
       )
       .forEach(el => {
         el.classList.remove(
-          'lumibionic-message'
+          'lumibionic-typography',
+          'lumibionic-font-override'
         )
 
         el.normalize()
@@ -432,10 +533,7 @@ export function setup(ctx) {
   }
 
   function processAll() {
-    if (
-      rebuilding ||
-      !settings.enabled
-    ) return
+    if (rebuilding) return
 
     document
       .querySelectorAll(
@@ -448,17 +546,13 @@ export function setup(ctx) {
     rebuilding = true
     unwrap()
     rebuilding = false
-
-    if (settings.enabled) {
-      processAll()
-    }
+    processAll()
   }
 
   function scheduleProcess() {
     if (
       scheduled ||
-      rebuilding ||
-      !settings.enabled
+      rebuilding
     ) return
 
     scheduled = true
@@ -473,6 +567,9 @@ export function setup(ctx) {
     const root =
       document.documentElement
 
+    const font =
+      currentFont()
+
     root.style.setProperty(
       '--lumibionic-weight',
       String(settings.weight)
@@ -480,7 +577,14 @@ export function setup(ctx) {
 
     root.style.setProperty(
       '--lumibionic-font-family',
-      settings.font
+      font
+    )
+
+    root.style.setProperty(
+      '--lumibionic-preview-font',
+      settings.fontEnabled
+        ? font
+        : 'inherit'
     )
 
     root.style.setProperty(
@@ -495,10 +599,12 @@ export function setup(ctx) {
   }
 
   function saveSettings() {
-    localStorage.setItem(
-      SETTINGS_KEY,
-      JSON.stringify(settings)
-    )
+    try {
+      localStorage.setItem(
+        SETTINGS_KEY,
+        JSON.stringify(settings)
+      )
+    } catch {}
   }
 
   function updateSetting(
@@ -515,11 +621,10 @@ export function setup(ctx) {
     applyCssSettings()
     syncControls()
 
-    if (
-      rebuild ||
-      key === 'enabled'
-    ) {
+    if (rebuild) {
       rebuildAll()
+    } else {
+      processAll()
     }
 
     renderPreview()
@@ -529,128 +634,276 @@ export function setup(ctx) {
     <div class="lumibionic-settings">
 
       <div>
-        <h2>Bionic Reading</h2>
-        <div class="lumibionic-muted">
-          A gentler emphasis mode designed
-          for smoother long-form reading.
-        </div>
-      </div>
-
-      <div class="lumibionic-row">
-        <strong>Enabled</strong>
-        <input
-          id="lb-enabled"
-          type="checkbox"
-        >
-      </div>
-
-      <div class="lumibionic-control">
-        <label>Emphasis density</label>
-
-        <select id="lb-density">
-          <option value="light">
-            Light — longer words only
-          </option>
-
-          <option value="balanced">
-            Balanced — recommended
-          </option>
-
-          <option value="full">
-            Full — classic effect
-          </option>
-        </select>
-      </div>
-
-      <div class="lumibionic-control">
-        <div class="lumibionic-row">
-          <label>Fixation strength</label>
-          <span
-            class="lumibionic-value"
-            id="lb-fixation-value"
-          ></span>
-        </div>
-
-        <input
-          id="lb-fixation"
-          type="range"
-          min="20"
-          max="70"
-          step="5"
-        >
+        <h2>Reading & Fonts</h2>
 
         <div class="lumibionic-muted">
-          Controls how much of longer words
-          receives emphasis.
+          Use Bionic-style emphasis, replace
+          Lumiverse's message font, or use
+          either feature independently.
         </div>
       </div>
 
-      <div class="lumibionic-control">
+      <div class="lumibionic-section">
+
+        <div class="lumibionic-section-title">
+          Bionic emphasis
+        </div>
+
         <div class="lumibionic-row">
-          <label>Bold weight</label>
-          <span
-            class="lumibionic-value"
-            id="lb-weight-value"
-          ></span>
+          <label for="lb-bionic-enabled">
+            Enable Bionic Reading
+          </label>
+
+          <input
+            id="lb-bionic-enabled"
+            type="checkbox"
+          >
         </div>
 
-        <input
-          id="lb-weight"
-          type="range"
-          min="500"
-          max="900"
-          step="100"
-        >
+        <div id="lb-bionic-options">
+
+          <div class="lumibionic-control">
+            <label for="lb-density">
+              Emphasis density
+            </label>
+
+            <select id="lb-density">
+              <option value="light">
+                Light — longer words only
+              </option>
+
+              <option value="balanced">
+                Balanced — recommended
+              </option>
+
+              <option value="full">
+                Full — classic effect
+              </option>
+            </select>
+          </div>
+
+          <div class="lumibionic-control">
+
+            <div class="lumibionic-row">
+
+              <label for="lb-fixation">
+                Fixation strength
+              </label>
+
+              <span
+                class="lumibionic-value"
+                id="lb-fixation-value"
+              ></span>
+
+            </div>
+
+            <input
+              id="lb-fixation"
+              type="range"
+              min="20"
+              max="70"
+              step="5"
+            >
+
+          </div>
+
+          <div class="lumibionic-control">
+
+            <div class="lumibionic-row">
+
+              <label for="lb-weight">
+                Emphasis weight
+              </label>
+
+              <span
+                class="lumibionic-value"
+                id="lb-weight-value"
+              ></span>
+
+            </div>
+
+            <input
+              id="lb-weight"
+              type="range"
+              min="500"
+              max="900"
+              step="100"
+            >
+
+          </div>
+
+        </div>
+
       </div>
 
-      <div class="lumibionic-control">
-        <label>Font</label>
-        <select id="lb-font"></select>
-      </div>
+      <div class="lumibionic-section">
 
-      <div class="lumibionic-control">
+        <div class="lumibionic-section-title">
+          Font override
+        </div>
+
         <div class="lumibionic-row">
-          <label>Text size</label>
-          <span
-            class="lumibionic-value"
-            id="lb-size-value"
-          ></span>
+
+          <label for="lb-font-enabled">
+            Override message font
+          </label>
+
+          <input
+            id="lb-font-enabled"
+            type="checkbox"
+          >
+
         </div>
 
-        <input
-          id="lb-size"
-          type="range"
-          min="80"
-          max="140"
-          step="5"
-        >
-      </div>
-
-      <div class="lumibionic-control">
-        <div class="lumibionic-row">
-          <label>Line spacing</label>
-          <span
-            class="lumibionic-value"
-            id="lb-line-value"
-          ></span>
+        <div class="lumibionic-muted">
+          Forces the selected font on message
+          text even when the Lumiverse theme
+          declares another font.
         </div>
 
-        <input
-          id="lb-line"
-          type="range"
-          min="1.1"
-          max="2.2"
-          step="0.05"
-        >
+        <div id="lb-font-options">
+
+          <div class="lumibionic-control">
+
+            <label for="lb-font">
+              Font
+            </label>
+
+            <select id="lb-font"></select>
+
+          </div>
+
+          <div
+            class="lumibionic-control"
+            id="lb-custom-font-wrap"
+          >
+
+            <label for="lb-custom-font">
+              Custom font name / CSS stack
+            </label>
+
+            <input
+              id="lb-custom-font"
+              type="text"
+              spellcheck="false"
+              placeholder='"Atkinson Hyperlegible", sans-serif'
+            >
+
+            <div class="lumibionic-muted">
+              Enter any font installed on your
+              device, or a normal CSS
+              font-family stack.
+            </div>
+
+          </div>
+
+          <div class="lumibionic-control">
+
+            <label for="lb-font-file">
+              Load a local font file
+            </label>
+
+            <input
+              id="lb-font-file"
+              type="file"
+              accept=".woff,.woff2,.ttf,.otf,font/woff,font/woff2,font/ttf,font/otf"
+            >
+
+            <div
+              class="lumibionic-file-status"
+              id="lb-font-file-status"
+            >
+              Optional. Local font files apply
+              until this Lumiverse tab is closed
+              or refreshed.
+            </div>
+
+          </div>
+
+          <button
+            type="button"
+            id="lb-clear-font-file"
+          >
+            Stop using loaded font file
+          </button>
+
+        </div>
+
       </div>
 
-      <div class="lumibionic-control">
-        <label>Preview</label>
+      <div class="lumibionic-section">
 
-        <div
-          class="lumibionic-preview"
-          id="lb-preview"
-        ></div>
+        <div class="lumibionic-section-title">
+          Typography
+        </div>
+
+        <div class="lumibionic-control">
+
+          <div class="lumibionic-row">
+
+            <label for="lb-size">
+              Text size
+            </label>
+
+            <span
+              class="lumibionic-value"
+              id="lb-size-value"
+            ></span>
+
+          </div>
+
+          <input
+            id="lb-size"
+            type="range"
+            min="80"
+            max="140"
+            step="5"
+          >
+
+        </div>
+
+        <div class="lumibionic-control">
+
+          <div class="lumibionic-row">
+
+            <label for="lb-line">
+              Line spacing
+            </label>
+
+            <span
+              class="lumibionic-value"
+              id="lb-line-value"
+            ></span>
+
+          </div>
+
+          <input
+            id="lb-line"
+            type="range"
+            min="1.1"
+            max="2.2"
+            step="0.05"
+          >
+
+        </div>
+
+      </div>
+
+      <div class="lumibionic-section">
+
+        <div class="lumibionic-control">
+
+          <label>
+            Preview
+          </label>
+
+          <div
+            class="lumibionic-preview"
+            id="lb-preview"
+          ></div>
+
+        </div>
+
       </div>
 
       <button
@@ -666,23 +919,68 @@ export function setup(ctx) {
   const $ = selector =>
     tab.root.querySelector(selector)
 
-  const enabled = $('#lb-enabled')
-  const density = $('#lb-density')
-  const fixation = $('#lb-fixation')
+  const bionicEnabled =
+    $('#lb-bionic-enabled')
+
+  const bionicOptions =
+    $('#lb-bionic-options')
+
+  const density =
+    $('#lb-density')
+
+  const fixation =
+    $('#lb-fixation')
+
   const fixationValue =
     $('#lb-fixation-value')
-  const weight = $('#lb-weight')
+
+  const weight =
+    $('#lb-weight')
+
   const weightValue =
     $('#lb-weight-value')
-  const font = $('#lb-font')
-  const size = $('#lb-size')
+
+  const fontEnabled =
+    $('#lb-font-enabled')
+
+  const fontOptions =
+    $('#lb-font-options')
+
+  const font =
+    $('#lb-font')
+
+  const customFontWrap =
+    $('#lb-custom-font-wrap')
+
+  const customFont =
+    $('#lb-custom-font')
+
+  const fontFile =
+    $('#lb-font-file')
+
+  const fontFileStatus =
+    $('#lb-font-file-status')
+
+  const clearFontFile =
+    $('#lb-clear-font-file')
+
+  const size =
+    $('#lb-size')
+
   const sizeValue =
     $('#lb-size-value')
-  const line = $('#lb-line')
+
+  const line =
+    $('#lb-line')
+
   const lineValue =
     $('#lb-line-value')
-  const preview = $('#lb-preview')
-  const reset = $('#lb-reset')
+
+  const preview =
+    $('#lb-preview')
+
+  const reset =
+    $('#lb-reset')
 
   for (
     const [value, label]
@@ -698,8 +996,16 @@ export function setup(ctx) {
   }
 
   function syncControls() {
-    enabled.checked = settings.enabled
-    density.value = settings.density
+    bionicEnabled.checked =
+      settings.bionicEnabled
+
+    bionicOptions.classList.toggle(
+      'lumibionic-hidden',
+      !settings.bionicEnabled
+    )
+
+    density.value =
+      settings.density
 
     fixation.value =
       String(settings.fixation)
@@ -713,7 +1019,24 @@ export function setup(ctx) {
     weightValue.textContent =
       String(settings.weight)
 
-    font.value = settings.font
+    fontEnabled.checked =
+      settings.fontEnabled
+
+    fontOptions.classList.toggle(
+      'lumibionic-hidden',
+      !settings.fontEnabled
+    )
+
+    font.value =
+      settings.font
+
+    customFont.value =
+      settings.customFont
+
+    customFontWrap.classList.toggle(
+      'lumibionic-hidden',
+      settings.font !== 'custom'
+    )
 
     size.value =
       String(settings.textSize)
@@ -738,17 +1061,109 @@ export function setup(ctx) {
 
     preview.appendChild(sample)
 
-    if (settings.enabled) {
+    if (settings.bionicEnabled) {
       processTextNode(sample)
     }
   }
 
-  enabled.addEventListener(
+  async function loadLocalFont(file) {
+    if (!file) return
+
+    if (
+      loadedFontFace &&
+      document.fonts
+    ) {
+      try {
+        document.fonts.delete(
+          loadedFontFace
+        )
+      } catch {}
+    }
+
+    if (loadedFontUrl) {
+      URL.revokeObjectURL(
+        loadedFontUrl
+      )
+    }
+
+    loadedFontFace = null
+    loadedFontUrl = null
+
+    try {
+      const url =
+        URL.createObjectURL(file)
+
+      const face =
+        new FontFace(
+          'LumibionicCustomFile',
+          `url("${url}")`
+        )
+
+      await face.load()
+
+      document.fonts.add(face)
+
+      loadedFontFace = face
+      loadedFontUrl = url
+
+      fontFileStatus.textContent =
+        `Using local font: ${file.name}`
+
+      settings.fontEnabled = true
+
+      saveSettings()
+      applyCssSettings()
+      syncControls()
+      processAll()
+      renderPreview()
+    } catch (error) {
+      fontFileStatus.textContent =
+        'Could not load that font file.'
+
+      console.error(
+        '[Bionic Reading] Font load failed:',
+        error
+      )
+    }
+  }
+
+  function unloadLocalFont() {
+    if (
+      loadedFontFace &&
+      document.fonts
+    ) {
+      try {
+        document.fonts.delete(
+          loadedFontFace
+        )
+      } catch {}
+    }
+
+    if (loadedFontUrl) {
+      URL.revokeObjectURL(
+        loadedFontUrl
+      )
+    }
+
+    loadedFontFace = null
+    loadedFontUrl = null
+
+    fontFile.value = ''
+
+    fontFileStatus.textContent =
+      'No local font file loaded.'
+
+    applyCssSettings()
+    processAll()
+    renderPreview()
+  }
+
+  bionicEnabled.addEventListener(
     'change',
     () => {
       updateSetting(
-        'enabled',
-        enabled.checked,
+        'bionicEnabled',
+        bionicEnabled.checked,
         true
       )
     }
@@ -786,6 +1201,16 @@ export function setup(ctx) {
     }
   )
 
+  fontEnabled.addEventListener(
+    'change',
+    () => {
+      updateSetting(
+        'fontEnabled',
+        fontEnabled.checked
+      )
+    }
+  )
+
   font.addEventListener(
     'change',
     () => {
@@ -794,6 +1219,30 @@ export function setup(ctx) {
         font.value
       )
     }
+  )
+
+  customFont.addEventListener(
+    'input',
+    () => {
+      updateSetting(
+        'customFont',
+        customFont.value
+      )
+    }
+  )
+
+  fontFile.addEventListener(
+    'change',
+    () => {
+      loadLocalFont(
+        fontFile.files?.[0]
+      )
+    }
+  )
+
+  clearFontFile.addEventListener(
+    'click',
+    unloadLocalFont
   )
 
   size.addEventListener(
@@ -819,7 +1268,11 @@ export function setup(ctx) {
   reset.addEventListener(
     'click',
     () => {
-      settings = { ...DEFAULTS }
+      unloadLocalFont()
+
+      settings = {
+        ...DEFAULTS,
+      }
 
       saveSettings()
       applyCssSettings()
@@ -850,7 +1303,10 @@ export function setup(ctx) {
 
   return () => {
     observer.disconnect()
+
     unwrap()
+    unloadLocalFont()
+
     tab.destroy()
     removeStyle()
     ctx.dom.cleanup()
@@ -864,6 +1320,10 @@ export function setup(ctx) {
 
     root.style.removeProperty(
       '--lumibionic-font-family'
+    )
+
+    root.style.removeProperty(
+      '--lumibionic-preview-font'
     )
 
     root.style.removeProperty(

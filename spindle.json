@@ -1,11 +1,11 @@
 {
-  "version": "0.4.0",
-  "name": "Bionic-style Reading",
+  "version": "0.5.0",
+  "name": "Bionic Reading & Fonts",
   "identifier": "bionic_style_reading",
   "author": "patatasbravasch-arch",
   "github": "https://github.com/patatasbravasch-arch/bionic",
   "homepage": "https://github.com/patatasbravasch-arch/bionic",
-  "description": "Customizable, smoother Bionic-style reading for Lumiverse.",
+  "description": "Bionic-style reading and customizable font overrides for Lumiverse messages.",
   "permissions": [],
   "entry_frontend": "dist/frontend.js"
 }
