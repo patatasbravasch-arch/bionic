@@ -1,8 +1,30 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.8'
-  const LEGACY_SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.7'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.9'
+  const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.8',
+    'lumiverse:bionic-style-reading:v0.7',
+  ]
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.9'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
+
+  const TOOLBAR_BUTTONS = [
+    { key: 'backHome', label: 'Back to home', title: 'Back to home', className: 'lb-hide-toolbar-back-home' },
+    { key: 'regenerate', label: 'Regenerate', title: 'Regenerate', className: 'lb-hide-toolbar-regenerate' },
+    { key: 'continue', label: 'Continue', title: 'Continue', className: 'lb-hide-toolbar-continue' },
+    { key: 'oneLiner', label: 'One-liner nudge', title: 'One-liner: Chat history + impersonation nudge only', className: 'lb-hide-toolbar-one-liner' },
+    { key: 'persona', label: 'Switch persona', title: 'Switch persona for this chat', className: 'lb-hide-toolbar-persona' },
+    { key: 'connection', label: 'Connection', title: 'Connection:', className: 'lb-hide-toolbar-connection' },
+    { key: 'alternateFields', label: 'Alternate fields', title: 'Alternate fields', className: 'lb-hide-toolbar-alternate-fields' },
+    { key: 'guidedGenerations', label: 'Guided generations', title: 'Guided generations', className: 'lb-hide-toolbar-guided' },
+    { key: 'quickReplies', label: 'Quick replies', title: 'Quick replies', className: 'lb-hide-toolbar-quick-replies' },
+    { key: 'tools', label: 'Tools', title: 'Tools', className: 'lb-hide-toolbar-tools' },
+    { key: 'extras', label: 'Extras', title: 'Extras', className: 'lb-hide-toolbar-extras' },
+  ]
+
+  const DEFAULT_TOOLBAR_HIDDEN = Object.fromEntries(
+    TOOLBAR_BUTTONS.map(item => [item.key, false])
+  )
 
   const DEFAULTS = {
     preset: 'custom',
@@ -30,6 +52,8 @@ export function setup(ctx) {
     wordSpacing: 0,
     textSize: 100,
     lineHeight: 1.55,
+
+    toolbarHidden: { ...DEFAULT_TOOLBAR_HIDDEN },
   }
 
   const FONT_OPTIONS = [
@@ -147,7 +171,9 @@ export function setup(ctx) {
     try {
       const raw =
         localStorage.getItem(SETTINGS_KEY) ||
-        localStorage.getItem(LEGACY_SETTINGS_KEY) ||
+        LEGACY_SETTINGS_KEYS
+          .map(key => localStorage.getItem(key))
+          .find(Boolean) ||
         '{}'
 
       const saved = JSON.parse(raw)
@@ -256,6 +282,15 @@ export function setup(ctx) {
 
         textSize: clamp(saved.textSize, 80, 140, DEFAULTS.textSize),
         lineHeight: clamp(saved.lineHeight, 1.1, 2.2, DEFAULTS.lineHeight),
+
+        toolbarHidden: Object.fromEntries(
+          TOOLBAR_BUTTONS.map(item => [
+            item.key,
+            typeof saved.toolbarHidden?.[item.key] === 'boolean'
+              ? saved.toolbarHidden[item.key]
+              : DEFAULT_TOOLBAR_HIDDEN[item.key],
+          ])
+        ),
       }
     } catch {
       return { ...DEFAULTS }
@@ -507,6 +542,73 @@ export function setup(ctx) {
       font-weight: var(--lumibionic-weight, 600) !important;
     }
 
+    /* Chat toolbar visibility — exact title matches requested by the user. */
+    html.lb-hide-toolbar-back-home
+    [data-component="InputArea"] [data-spindle-mount="chat_toolbar"]
+    button[title*="Back to home"] {
+      display: none !important;
+    }
+
+    html.lb-hide-toolbar-regenerate
+    [data-component="InputArea"] [data-spindle-mount="chat_toolbar"]
+    button[title*="Regenerate"] {
+      display: none !important;
+    }
+
+    html.lb-hide-toolbar-continue
+    [data-component="InputArea"] [data-spindle-mount="chat_toolbar"]
+    button[title*="Continue"] {
+      display: none !important;
+    }
+
+    html.lb-hide-toolbar-one-liner
+    [data-component="InputArea"] [data-spindle-mount="chat_toolbar"]
+    button[title*="One-liner: Chat history + impersonation nudge only"] {
+      display: none !important;
+    }
+
+    html.lb-hide-toolbar-persona
+    [data-component="InputArea"] [data-spindle-mount="chat_toolbar"]
+    button[title*="Switch persona for this chat"] {
+      display: none !important;
+    }
+
+    html.lb-hide-toolbar-connection
+    [data-component="InputArea"] [data-spindle-mount="chat_toolbar"]
+    button[title*="Connection:"] {
+      display: none !important;
+    }
+
+    html.lb-hide-toolbar-alternate-fields
+    [data-component="InputArea"] [data-spindle-mount="chat_toolbar"]
+    button[title*="Alternate fields"] {
+      display: none !important;
+    }
+
+    html.lb-hide-toolbar-guided
+    [data-component="InputArea"] [data-spindle-mount="chat_toolbar"]
+    button[title*="Guided generations"] {
+      display: none !important;
+    }
+
+    html.lb-hide-toolbar-quick-replies
+    [data-component="InputArea"] [data-spindle-mount="chat_toolbar"]
+    button[title*="Quick replies"] {
+      display: none !important;
+    }
+
+    html.lb-hide-toolbar-tools
+    [data-component="InputArea"] [data-spindle-mount="chat_toolbar"]
+    button[title*="Tools"] {
+      display: none !important;
+    }
+
+    html.lb-hide-toolbar-extras
+    [data-component="InputArea"] [data-spindle-mount="chat_toolbar"]
+    button[title*="Extras"] {
+      display: none !important;
+    }
+
     .lumibionic-settings {
       padding: 16px;
       display: flex;
@@ -534,6 +636,118 @@ export function setup(ctx) {
     .lumibionic-section-title {
       font-size: 14px;
       font-weight: 700;
+    }
+
+
+    .lumibionic-section-toggle {
+      width: 100% !important;
+      padding: 8px 0 !important;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border: 0;
+      background: transparent;
+      text-align: left;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .lumibionic-section-toggle::after {
+      content: "▾";
+      opacity: 0.62;
+      transition: transform 120ms ease;
+    }
+
+    .lumibionic-section-toggle[aria-expanded="false"]::after {
+      transform: rotate(-90deg);
+    }
+
+    .lumibionic-section-body {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .lumibionic-section-body.lumibionic-section-collapsed {
+      display: none !important;
+    }
+
+    .lumibionic-preview-section {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      margin: 0 -8px;
+      padding: 10px 8px 12px !important;
+      border-top: 0 !important;
+      border-bottom: 1px solid rgba(127, 127, 127, 0.22);
+      background: color-mix(in srgb, var(--lumiverse-bg, #080812) 92%, transparent);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+
+    .lumibionic-preview-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .lumibionic-preview-toolbar strong {
+      font-size: 13px;
+    }
+
+    .lumibionic-preview-toolbar button {
+      width: auto !important;
+      padding: 6px 9px !important;
+      font-size: 12px;
+    }
+
+    .lumibionic-ui-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .lumibionic-toolbar-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .lumibionic-toolbar-toggle {
+      min-height: 48px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 2px;
+      text-align: left;
+      border: 1px solid rgba(127, 127, 127, 0.22);
+      background: rgba(127, 127, 127, 0.04);
+    }
+
+    .lumibionic-toolbar-toggle small {
+      opacity: 0.64;
+      font-size: 11px;
+    }
+
+    .lumibionic-toolbar-toggle[data-hidden="true"] {
+      border-color: color-mix(in srgb, var(--lumiverse-primary, #7c9bc8) 58%, transparent);
+      background: color-mix(in srgb, var(--lumiverse-primary, #7c9bc8) 13%, transparent);
+    }
+
+    .lumibionic-toolbar-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    @media (max-width: 440px) {
+      .lumibionic-toolbar-grid {
+        grid-template-columns: 1fr;
+      }
     }
 
     .lumibionic-muted {
@@ -904,6 +1118,13 @@ export function setup(ctx) {
       'lb-font-all',
       enabled && settings.scopeAll
     )
+
+    for (const item of TOOLBAR_BUTTONS) {
+      root.classList.toggle(
+        item.className,
+        Boolean(settings.toolbarHidden?.[item.key])
+      )
+    }
   }
 
   function applyCssSettings() {
@@ -1032,6 +1253,35 @@ export function setup(ctx) {
     }
 
     renderPreview()
+  }
+
+  function updateToolbarSetting(key, hidden) {
+    if (!TOOLBAR_BUTTONS.some(item => item.key === key)) return
+
+    settings = {
+      ...settings,
+      toolbarHidden: {
+        ...settings.toolbarHidden,
+        [key]: Boolean(hidden),
+      },
+    }
+
+    saveSettings()
+    applyCssSettings()
+    syncControls()
+  }
+
+  function setAllToolbarHidden(hidden) {
+    settings = {
+      ...settings,
+      toolbarHidden: Object.fromEntries(
+        TOOLBAR_BUTTONS.map(item => [item.key, Boolean(hidden)])
+      ),
+    }
+
+    saveSettings()
+    applyCssSettings()
+    syncControls()
   }
 
   function applyPreset(name) {
@@ -1374,6 +1624,43 @@ export function setup(ctx) {
       </div>
 
       <div class="lumibionic-section">
+
+        <div class="lumibionic-section-title">
+          Chat toolbar
+        </div>
+
+        <div class="lumibionic-muted">
+          Tap an item to hide or show that exact Lumiverse toolbar button.
+          These use the same title matches as your CSS block.
+        </div>
+
+        <div class="lumibionic-toolbar-grid" id="lb-toolbar-grid">
+          <button type="button" class="lumibionic-toolbar-toggle" data-toolbar-key="backHome"><span>Back to home</span><small>Shown</small></button>
+          <button type="button" class="lumibionic-toolbar-toggle" data-toolbar-key="regenerate"><span>Regenerate</span><small>Shown</small></button>
+          <button type="button" class="lumibionic-toolbar-toggle" data-toolbar-key="continue"><span>Continue</span><small>Shown</small></button>
+          <button type="button" class="lumibionic-toolbar-toggle" data-toolbar-key="oneLiner"><span>One-liner nudge</span><small>Shown</small></button>
+          <button type="button" class="lumibionic-toolbar-toggle" data-toolbar-key="persona"><span>Switch persona</span><small>Shown</small></button>
+          <button type="button" class="lumibionic-toolbar-toggle" data-toolbar-key="connection"><span>Connection</span><small>Shown</small></button>
+          <button type="button" class="lumibionic-toolbar-toggle" data-toolbar-key="alternateFields"><span>Alternate fields</span><small>Shown</small></button>
+          <button type="button" class="lumibionic-toolbar-toggle" data-toolbar-key="guidedGenerations"><span>Guided generations</span><small>Shown</small></button>
+          <button type="button" class="lumibionic-toolbar-toggle" data-toolbar-key="quickReplies"><span>Quick replies</span><small>Shown</small></button>
+          <button type="button" class="lumibionic-toolbar-toggle" data-toolbar-key="tools"><span>Tools</span><small>Shown</small></button>
+          <button type="button" class="lumibionic-toolbar-toggle" data-toolbar-key="extras"><span>Extras</span><small>Shown</small></button>
+        </div>
+
+        <div class="lumibionic-toolbar-actions">
+          <button type="button" id="lb-toolbar-hide-all">Hide all listed</button>
+          <button type="button" id="lb-toolbar-show-all">Show all listed</button>
+        </div>
+
+        <div class="lumibionic-muted">
+          If the old custom CSS block is still active elsewhere, remove it first;
+          otherwise it will keep these buttons hidden regardless of this setting.
+        </div>
+
+      </div>
+
+      <div class="lumibionic-section">
         <div class="lumibionic-control">
           <label>Preview</label>
           <div
@@ -1438,6 +1725,13 @@ export function setup(ctx) {
   const preview = $('#lb-preview')
   const reset = $('#lb-reset')
 
+  const toolbarGrid = $('#lb-toolbar-grid')
+  const toolbarHideAll = $('#lb-toolbar-hide-all')
+  const toolbarShowAll = $('#lb-toolbar-show-all')
+  const toolbarToggleButtons = Array.from(
+    tab.root.querySelectorAll('[data-toolbar-key]')
+  )
+
   for (const [value, label] of FONT_OPTIONS) {
     const option = document.createElement('option')
     option.value = value
@@ -1451,6 +1745,179 @@ export function setup(ctx) {
     option.textContent = label
     readingWidth.appendChild(option)
   }
+
+  function loadUiState() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(UI_STATE_KEY) || '{}')
+      return {
+        previewVisible:
+          typeof saved.previewVisible === 'boolean'
+            ? saved.previewVisible
+            : true,
+        sections:
+          saved.sections && typeof saved.sections === 'object'
+            ? saved.sections
+            : {},
+      }
+    } catch {
+      return { previewVisible: true, sections: {} }
+    }
+  }
+
+  let uiState = loadUiState()
+
+  function saveUiState() {
+    try {
+      localStorage.setItem(UI_STATE_KEY, JSON.stringify(uiState))
+    } catch {}
+  }
+
+  function sectionKey(title) {
+    return title
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+  }
+
+  function setupCollapsibleUi() {
+    const settingsRoot = tab.root.querySelector('.lumibionic-settings')
+    if (!settingsRoot) return
+
+    const previewSection = preview.closest('.lumibionic-section')
+    const headingBlock = settingsRoot.firstElementChild
+
+    if (previewSection && headingBlock) {
+      previewSection.classList.add('lumibionic-preview-section')
+      headingBlock.insertAdjacentElement('afterend', previewSection)
+
+      const toolbar = document.createElement('div')
+      toolbar.className = 'lumibionic-preview-toolbar'
+      toolbar.innerHTML = `
+        <strong>Live preview</strong>
+        <button type="button" id="lb-toggle-preview"></button>
+      `
+      previewSection.insertBefore(toolbar, previewSection.firstChild)
+
+      const previewControl = preview.closest('.lumibionic-control')
+      const previewLabel = previewControl?.querySelector('label')
+      if (previewLabel) previewLabel.remove()
+
+      const previewToggle = toolbar.querySelector('#lb-toggle-preview')
+
+      const syncPreviewVisibility = () => {
+        if (previewControl) {
+          previewControl.classList.toggle(
+            'lumibionic-hidden',
+            !uiState.previewVisible
+          )
+        }
+        if (previewToggle) {
+          previewToggle.textContent = uiState.previewVisible
+            ? 'Hide preview'
+            : 'Show preview'
+          previewToggle.setAttribute(
+            'aria-expanded',
+            String(uiState.previewVisible)
+          )
+        }
+      }
+
+      previewToggle?.addEventListener('click', () => {
+        uiState = {
+          ...uiState,
+          previewVisible: !uiState.previewVisible,
+        }
+        saveUiState()
+        syncPreviewVisibility()
+      })
+
+      syncPreviewVisibility()
+    }
+
+    const uiActions = document.createElement('div')
+    uiActions.className = 'lumibionic-ui-actions'
+    uiActions.innerHTML = `
+      <button type="button" id="lb-collapse-all">Collapse settings</button>
+      <button type="button" id="lb-expand-all">Expand settings</button>
+    `
+
+    if (previewSection) {
+      previewSection.insertAdjacentElement('afterend', uiActions)
+    } else if (headingBlock) {
+      headingBlock.insertAdjacentElement('afterend', uiActions)
+    }
+
+    const sectionControllers = []
+
+    tab.root
+      .querySelectorAll('.lumibionic-section')
+      .forEach(section => {
+        if (section.classList.contains('lumibionic-preview-section')) return
+
+        const title = section.querySelector(':scope > .lumibionic-section-title')
+        if (!title) return
+
+        const key = sectionKey(title.textContent || 'section')
+        const body = document.createElement('div')
+        body.className = 'lumibionic-section-body'
+
+        const children = Array.from(section.children)
+        for (const child of children) {
+          if (child !== title) body.appendChild(child)
+        }
+
+        const toggle = document.createElement('button')
+        toggle.type = 'button'
+        toggle.className = 'lumibionic-section-toggle'
+        toggle.textContent = title.textContent.trim()
+
+        title.replaceWith(toggle)
+        section.appendChild(body)
+
+        const collapsed = uiState.sections[key] === false
+
+        const setExpanded = (expanded, persist = true) => {
+          body.classList.toggle(
+            'lumibionic-section-collapsed',
+            !expanded
+          )
+          toggle.setAttribute('aria-expanded', String(expanded))
+
+          if (persist) {
+            uiState = {
+              ...uiState,
+              sections: {
+                ...uiState.sections,
+                [key]: expanded,
+              },
+            }
+            saveUiState()
+          }
+        }
+
+        toggle.addEventListener('click', () => {
+          setExpanded(toggle.getAttribute('aria-expanded') !== 'true')
+        })
+
+        setExpanded(!collapsed, false)
+        sectionControllers.push(setExpanded)
+      })
+
+    uiActions
+      .querySelector('#lb-collapse-all')
+      ?.addEventListener('click', () => {
+        for (const setExpanded of sectionControllers) setExpanded(false)
+      })
+
+    uiActions
+      .querySelector('#lb-expand-all')
+      ?.addEventListener('click', () => {
+        for (const setExpanded of sectionControllers) setExpanded(true)
+      })
+  }
+
+  setupCollapsibleUi()
 
   function formatEm(value, digits = 2) {
     if (Math.abs(value) < 0.0001) return 'Theme'
@@ -1525,6 +1992,16 @@ export function setup(ctx) {
 
     line.value = String(settings.lineHeight)
     lineValue.textContent = settings.lineHeight.toFixed(2)
+
+    for (const button of toolbarToggleButtons) {
+      const key = button.dataset.toolbarKey
+      const hidden = Boolean(settings.toolbarHidden?.[key])
+      button.dataset.hidden = String(hidden)
+      button.setAttribute('aria-pressed', String(hidden))
+
+      const state = button.querySelector('small')
+      if (state) state.textContent = hidden ? 'Hidden' : 'Shown'
+    }
 
     for (const sync of mobileStepperSyncers) sync()
   }
@@ -1704,6 +2181,27 @@ export function setup(ctx) {
     }
   }
 
+  toolbarGrid?.addEventListener('click', event => {
+    const button = event.target.closest('[data-toolbar-key]')
+    if (!button || !toolbarGrid.contains(button)) return
+
+    const key = button.dataset.toolbarKey
+    updateToolbarSetting(
+      key,
+      !Boolean(settings.toolbarHidden?.[key])
+    )
+  })
+
+  toolbarHideAll?.addEventListener(
+    'click',
+    () => setAllToolbarHidden(true)
+  )
+
+  toolbarShowAll?.addEventListener(
+    'click',
+    () => setAllToolbarHidden(false)
+  )
+
   preset.addEventListener(
     'change',
     () => applyPreset(preset.value)
@@ -1870,6 +2368,7 @@ export function setup(ctx) {
 
       settings = {
         ...DEFAULTS,
+        toolbarHidden: { ...DEFAULT_TOOLBAR_HIDDEN },
       }
 
       saveSettings()
@@ -1920,6 +2419,7 @@ export function setup(ctx) {
       'lb-font-menus',
       'lb-font-navigation',
       'lb-font-all',
+      ...TOOLBAR_BUTTONS.map(item => item.className),
     ]) {
       root.classList.remove(className)
     }
