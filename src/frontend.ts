@@ -220,24 +220,28 @@ export function setup(ctx) {
         !important;
     }
 
-    ${MESSAGE_SELECTOR}.lumibionic-font-override
-      *:not(code)
-      :not(pre)
-      :not(kbd)
-      :not(samp)
-      :not(button)
-      :not(input)
-      :not(textarea)
-      :not(select)
-      :not(option)
-      :not(svg)
-      :not(math) {
-      font-family:
-        var(--lumibionic-font-family, inherit)
-        !important;
-    }
-
-    ${MESSAGE_SELECTOR}.lumibionic-font-override {
+    html body ${MESSAGE_SELECTOR}.lumibionic-font-override,
+    html body ${MESSAGE_SELECTOR}.lumibionic-font-override
+      *:not(
+        code,
+        code *,
+        pre,
+        pre *,
+        kbd,
+        kbd *,
+        samp,
+        samp *,
+        button,
+        button *,
+        input,
+        textarea,
+        select,
+        option,
+        svg,
+        svg *,
+        math,
+        math *
+      ) {
       font-family:
         var(--lumibionic-font-family, inherit)
         !important;
