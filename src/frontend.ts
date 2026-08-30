@@ -1,15 +1,16 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.3'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.4'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const DEFAULTS = {
     enabled: true,
-    fixation: 50,
-    weight: 700,
+    density: 'balanced',
+    fixation: 35,
+    weight: 600,
     font: 'inherit',
     textSize: 100,
-    lineHeight: 1.5,
+    lineHeight: 1.55,
   }
 
   const FONT_OPTIONS = [
@@ -21,7 +22,6 @@ export function setup(ctx) {
     ['"Trebuchet MS", sans-serif', 'Trebuchet MS'],
     ['Georgia, serif', 'Georgia'],
     ['"Times New Roman", serif', 'Times New Roman'],
-    ['ui-monospace, monospace', 'Monospace'],
   ]
 
   const SKIP_SELECTOR = [
@@ -45,10 +45,11 @@ export function setup(ctx) {
     '[data-lumibionic-word]',
   ].join(',')
 
-  function clampNumber(value, min, max, fallback) {
-    const number = Number(value)
-    if (!Number.isFinite(number)) return fallback
-    return Math.min(max, Math.max(min, number))
+  function clamp(value, min, max, fallback) {
+    const n = Number(value)
+    return Number.isFinite(n)
+      ? Math.min(max, Math.max(min, n))
+      : fallback
   }
 
   function loadSettings() {
@@ -63,14 +64,19 @@ export function setup(ctx) {
             ? saved.enabled
             : DEFAULTS.enabled,
 
-        fixation: clampNumber(
+        density:
+          ['light', 'balanced', 'full'].includes(saved.density)
+            ? saved.density
+            : DEFAULTS.density,
+
+        fixation: clamp(
           saved.fixation,
           20,
-          80,
+          70,
           DEFAULTS.fixation
         ),
 
-        weight: clampNumber(
+        weight: clamp(
           saved.weight,
           500,
           900,
@@ -82,14 +88,14 @@ export function setup(ctx) {
             ? saved.font
             : DEFAULTS.font,
 
-        textSize: clampNumber(
+        textSize: clamp(
           saved.textSize,
           80,
           140,
           DEFAULTS.textSize
         ),
 
-        lineHeight: clampNumber(
+        lineHeight: clamp(
           saved.lineHeight,
           1.1,
           2.2,
@@ -112,6 +118,65 @@ export function setup(ctx) {
         })
       : null
 
+  function graphemes(value) {
+    if (!segmenter) return Array.from(value)
+
+    return Array.from(
+      segmenter.segment(value),
+      part => part.segment
+    )
+  }
+
+  function shouldEmphasize(length) {
+    if (settings.density === 'light') {
+      return length >= 6
+    }
+
+    if (settings.density === 'balanced') {
+      return length >= 4
+    }
+
+    return length >= 2
+  }
+
+  function fixationCut(word) {
+    const chars = graphemes(word)
+    const length = chars.length
+
+    if (!shouldEmphasize(length)) {
+      return { chars, cut: 0 }
+    }
+
+    let base
+
+    if (length <= 5) {
+      base = 1
+    } else if (length <= 8) {
+      base = 2
+    } else if (length <= 11) {
+      base = 3
+    } else {
+      base = 4
+    }
+
+    const multiplier =
+      settings.fixation / 35
+
+    let cut =
+      Math.round(base * multiplier)
+
+    cut = Math.max(
+      1,
+      Math.min(
+        cut,
+        4,
+        length - 1
+      )
+    )
+
+    return { chars, cut }
+  }
+
   const removeStyle = ctx.dom.addStyle(`
     [data-component="MessageContent"].lumibionic-message {
       font-family:
@@ -123,13 +188,13 @@ export function setup(ctx) {
         !important;
 
       line-height:
-        var(--lumibionic-line-height, 1.5)
+        var(--lumibionic-line-height, 1.55)
         !important;
     }
 
     [data-lumibionic-fix] {
       font-weight:
-        var(--lumibionic-weight, 700)
+        var(--lumibionic-weight, 600)
         !important;
     }
 
@@ -138,7 +203,6 @@ export function setup(ctx) {
       display: flex;
       flex-direction: column;
       gap: 18px;
-      color: var(--lumiverse-text);
     }
 
     .lumibionic-settings h2 {
@@ -147,7 +211,7 @@ export function setup(ctx) {
     }
 
     .lumibionic-muted {
-      color: var(--lumiverse-text-muted);
+      opacity: 0.68;
       font-size: 12px;
       line-height: 1.45;
     }
@@ -158,7 +222,7 @@ export function setup(ctx) {
       gap: 7px;
     }
 
-    .lumibionic-control-row {
+    .lumibionic-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -171,35 +235,23 @@ export function setup(ctx) {
     }
 
     .lumibionic-value {
-      min-width: 52px;
+      min-width: 48px;
       text-align: right;
-      color: var(--lumiverse-text-muted);
+      opacity: 0.7;
       font-size: 12px;
-      font-variant-numeric: tabular-nums;
     }
 
-    .lumibionic-settings input[type="range"] {
-      width: 100%;
-    }
-
+    .lumibionic-settings input[type="range"],
     .lumibionic-settings select,
     .lumibionic-settings button {
       width: 100%;
       box-sizing: border-box;
+    }
+
+    .lumibionic-settings select,
+    .lumibionic-settings button {
       padding: 9px 10px;
-
-      border:
-        1px solid var(--lumiverse-border);
-
-      border-radius:
-        var(--lumiverse-radius);
-
-      background:
-        var(--lumiverse-fill);
-
-      color:
-        var(--lumiverse-text);
-
+      border-radius: 8px;
       font: inherit;
     }
 
@@ -207,25 +259,10 @@ export function setup(ctx) {
       cursor: pointer;
     }
 
-    .lumibionic-switch-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 10px 0;
-    }
-
     .lumibionic-preview {
       padding: 14px;
-
-      border:
-        1px solid var(--lumiverse-border);
-
-      border-radius:
-        var(--lumiverse-radius);
-
-      background:
-        var(--lumiverse-fill-subtle);
+      border-radius: 8px;
+      background: rgba(127,127,127,0.08);
 
       font-family:
         var(--lumibionic-font-family, inherit);
@@ -234,96 +271,29 @@ export function setup(ctx) {
         var(--lumibionic-text-size, 100%);
 
       line-height:
-        var(--lumibionic-line-height, 1.5);
-    }
-
-    .lumibionic-preview [data-lumibionic-fix] {
-      font-weight:
-        var(--lumibionic-weight, 700)
-        !important;
+        var(--lumibionic-line-height, 1.55);
     }
   `)
 
   const tab = ctx.ui.registerDrawerTab({
     id: 'bionic-reading',
-
     title: 'Bionic Reading',
-
     shortName: 'Bionic',
-
     headerTitle: 'Bionic Reading',
 
     description:
-      'Customize fixation, font, weight, size, and spacing',
+      'Customize reading emphasis and typography',
 
     keywords: [
       'bionic',
       'reading',
       'font',
       'accessibility',
-      'fixation',
     ],
-
-    iconSvg: `
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <path
-          d="M4 5h9a4 4 0 0 1 0 8H4V5Z"
-          stroke="currentColor"
-          stroke-width="2"
-        />
-        <path
-          d="M4 13h10a3 3 0 0 1 0 6H4v-6Z"
-          stroke="currentColor"
-          stroke-width="2"
-        />
-      </svg>
-    `,
   })
-
-  function graphemes(value) {
-    if (!segmenter) return Array.from(value)
-
-    return Array.from(
-      segmenter.segment(value),
-      part => part.segment
-    )
-  }
-
-  function fixationCut(word) {
-    const chars = graphemes(word)
-
-    if (chars.length < 2) {
-      return {
-        chars,
-        cut: 0,
-      }
-    }
-
-    const cut = Math.max(
-      1,
-      Math.min(
-        chars.length - 1,
-        Math.ceil(
-          chars.length *
-          settings.fixation /
-          100
-        )
-      )
-    )
-
-    return {
-      chars,
-      cut,
-    }
-  }
 
   function processTextNode(node) {
     const parent = node.parentElement
-
     if (!parent) return
 
     if (parent.closest(SKIP_SELECTOR)) {
@@ -347,60 +317,47 @@ export function setup(ctx) {
       const word = match[0]
       const index = match.index ?? 0
 
-      const {
-        chars,
-        cut,
-      } = fixationCut(word)
+      const { chars, cut } =
+        fixationCut(word)
 
       if (!cut) continue
 
       if (index > lastIndex) {
         fragment.appendChild(
           doc.createTextNode(
-            text.slice(
-              lastIndex,
-              index
-            )
+            text.slice(lastIndex, index)
           )
         )
       }
 
-      const wordWrapper =
+      const wrapper =
         doc.createElement('span')
 
-      wordWrapper.setAttribute(
+      wrapper.setAttribute(
         'data-lumibionic-word',
         ''
       )
 
-      const fixation =
+      const fix =
         doc.createElement('span')
 
-      fixation.setAttribute(
+      fix.setAttribute(
         'data-lumibionic-fix',
         ''
       )
 
-      fixation.textContent =
-        chars
-          .slice(0, cut)
-          .join('')
+      fix.textContent =
+        chars.slice(0, cut).join('')
 
-      wordWrapper.appendChild(
-        fixation
-      )
+      wrapper.appendChild(fix)
 
-      wordWrapper.appendChild(
+      wrapper.appendChild(
         doc.createTextNode(
-          chars
-            .slice(cut)
-            .join('')
+          chars.slice(cut).join('')
         )
       )
 
-      fragment.appendChild(
-        wordWrapper
-      )
+      fragment.appendChild(wrapper)
 
       lastIndex =
         index + word.length
@@ -440,9 +397,7 @@ export function setup(ctx) {
     const nodes = []
 
     while (walker.nextNode()) {
-      nodes.push(
-        walker.currentNode
-      )
+      nodes.push(walker.currentNode)
     }
 
     for (const node of nodes) {
@@ -478,26 +433,20 @@ export function setup(ctx) {
 
   function processAll() {
     if (
-      !settings.enabled ||
-      rebuilding
-    ) {
-      return
-    }
+      rebuilding ||
+      !settings.enabled
+    ) return
 
     document
       .querySelectorAll(
         MESSAGE_SELECTOR
       )
-      .forEach(
-        processMessage
-      )
+      .forEach(processMessage)
   }
 
   function rebuildAll() {
     rebuilding = true
-
     unwrap()
-
     rebuilding = false
 
     if (settings.enabled) {
@@ -510,9 +459,7 @@ export function setup(ctx) {
       scheduled ||
       rebuilding ||
       !settings.enabled
-    ) {
-      return
-    }
+    ) return
 
     scheduled = true
 
@@ -548,20 +495,16 @@ export function setup(ctx) {
   }
 
   function saveSettings() {
-    try {
-      localStorage.setItem(
-        SETTINGS_KEY,
-        JSON.stringify(settings)
-      )
-    } catch {
-      // Settings still work for this session.
-    }
+    localStorage.setItem(
+      SETTINGS_KEY,
+      JSON.stringify(settings)
+    )
   }
 
-  function setSetting(
+  function updateSetting(
     key,
     value,
-    needsRebuild = false
+    rebuild = false
   ) {
     settings = {
       ...settings,
@@ -573,8 +516,8 @@ export function setup(ctx) {
     syncControls()
 
     if (
-      key === 'enabled' ||
-      needsRebuild
+      rebuild ||
+      key === 'enabled'
     ) {
       rebuildAll()
     }
@@ -587,152 +530,132 @@ export function setup(ctx) {
 
       <div>
         <h2>Bionic Reading</h2>
-
         <div class="lumibionic-muted">
-          Tune the fixation effect to whatever
-          feels easiest to scan.
+          A gentler emphasis mode designed
+          for smoother long-form reading.
         </div>
       </div>
 
-      <div class="lumibionic-switch-row">
-        <label for="lumibionic-enabled">
-          <strong>Enabled</strong>
-        </label>
-
+      <div class="lumibionic-row">
+        <strong>Enabled</strong>
         <input
-          id="lumibionic-enabled"
+          id="lb-enabled"
           type="checkbox"
-        />
+        >
       </div>
 
       <div class="lumibionic-control">
+        <label>Emphasis density</label>
 
-        <div class="lumibionic-control-row">
-          <label for="lumibionic-fixation">
-            Fixation
-          </label>
+        <select id="lb-density">
+          <option value="light">
+            Light — longer words only
+          </option>
 
+          <option value="balanced">
+            Balanced — recommended
+          </option>
+
+          <option value="full">
+            Full — classic effect
+          </option>
+        </select>
+      </div>
+
+      <div class="lumibionic-control">
+        <div class="lumibionic-row">
+          <label>Fixation strength</label>
           <span
             class="lumibionic-value"
-            id="lumibionic-fixation-value"
+            id="lb-fixation-value"
           ></span>
         </div>
 
         <input
-          id="lumibionic-fixation"
+          id="lb-fixation"
           type="range"
           min="20"
-          max="80"
+          max="70"
           step="5"
-        />
+        >
 
         <div class="lumibionic-muted">
-          Percentage of each word emphasized.
+          Controls how much of longer words
+          receives emphasis.
         </div>
-
       </div>
 
       <div class="lumibionic-control">
-
-        <div class="lumibionic-control-row">
-          <label for="lumibionic-weight">
-            Bold weight
-          </label>
-
+        <div class="lumibionic-row">
+          <label>Bold weight</label>
           <span
             class="lumibionic-value"
-            id="lumibionic-weight-value"
+            id="lb-weight-value"
           ></span>
         </div>
 
         <input
-          id="lumibionic-weight"
+          id="lb-weight"
           type="range"
           min="500"
           max="900"
           step="100"
-        />
-
+        >
       </div>
 
       <div class="lumibionic-control">
-
-        <label for="lumibionic-font">
-          Font
-        </label>
-
-        <select
-          id="lumibionic-font"
-        ></select>
-
+        <label>Font</label>
+        <select id="lb-font"></select>
       </div>
 
       <div class="lumibionic-control">
-
-        <div class="lumibionic-control-row">
-
-          <label for="lumibionic-size">
-            Text size
-          </label>
-
+        <div class="lumibionic-row">
+          <label>Text size</label>
           <span
             class="lumibionic-value"
-            id="lumibionic-size-value"
+            id="lb-size-value"
           ></span>
-
         </div>
 
         <input
-          id="lumibionic-size"
+          id="lb-size"
           type="range"
           min="80"
           max="140"
           step="5"
-        />
-
+        >
       </div>
 
       <div class="lumibionic-control">
-
-        <div class="lumibionic-control-row">
-
-          <label for="lumibionic-line-height">
-            Line spacing
-          </label>
-
+        <div class="lumibionic-row">
+          <label>Line spacing</label>
           <span
             class="lumibionic-value"
-            id="lumibionic-line-height-value"
+            id="lb-line-value"
           ></span>
-
         </div>
 
         <input
-          id="lumibionic-line-height"
+          id="lb-line"
           type="range"
           min="1.1"
           max="2.2"
-          step="0.1"
-        />
-
+          step="0.05"
+        >
       </div>
 
       <div class="lumibionic-control">
-
-        <label>
-          Preview
-        </label>
+        <label>Preview</label>
 
         <div
           class="lumibionic-preview"
-          id="lumibionic-preview"
+          id="lb-preview"
         ></div>
-
       </div>
 
       <button
         type="button"
-        id="lumibionic-reset"
+        id="lb-reset"
       >
         Reset defaults
       </button>
@@ -740,231 +663,163 @@ export function setup(ctx) {
     </div>
   `
 
-  const enabledInput =
-    tab.root.querySelector(
-      '#lumibionic-enabled'
-    )
+  const $ = selector =>
+    tab.root.querySelector(selector)
 
-  const fixationInput =
-    tab.root.querySelector(
-      '#lumibionic-fixation'
-    )
-
+  const enabled = $('#lb-enabled')
+  const density = $('#lb-density')
+  const fixation = $('#lb-fixation')
   const fixationValue =
-    tab.root.querySelector(
-      '#lumibionic-fixation-value'
-    )
-
-  const weightInput =
-    tab.root.querySelector(
-      '#lumibionic-weight'
-    )
-
+    $('#lb-fixation-value')
+  const weight = $('#lb-weight')
   const weightValue =
-    tab.root.querySelector(
-      '#lumibionic-weight-value'
-    )
-
-  const fontSelect =
-    tab.root.querySelector(
-      '#lumibionic-font'
-    )
-
-  const sizeInput =
-    tab.root.querySelector(
-      '#lumibionic-size'
-    )
-
+    $('#lb-weight-value')
+  const font = $('#lb-font')
+  const size = $('#lb-size')
   const sizeValue =
-    tab.root.querySelector(
-      '#lumibionic-size-value'
-    )
-
-  const lineHeightInput =
-    tab.root.querySelector(
-      '#lumibionic-line-height'
-    )
-
-  const lineHeightValue =
-    tab.root.querySelector(
-      '#lumibionic-line-height-value'
-    )
-
-  const preview =
-    tab.root.querySelector(
-      '#lumibionic-preview'
-    )
-
-  const resetButton =
-    tab.root.querySelector(
-      '#lumibionic-reset'
-    )
+    $('#lb-size-value')
+  const line = $('#lb-line')
+  const lineValue =
+    $('#lb-line-value')
+  const preview = $('#lb-preview')
+  const reset = $('#lb-reset')
 
   for (
     const [value, label]
     of FONT_OPTIONS
   ) {
     const option =
-      document.createElement(
-        'option'
-      )
+      document.createElement('option')
 
     option.value = value
     option.textContent = label
 
-    fontSelect?.appendChild(
-      option
-    )
+    font.appendChild(option)
   }
 
   function syncControls() {
-    if (enabledInput) {
-      enabledInput.checked =
-        settings.enabled
-    }
+    enabled.checked = settings.enabled
+    density.value = settings.density
 
-    if (fixationInput) {
-      fixationInput.value =
-        String(settings.fixation)
-    }
+    fixation.value =
+      String(settings.fixation)
 
-    if (fixationValue) {
-      fixationValue.textContent =
-        `${settings.fixation}%`
-    }
+    fixationValue.textContent =
+      `${settings.fixation}%`
 
-    if (weightInput) {
-      weightInput.value =
-        String(settings.weight)
-    }
+    weight.value =
+      String(settings.weight)
 
-    if (weightValue) {
-      weightValue.textContent =
-        String(settings.weight)
-    }
+    weightValue.textContent =
+      String(settings.weight)
 
-    if (fontSelect) {
-      fontSelect.value =
-        settings.font
-    }
+    font.value = settings.font
 
-    if (sizeInput) {
-      sizeInput.value =
-        String(settings.textSize)
-    }
+    size.value =
+      String(settings.textSize)
 
-    if (sizeValue) {
-      sizeValue.textContent =
-        `${settings.textSize}%`
-    }
+    sizeValue.textContent =
+      `${settings.textSize}%`
 
-    if (lineHeightInput) {
-      lineHeightInput.value =
-        String(settings.lineHeight)
-    }
+    line.value =
+      String(settings.lineHeight)
 
-    if (lineHeightValue) {
-      lineHeightValue.textContent =
-        settings.lineHeight.toFixed(1)
-    }
+    lineValue.textContent =
+      settings.lineHeight.toFixed(2)
   }
 
   function renderPreview() {
-    if (!preview) return
-
     preview.replaceChildren()
 
-    const textNode =
+    const sample =
       document.createTextNode(
-        'The quick brown fox jumps over the lazy dog.'
+        'A dry mocking chuckle shook his chest as he leaned closer toward the doorway.'
       )
 
-    preview.appendChild(
-      textNode
-    )
+    preview.appendChild(sample)
 
     if (settings.enabled) {
-      processTextNode(
-        textNode
-      )
+      processTextNode(sample)
     }
   }
 
-  enabledInput?.addEventListener(
+  enabled.addEventListener(
     'change',
     () => {
-      setSetting(
+      updateSetting(
         'enabled',
-        enabledInput.checked
-      )
-    }
-  )
-
-  fixationInput?.addEventListener(
-    'input',
-    () => {
-      setSetting(
-        'fixation',
-        Number(
-          fixationInput.value
-        ),
+        enabled.checked,
         true
       )
     }
   )
 
-  weightInput?.addEventListener(
-    'input',
-    () => {
-      setSetting(
-        'weight',
-        Number(
-          weightInput.value
-        )
-      )
-    }
-  )
-
-  fontSelect?.addEventListener(
+  density.addEventListener(
     'change',
     () => {
-      setSetting(
+      updateSetting(
+        'density',
+        density.value,
+        true
+      )
+    }
+  )
+
+  fixation.addEventListener(
+    'input',
+    () => {
+      updateSetting(
+        'fixation',
+        Number(fixation.value),
+        true
+      )
+    }
+  )
+
+  weight.addEventListener(
+    'input',
+    () => {
+      updateSetting(
+        'weight',
+        Number(weight.value)
+      )
+    }
+  )
+
+  font.addEventListener(
+    'change',
+    () => {
+      updateSetting(
         'font',
-        fontSelect.value
+        font.value
       )
     }
   )
 
-  sizeInput?.addEventListener(
+  size.addEventListener(
     'input',
     () => {
-      setSetting(
+      updateSetting(
         'textSize',
-        Number(
-          sizeInput.value
-        )
+        Number(size.value)
       )
     }
   )
 
-  lineHeightInput?.addEventListener(
+  line.addEventListener(
     'input',
     () => {
-      setSetting(
+      updateSetting(
         'lineHeight',
-        Number(
-          lineHeightInput.value
-        )
+        Number(line.value)
       )
     }
   )
 
-  resetButton?.addEventListener(
+  reset.addEventListener(
     'click',
     () => {
-      settings = {
-        ...DEFAULTS,
-      }
+      settings = { ...DEFAULTS }
 
       saveSettings()
       applyCssSettings()
@@ -995,9 +850,7 @@ export function setup(ctx) {
 
   return () => {
     observer.disconnect()
-
     unwrap()
-
     tab.destroy()
     removeStyle()
     ctx.dom.cleanup()
