@@ -1,11 +1,12 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.9'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.10'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.9',
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.9'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.10'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -1084,6 +1085,102 @@ export function setup(ctx) {
       })
   }
 
+
+  function toolbarButtonLabel(button) {
+    return [
+      button.getAttribute('title') || '',
+      button.getAttribute('aria-label') || '',
+    ]
+      .filter(Boolean)
+      .join(' ')
+  }
+
+  function toolbarItemForButton(button) {
+    const label = toolbarButtonLabel(button)
+    if (!label) return null
+
+    return TOOLBAR_BUTTONS.find(
+      item => label.includes(item.title)
+    ) || null
+  }
+
+  function findToolbarButtons() {
+    const buttons = new Set()
+
+    document
+      .querySelectorAll(
+        '[data-component="InputArea"] button, ' +
+        '[data-spindle-mount="chat_toolbar"] button'
+      )
+      .forEach(button => buttons.add(button))
+
+    return Array.from(buttons)
+  }
+
+  function applyToolbarVisibility() {
+    let matched = 0
+    let hidden = 0
+
+    for (const button of findToolbarButtons()) {
+      const item = toolbarItemForButton(button)
+      if (!item) continue
+
+      matched += 1
+
+      const shouldHide =
+        Boolean(settings.toolbarHidden?.[item.key])
+
+      if (shouldHide) {
+        button.setAttribute(
+          'data-lumibionic-toolbar-hidden',
+          item.key
+        )
+        button.style.setProperty(
+          'display',
+          'none',
+          'important'
+        )
+        hidden += 1
+      } else if (
+        button.hasAttribute(
+          'data-lumibionic-toolbar-hidden'
+        )
+      ) {
+        button.style.removeProperty('display')
+        button.removeAttribute(
+          'data-lumibionic-toolbar-hidden'
+        )
+      }
+    }
+
+    const status =
+      typeof tab !== 'undefined'
+        ? tab.root?.querySelector(
+            '#lb-toolbar-match-status'
+          )
+        : null
+
+    if (status) {
+      status.textContent =
+        matched > 0
+          ? `${matched} toolbar buttons detected · ${hidden} hidden`
+          : 'No matching toolbar buttons detected on this screen'
+    }
+  }
+
+  function clearToolbarVisibility() {
+    document
+      .querySelectorAll(
+        '[data-lumibionic-toolbar-hidden]'
+      )
+      .forEach(button => {
+        button.style.removeProperty('display')
+        button.removeAttribute(
+          'data-lumibionic-toolbar-hidden'
+        )
+      })
+  }
+
   function applyRootClasses() {
     const root = document.documentElement
 
@@ -1203,6 +1300,7 @@ export function setup(ctx) {
 
     applyRootClasses()
     refreshBubbleScopes()
+    applyToolbarVisibility()
   }
 
   function processAll() {
@@ -1213,6 +1311,7 @@ export function setup(ctx) {
       .forEach(processMessage)
 
     refreshBubbleScopes()
+    applyToolbarVisibility()
   }
 
   function rebuildAll() {
@@ -1651,6 +1750,10 @@ export function setup(ctx) {
         <div class="lumibionic-toolbar-actions">
           <button type="button" id="lb-toolbar-hide-all">Hide all listed</button>
           <button type="button" id="lb-toolbar-show-all">Show all listed</button>
+        </div>
+
+        <div class="lumibionic-muted" id="lb-toolbar-match-status">
+          Checking Lumiverse toolbar…
         </div>
 
         <div class="lumibionic-muted">
@@ -2390,6 +2493,8 @@ export function setup(ctx) {
       childList: true,
       subtree: true,
       characterData: true,
+      attributes: true,
+      attributeFilter: ['title', 'aria-label'],
     }
   )
 
@@ -2403,6 +2508,7 @@ export function setup(ctx) {
 
     unwrap()
     unloadLocalFont(false)
+    clearToolbarVisibility()
 
     document
       .querySelectorAll('.lumibionic-bubble-scope')
