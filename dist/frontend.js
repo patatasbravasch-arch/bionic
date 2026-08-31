@@ -1,12 +1,13 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.10'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.11'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.10',
     'lumiverse:bionic-style-reading:v0.9',
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.10'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.11'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -885,6 +886,16 @@ export function setup(ctx) {
     .lumibionic-preview.lb-preview-justify {
       text-align: justify;
       text-justify: inter-word;
+    }
+
+    .lumibionic-preview p {
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+
+    .lumibionic-preview p + p {
+      margin-block-start:
+        var(--lumibionic-paragraph-spacing, 0em) !important;
     }
 
     .lumibionic-hidden {
@@ -2200,15 +2211,22 @@ export function setup(ctx) {
         ? ''
         : settings.readingWidth
 
-    const sample =
-      document.createTextNode(
-        'A dry mocking chuckle shook his chest as he leaned closer toward the doorway. The longer line makes justified spacing easier to judge.'
-      )
+    const samples = [
+      'A dry mocking chuckle shook his chest as he leaned closer toward the doorway. The longer line makes justified spacing easier to judge.',
+      'She watched him for a moment, then looked away toward the rain-dark window. This second paragraph makes paragraph spacing visible while you adjust it.',
+      'The room settled into a quieter rhythm, leaving enough text here to compare line height, word spacing, and the gap between paragraphs.'
+    ]
 
-    preview.appendChild(sample)
+    for (const sampleText of samples) {
+      const paragraph = document.createElement('p')
+      const sample = document.createTextNode(sampleText)
 
-    if (settings.bionicEnabled) {
-      processTextNode(sample)
+      paragraph.appendChild(sample)
+      preview.appendChild(paragraph)
+
+      if (settings.bionicEnabled) {
+        processTextNode(sample)
+      }
     }
   }
 
