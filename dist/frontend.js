@@ -1,13 +1,14 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.11'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.12'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.11',
     'lumiverse:bionic-style-reading:v0.10',
     'lumiverse:bionic-style-reading:v0.9',
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.11'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.12'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -867,7 +868,7 @@ export function setup(ctx) {
     }
 
     .lumibionic-preview {
-      padding: 14px;
+      padding: 12px;
       border-radius: 8px;
       background: rgba(127, 127, 127, 0.08);
       font-family: var(--lumibionic-preview-font, inherit) !important;
@@ -877,6 +878,19 @@ export function setup(ctx) {
       word-spacing: var(--lumibionic-preview-word-spacing, normal);
       hyphens: var(--lumibionic-preview-hyphens, manual);
       -webkit-hyphens: var(--lumibionic-preview-hyphens, manual);
+
+      /* Keep live preview useful without taking over the drawer. */
+      max-height: min(170px, 24vh);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+    }
+
+    @media (max-width: 720px) {
+      .lumibionic-preview {
+        max-height: min(150px, 21vh);
+        padding: 10px;
+      }
     }
 
     .lumibionic-preview * {
@@ -2212,9 +2226,8 @@ export function setup(ctx) {
         : settings.readingWidth
 
     const samples = [
-      'A dry mocking chuckle shook his chest as he leaned closer toward the doorway. The longer line makes justified spacing easier to judge.',
-      'She watched him for a moment, then looked away toward the rain-dark window. This second paragraph makes paragraph spacing visible while you adjust it.',
-      'The room settled into a quieter rhythm, leaving enough text here to compare line height, word spacing, and the gap between paragraphs.'
+      'A dry chuckle escaped him as he leaned toward the doorway. This line is long enough to judge justification and word spacing.',
+      'She glanced toward the rain-dark window. Adjust paragraph spacing to see this second paragraph move closer or farther away.'
     ]
 
     for (const sampleText of samples) {

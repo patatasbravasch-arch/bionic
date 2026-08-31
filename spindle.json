@@ -1,11 +1,11 @@
 {
-  "version": "0.11.0",
+  "version": "0.12.0",
   "name": "Bionic Reading & Fonts",
   "identifier": "bionic_style_reading",
   "author": "patatasbravasch-arch",
   "github": "https://github.com/patatasbravasch-arch/bionic",
   "homepage": "https://github.com/patatasbravasch-arch/bionic",
-  "description": "Bionic reading, font overrides, collapsible live-preview settings, long-form typography, direct chat-toolbar visibility controls, and multi-paragraph live preview for paragraph spacing.",
+  "description": "Bionic reading, font overrides, collapsible live-preview settings, long-form typography, direct chat-toolbar visibility controls, and a compact multi-paragraph live preview.",
   "permissions": [],
   "entry_backend": "dist/backend.js",
   "entry_frontend": "dist/frontend.js"
