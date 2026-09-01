@@ -1,6 +1,6 @@
 declare const spindle: import('lumiverse-spindle-types').SpindleAPI
 
-const FF_THINK_FIX_VERSION = '0.26.0'
+const FF_THINK_FIX_VERSION = '0.27.0'
 
 type FFThinkFixConfig = {
   boundaryText: string
@@ -524,6 +524,81 @@ try {
     }`,
   )
 }
+
+
+/*
+  Ken sleep reminder bridge
+  -------------------------
+  MESSAGE_SENT is the host lifecycle event for newly-created chat rows.
+  Resolve the currently active persona so the frontend can compare the
+  actual {{user}} identity, while the frontend itself performs the
+  device-local time check.
+*/
+spindle.on(
+  'MESSAGE_SENT',
+  async (
+    payload: any,
+    userId?: string,
+  ) => {
+    const chatId =
+      typeof payload?.chatId === 'string'
+        ? payload.chatId
+        : (
+            typeof payload?.message?.chat_id === 'string'
+              ? payload.message.chat_id
+              : ''
+          )
+
+    if (!chatId) return
+
+    let personaName = ''
+
+    try {
+      const persona =
+        await spindle.personas.getActive(
+          userId,
+        )
+
+      /*
+        getActive() is the persona currently selected by the frontend.
+        If the host reports no active persona, fall back to the default
+        persona because that is the identity Lumiverse uses when no
+        explicit active override is selected.
+      */
+      if (persona?.name) {
+        personaName = persona.name
+      } else {
+        const defaultPersona =
+          await spindle.personas.getDefault(
+            userId,
+          )
+
+        personaName =
+          defaultPersona?.name || ''
+      }
+    } catch (error: any) {
+      spindle.log.warn(
+        `Ken sleep reminder could not resolve active persona: ${
+          error?.message || String(error)
+        }`,
+      )
+      return
+    }
+
+    spindle.sendToFrontend(
+      {
+        type: 'ken_sleep_message_sent',
+        chatId,
+        personaName,
+        messageId:
+          typeof payload?.message?.id === 'string'
+            ? payload.message.id
+            : null,
+      },
+      userId,
+    )
+  },
+)
 
 spindle.log.info(
   `Bionic Reading & Fonts FF backend v${FF_THINK_FIX_VERSION} loaded`,

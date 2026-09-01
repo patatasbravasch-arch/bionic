@@ -1,14 +1,15 @@
 {
-  "version": "0.26.0",
+  "version": "0.27.0",
   "name": "Bionic Reading & Fonts",
   "identifier": "bionic_style_reading",
   "author": "patatasbravasch-arch",
   "github": "https://github.com/patatasbravasch-arch/bionic",
   "homepage": "https://github.com/patatasbravasch-arch/bionic",
-  "description": "Bionic reading and typography remain frontend-owned. FF think fix now uses a standalone backend worker with no imports, manual health/play diagnostics, and native reasoning mutation.",
+  "description": "Bionic reading and typography remain frontend-owned. FF think fix uses native reasoning mutation. Adds a device-local 06:00\u201312:00 Ken sleep reminder that checks the active Lumiverse persona and pops up every two new messages.",
   "permissions": [
     "generation",
-    "chat_mutation"
+    "chat_mutation",
+    "personas"
   ],
   "entry_backend": "dist/backend.js",
   "entry_frontend": "dist/frontend.js"

@@ -1,4 +1,4 @@
-const FF_THINK_FIX_VERSION = '0.26.0';
+const FF_THINK_FIX_VERSION = '0.27.0';
 const DEFAULT_FF_THINK_CONFIG = {
     boundaryText: '[ 🕰️ Time',
 };
@@ -310,6 +310,49 @@ catch (error) {
         }`
     );
 }
+
+
+spindle.on('MESSAGE_SENT', async (payload, userId) => {
+    const chatId = typeof payload?.chatId === 'string'
+        ? payload.chatId
+        : (typeof payload?.message?.chat_id === 'string'
+            ? payload.message.chat_id
+            : '');
+    if (!chatId)
+        return;
+
+    let personaName = '';
+
+    try {
+        const persona = await spindle.personas.getActive(userId);
+
+        if (persona?.name) {
+            personaName = persona.name;
+        }
+        else {
+            const defaultPersona =
+                await spindle.personas.getDefault(userId);
+            personaName = defaultPersona?.name || '';
+        }
+    }
+    catch (error) {
+        spindle.log.warn(
+            `Ken sleep reminder could not resolve active persona: ${
+                error?.message || String(error)
+            }`
+        );
+        return;
+    }
+
+    spindle.sendToFrontend({
+        type: 'ken_sleep_message_sent',
+        chatId,
+        personaName,
+        messageId: typeof payload?.message?.id === 'string'
+            ? payload.message.id
+            : null,
+    }, userId);
+});
 
 spindle.log.info(
     `Bionic Reading & Fonts FF backend v${FF_THINK_FIX_VERSION} loaded`

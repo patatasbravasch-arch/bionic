@@ -1,7 +1,8 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.26'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.27'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.26',
     'lumiverse:bionic-style-reading:v0.25',
     'lumiverse:bionic-style-reading:v0.24',
     'lumiverse:bionic-style-reading:v0.23',
@@ -22,7 +23,7 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.26'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.27'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -2935,8 +2936,161 @@ export function setup(ctx) {
   // Sync the saved user choice/config as soon as the frontend loads.
   syncFFThinkBackendConfig()
 
+  /*
+    Ken sleep reminder
+    ------------------
+    The backend tells us when a real MESSAGE_SENT row was created and
+    supplies the active persona name (the identity behind {{user}}).
+
+    IMPORTANT: the hour check deliberately lives in the frontend.
+    `new Date().getHours()` therefore uses the browser/device's local
+    clock, not the Lumiverse server's timezone.
+  */
+  let kenSleepMessageCount = 0
+  let kenSleepChatId = null
+  let kenSleepModal = null
+
+  function resetKenSleepCounter(
+    chatId = null
+  ) {
+    kenSleepMessageCount = 0
+    kenSleepChatId = chatId
+  }
+
+  function isKenSleepWindow() {
+    const hour =
+      new Date().getHours()
+
+    return hour >= 6 && hour < 12
+  }
+
+  function showKenSleepPopup() {
+    if (kenSleepModal) return
+
+    try {
+      const modal =
+        ctx.ui.showModal({
+          title: 'Ken.',
+          width: 380,
+          maxHeight: 240,
+          persistent: false,
+        })
+
+      const message =
+        document.createElement('div')
+
+      message.textContent =
+        'go the fuck to sleep, Ken.'
+
+      message.style.padding = '18px 8px'
+      message.style.fontSize = '1.15rem'
+      message.style.fontWeight = '700'
+      message.style.lineHeight = '1.45'
+      message.style.textAlign = 'center'
+
+      modal.root.appendChild(message)
+
+      kenSleepModal = modal
+
+      modal.onDismiss(() => {
+        if (kenSleepModal === modal) {
+          kenSleepModal = null
+        }
+      })
+    } catch (error) {
+      console.warn(
+        '[Bionic Reading] Ken sleep popup failed:',
+        error
+      )
+    }
+  }
+
+  function handleKenSleepMessage(
+    payload
+  ) {
+    const active =
+      ctx.getActiveChat?.()
+
+    const activeChatId =
+      typeof active?.chatId === 'string'
+        ? active.chatId
+        : null
+
+    const eventChatId =
+      typeof payload?.chatId === 'string'
+        ? payload.chatId
+        : null
+
+    /*
+      Only count messages belonging to the chat the user is actually
+      looking at. Switching chats starts a fresh pair.
+    */
+    if (
+      !activeChatId ||
+      !eventChatId ||
+      activeChatId !== eventChatId
+    ) {
+      if (
+        kenSleepChatId !== activeChatId
+      ) {
+        resetKenSleepCounter(
+          activeChatId
+        )
+      }
+      return
+    }
+
+    if (
+      kenSleepChatId !== activeChatId
+    ) {
+      resetKenSleepCounter(
+        activeChatId
+      )
+    }
+
+    const personaName =
+      typeof payload?.personaName === 'string'
+        ? payload.personaName.trim()
+        : ''
+
+    const qualifies =
+      isKenSleepWindow() &&
+      personaName === 'Ken'
+
+    /*
+      A message outside either condition breaks the streak. This stops
+      counts accumulated before 06:00, after noon, or under another
+      persona from carrying into Ken's reminder cadence.
+    */
+    if (!qualifies) {
+      resetKenSleepCounter(
+        activeChatId
+      )
+      return
+    }
+
+    kenSleepMessageCount += 1
+
+    if (
+      kenSleepMessageCount >= 2
+    ) {
+      kenSleepMessageCount = 0
+      showKenSleepPopup()
+    }
+  }
+
   const unsubBackendMessage =
     ctx.onBackendMessage(payload => {
+      if (
+        payload?.type ===
+        'ken_sleep_message_sent'
+      ) {
+        handleKenSleepMessage(
+          payload
+        )
+        return
+      }
+
       if (
         payload?.type ===
         'ff_think_fix_health'
@@ -3068,6 +3222,13 @@ export function setup(ctx) {
   return () => {
     observer.disconnect()
     unsubBackendMessage?.()
+
+    if (kenSleepModal) {
+      try {
+        kenSleepModal.dismiss()
+      } catch {}
+      kenSleepModal = null
+    }
 
     unwrap()
     unloadLocalFont(false)
