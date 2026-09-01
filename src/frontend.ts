@@ -1,14 +1,15 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.12'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.13'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.12',
     'lumiverse:bionic-style-reading:v0.11',
     'lumiverse:bionic-style-reading:v0.10',
     'lumiverse:bionic-style-reading:v0.9',
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.12'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.13'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -56,6 +57,7 @@ export function setup(ctx) {
     textSize: 100,
     lineHeight: 1.55,
 
+    toolbarSpacing: 4,
     toolbarHidden: { ...DEFAULT_TOOLBAR_HIDDEN },
   }
 
@@ -285,6 +287,13 @@ export function setup(ctx) {
 
         textSize: clamp(saved.textSize, 80, 140, DEFAULTS.textSize),
         lineHeight: clamp(saved.lineHeight, 1.1, 2.2, DEFAULTS.lineHeight),
+
+        toolbarSpacing: clamp(
+          saved.toolbarSpacing,
+          0,
+          16,
+          DEFAULTS.toolbarSpacing
+        ),
 
         toolbarHidden: Object.fromEntries(
           TOOLBAR_BUTTONS.map(item => [
@@ -1146,7 +1155,30 @@ export function setup(ctx) {
     let matched = 0
     let hidden = 0
 
+    const spacing = clamp(
+      settings.toolbarSpacing,
+      0,
+      16,
+      DEFAULTS.toolbarSpacing
+    )
+    const halfSpacing = spacing / 2
+
     for (const button of findToolbarButtons()) {
+      /*
+        Apply the chosen total gap as half-margin on each button.
+        Two neighboring buttons therefore produce the requested gap.
+        Inline !important intentionally wins over theme CSS.
+      */
+      button.style.setProperty(
+        'margin-inline',
+        `${halfSpacing}px`,
+        'important'
+      )
+      button.setAttribute(
+        'data-lumibionic-toolbar-spacing',
+        String(spacing)
+      )
+
       const item = toolbarItemForButton(button)
       if (!item) continue
 
@@ -1196,12 +1228,17 @@ export function setup(ctx) {
   function clearToolbarVisibility() {
     document
       .querySelectorAll(
-        '[data-lumibionic-toolbar-hidden]'
+        '[data-lumibionic-toolbar-hidden], ' +
+        '[data-lumibionic-toolbar-spacing]'
       )
       .forEach(button => {
         button.style.removeProperty('display')
+        button.style.removeProperty('margin-inline')
         button.removeAttribute(
           'data-lumibionic-toolbar-hidden'
+        )
+        button.removeAttribute(
+          'data-lumibionic-toolbar-spacing'
         )
       })
   }
@@ -1758,6 +1795,23 @@ export function setup(ctx) {
           These use the same title matches as your CSS block.
         </div>
 
+        <div class="lumibionic-control">
+          <div class="lumibionic-row">
+            <label for="lb-toolbar-spacing">Toolbar button gap</label>
+            <span class="lumibionic-value" id="lb-toolbar-spacing-value"></span>
+          </div>
+          <input
+            id="lb-toolbar-spacing"
+            type="range"
+            min="0"
+            max="16"
+            step="1"
+          >
+          <div class="lumibionic-muted">
+            Total space between neighboring toolbar buttons. 0px packs them together.
+          </div>
+        </div>
+
         <div class="lumibionic-toolbar-grid" id="lb-toolbar-grid">
           <button type="button" class="lumibionic-toolbar-toggle" data-toolbar-key="backHome"><span>Back to home</span><small>Shown</small></button>
           <button type="button" class="lumibionic-toolbar-toggle" data-toolbar-key="regenerate"><span>Regenerate</span><small>Shown</small></button>
@@ -1853,6 +1907,8 @@ export function setup(ctx) {
   const preview = $('#lb-preview')
   const reset = $('#lb-reset')
 
+  const toolbarSpacing = $('#lb-toolbar-spacing')
+  const toolbarSpacingValue = $('#lb-toolbar-spacing-value')
   const toolbarGrid = $('#lb-toolbar-grid')
   const toolbarHideAll = $('#lb-toolbar-hide-all')
   const toolbarShowAll = $('#lb-toolbar-show-all')
@@ -2121,6 +2177,9 @@ export function setup(ctx) {
     line.value = String(settings.lineHeight)
     lineValue.textContent = settings.lineHeight.toFixed(2)
 
+    toolbarSpacing.value = String(settings.toolbarSpacing)
+    toolbarSpacingValue.textContent = `${settings.toolbarSpacing}px`
+
     for (const button of toolbarToggleButtons) {
       const key = button.dataset.toolbarKey
       const hidden = Boolean(settings.toolbarHidden?.[key])
@@ -2211,6 +2270,7 @@ export function setup(ctx) {
   createMobileStepper(wordSpacing, 'wordSpacing', { resetValue: DEFAULTS.wordSpacing })
   createMobileStepper(size, 'textSize', { resetValue: DEFAULTS.textSize })
   createMobileStepper(line, 'lineHeight', { resetValue: DEFAULTS.lineHeight })
+  createMobileStepper(toolbarSpacing, 'toolbarSpacing', { resetValue: DEFAULTS.toolbarSpacing })
 
   function renderPreview() {
     preview.replaceChildren()
@@ -2492,6 +2552,14 @@ export function setup(ctx) {
     () => updateSetting(
       'lineHeight',
       Number(line.value)
+    )
+  )
+
+  toolbarSpacing.addEventListener(
+    'input',
+    () => updateSetting(
+      'toolbarSpacing',
+      Number(toolbarSpacing.value)
     )
   )
 
