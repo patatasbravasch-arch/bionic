@@ -50,45 +50,64 @@ spindle.on('MESSAGE_DELETED', () => renderCache.clear());
 
 const ffThinkFixInFlight = new Set();
 
-function repairFFThinkBlock(content) {
-    const marker = '**Task 0:**';
-    const taskIndex = content.indexOf(marker);
-    if (taskIndex < 0) {
+const DEFAULT_FF_THINK_CONFIG = {
+    boundaryText: '[ 🕰️ Time',
+    openText: '<think>',
+    closeText: '</think>',
+};
+
+function cleanFFThinkConfig(raw) {
+    const text = (value, fallback) => typeof value === 'string'
+        ? value.slice(0, 1000)
+        : fallback;
+    return {
+        boundaryText: text(raw?.boundaryText, DEFAULT_FF_THINK_CONFIG.boundaryText),
+        openText: text(raw?.openText, DEFAULT_FF_THINK_CONFIG.openText),
+        closeText: text(raw?.closeText, DEFAULT_FF_THINK_CONFIG.closeText),
+    };
+}
+
+function repairFFThinkBlock(content, rawConfig) {
+    const config = cleanFFThinkConfig(rawConfig);
+    const boundary = config.boundaryText;
+    if (!boundary) {
         return { status: 'no_match' };
     }
-    const lower = content.toLowerCase();
-    const beforeTask = lower.slice(0, taskIndex);
-    const lastOpen = beforeTask.lastIndexOf('<think>');
-    const lastClose = beforeTask.lastIndexOf('</think>');
-    if (lastOpen > lastClose) {
-        return { status: 'already_fixed' };
-    }
-    if (lower
-        .slice(Math.max(0, taskIndex - 32), taskIndex)
-        .match(/<think>\s*$/)) {
-        return { status: 'already_fixed' };
-    }
-    const afterMarkerStart = taskIndex + marker.length;
-    const afterMarker = content.slice(afterMarkerStart);
-    const divider = /^[ \t]*---[ \t]*\r?$/m.exec(afterMarker);
-    if (!divider || divider.index == null) {
+    const boundaryIndex = content.indexOf(boundary);
+    if (boundaryIndex < 0) {
         return { status: 'no_match' };
     }
-    const dividerStart = afterMarkerStart + divider.index;
-    const between = lower.slice(taskIndex, dividerStart);
-    if (between.includes('</think>')) {
+    const beforeBoundary = content.slice(0, boundaryIndex);
+    if (beforeBoundary.trim().length === 0) {
+        return { status: 'no_match' };
+    }
+    if (config.openText &&
+        beforeBoundary.startsWith(config.openText)) {
+        const closeIndex = config.closeText
+            ? beforeBoundary.lastIndexOf(config.closeText)
+            : config.openText.length;
+        if (!config.closeText ||
+            closeIndex >= config.openText.length) {
+            return { status: 'already_fixed' };
+        }
+    }
+    const lowerBefore = beforeBoundary.toLowerCase();
+    if (lowerBefore.trimStart().startsWith('<think>') &&
+        lowerBefore.includes('</think>')) {
         return { status: 'already_fixed' };
     }
-    const dividerEnd = dividerStart + divider[0].length;
-    const repaired = content.slice(0, taskIndex) +
-        '<think>' +
-        content.slice(taskIndex, dividerStart) +
-        '</think>' +
-        content.slice(dividerEnd);
+    const repaired = config.openText +
+        beforeBoundary +
+        config.closeText +
+        '\n' +
+        content.slice(boundaryIndex);
     if (repaired === content) {
         return { status: 'already_fixed' };
     }
-    return { status: 'fixed', content: repaired };
+    return {
+        status: 'fixed',
+        content: repaired,
+    };
 }
 
 function sendFFThinkFixResult(userId, payload) {
@@ -134,7 +153,10 @@ spindle.onFrontendMessage(async (payload, userId) => {
             });
             return;
         }
-        const result = repairFFThinkBlock(message.content || '');
+        const result = repairFFThinkBlock(
+            message.content || '',
+            payload.config
+        );
         if (result.status !== 'fixed' ||
             typeof result.content !== 'string') {
             sendFFThinkFixResult(userId, {

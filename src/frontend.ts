@@ -1,7 +1,9 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.19'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.21'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.20',
+    'lumiverse:bionic-style-reading:v0.19',
     'lumiverse:bionic-style-reading:v0.18',
     'lumiverse:bionic-style-reading:v0.17',
     'lumiverse:bionic-style-reading:v0.16',
@@ -15,7 +17,7 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.19'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.21'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -81,6 +83,9 @@ export function setup(ctx) {
     lineHeight: 1.55,
 
     ffThinkFixEnabled: false,
+    ffThinkBoundaryText: '[ 🕰️ Time',
+    ffThinkOpenText: '<think>',
+    ffThinkCloseText: '</think>',
 
     toolbarSpacing: 4,
     toolbarHidden: { ...DEFAULT_TOOLBAR_HIDDEN },
@@ -317,6 +322,29 @@ export function setup(ctx) {
           typeof saved.ffThinkFixEnabled === 'boolean'
             ? saved.ffThinkFixEnabled
             : DEFAULTS.ffThinkFixEnabled,
+
+        ffThinkBoundaryText:
+          typeof saved.ffThinkBoundaryText === 'string'
+            ? saved.ffThinkBoundaryText
+            : DEFAULTS.ffThinkBoundaryText,
+
+        ffThinkOpenText:
+          typeof saved.ffThinkOpenText === 'string'
+            ? saved.ffThinkOpenText
+            : (
+                typeof saved.ffThinkInsertBefore === 'string'
+                  ? saved.ffThinkInsertBefore
+                  : DEFAULTS.ffThinkOpenText
+              ),
+
+        ffThinkCloseText:
+          typeof saved.ffThinkCloseText === 'string'
+            ? saved.ffThinkCloseText
+            : (
+                typeof saved.ffThinkReplaceEnd === 'string'
+                  ? saved.ffThinkReplaceEnd
+                  : DEFAULTS.ffThinkCloseText
+              ),
 
         toolbarSpacing: clamp(
           saved.toolbarSpacing,
@@ -652,10 +680,10 @@ export function setup(ctx) {
     }
 
     .lumibionic-settings {
-      padding: 16px;
+      padding: 14px;
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      gap: 10px;
     }
 
     .lumibionic-settings h2 {
@@ -672,7 +700,7 @@ export function setup(ctx) {
 
     .lumibionic-section + .lumibionic-section {
       border-top: 1px solid rgba(127, 127, 127, 0.2);
-      padding-top: 18px;
+      padding-top: 10px;
     }
 
     .lumibionic-section-title {
@@ -683,7 +711,7 @@ export function setup(ctx) {
 
     .lumibionic-section-toggle {
       width: 100% !important;
-      padding: 8px 0 !important;
+      padding: 6px 0 !important;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -750,6 +778,28 @@ export function setup(ctx) {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 8px;
+    }
+
+    .lumibionic-ff-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .lumibionic-ff-grid .lumibionic-control {
+      min-width: 0;
+    }
+
+    .lumibionic-ff-grid input[type="text"] {
+      width: 100%;
+      box-sizing: border-box;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    @media (max-width: 720px) {
+      .lumibionic-ff-grid {
+        grid-template-columns: 1fr;
+      }
     }
 
     .lumibionic-toolbar-grid {
@@ -1862,14 +1912,55 @@ export function setup(ctx) {
 
         <label class="lumibionic-check">
           <input id="lb-ff-think-fix" type="checkbox">
-          <span>Auto-fix Task 0 thinking after AI replies</span>
+          <span>Wrap everything before the RP boundary as thinking</span>
         </label>
 
         <div class="lumibionic-muted">
-          After generation finishes, a saved assistant message containing
-          <code>**Task 0:**</code> and the first later standalone
-          <code>---</code> is edited to wrap that block in
-          <code>&lt;think&gt;</code> and <code>&lt;/think&gt;</code>.
+          After the AI finishes, the extension edits the newly saved
+          assistant message. Everything before the first boundary marker
+          is wrapped; the boundary and everything after it stay outside.
+          These are literal text values, not regex.
+        </div>
+
+        <div class="lumibionic-control">
+          <label for="lb-ff-boundary-text">RP boundary marker</label>
+          <input
+            id="lb-ff-boundary-text"
+            type="text"
+            spellcheck="false"
+          >
+        </div>
+
+        <div class="lumibionic-ff-grid">
+
+          <div class="lumibionic-control">
+            <label for="lb-ff-open-text">Thinking open text</label>
+            <input
+              id="lb-ff-open-text"
+              type="text"
+              spellcheck="false"
+            >
+          </div>
+
+          <div class="lumibionic-control">
+            <label for="lb-ff-close-text">Thinking close text</label>
+            <input
+              id="lb-ff-close-text"
+              type="text"
+              spellcheck="false"
+            >
+          </div>
+
+        </div>
+
+        <button type="button" id="lb-ff-reset-pattern">
+          Reset FF think fix text
+        </button>
+
+        <div class="lumibionic-muted">
+          Default: everything before <code>[ 🕰️ Time</code> becomes
+          <code>&lt;think&gt;…&lt;/think&gt;</code>. The time marker
+          itself is preserved unchanged.
         </div>
 
         <div class="lumibionic-muted" id="lb-ff-think-status">
@@ -1987,6 +2078,10 @@ export function setup(ctx) {
   const lineValue = $('#lb-line-value')
 
   const ffThinkFix = $('#lb-ff-think-fix')
+  const ffThinkBoundaryText = $('#lb-ff-boundary-text')
+  const ffThinkOpenText = $('#lb-ff-open-text')
+  const ffThinkCloseText = $('#lb-ff-close-text')
+  const ffThinkResetPattern = $('#lb-ff-reset-pattern')
   const ffThinkStatus = $('#lb-ff-think-status')
 
   const preview = $('#lb-preview')
@@ -2043,14 +2138,14 @@ export function setup(ctx) {
         previewVisible:
           typeof saved.previewVisible === 'boolean'
             ? saved.previewVisible
-            : true,
+            : false,
         sections:
           saved.sections && typeof saved.sections === 'object'
             ? saved.sections
             : {},
       }
     } catch {
-      return { previewVisible: true, sections: {} }
+      return { previewVisible: false, sections: {} }
     }
   }
 
@@ -2165,7 +2260,11 @@ export function setup(ctx) {
         title.replaceWith(toggle)
         section.appendChild(body)
 
-        const collapsed = uiState.sections[key] === false
+        const savedExpanded = uiState.sections[key]
+        const initialExpanded =
+          typeof savedExpanded === 'boolean'
+            ? savedExpanded
+            : false
 
         const setExpanded = (expanded, persist = true) => {
           body.classList.toggle(
@@ -2190,7 +2289,7 @@ export function setup(ctx) {
           setExpanded(toggle.getAttribute('aria-expanded') !== 'true')
         })
 
-        setExpanded(!collapsed, false)
+        setExpanded(initialExpanded, false)
         sectionControllers.push(setExpanded)
       })
 
@@ -2284,6 +2383,9 @@ export function setup(ctx) {
     lineValue.textContent = settings.lineHeight.toFixed(2)
 
     ffThinkFix.checked = settings.ffThinkFixEnabled
+    ffThinkBoundaryText.value = settings.ffThinkBoundaryText
+    ffThinkOpenText.value = settings.ffThinkOpenText
+    ffThinkCloseText.value = settings.ffThinkCloseText
 
     toolbarSpacing.value = String(settings.toolbarSpacing)
     toolbarSpacingValue.textContent = `${settings.toolbarSpacing}px`
@@ -2682,6 +2784,42 @@ export function setup(ctx) {
     }
   )
 
+  const ffTextBindings = [
+    [ffThinkBoundaryText, 'ffThinkBoundaryText'],
+    [ffThinkOpenText, 'ffThinkOpenText'],
+    [ffThinkCloseText, 'ffThinkCloseText'],
+  ]
+
+  for (const [input, key] of ffTextBindings) {
+    input.addEventListener('input', () => {
+      settings = {
+        ...settings,
+        [key]: input.value,
+      }
+      saveSettings()
+    })
+  }
+
+  ffThinkResetPattern.addEventListener(
+    'click',
+    () => {
+      settings = {
+        ...settings,
+        ffThinkBoundaryText: DEFAULTS.ffThinkBoundaryText,
+        ffThinkOpenText: DEFAULTS.ffThinkOpenText,
+        ffThinkCloseText: DEFAULTS.ffThinkCloseText,
+      }
+
+      saveSettings()
+      syncControls()
+
+      if (ffThinkStatus) {
+        ffThinkStatus.textContent =
+          'FF think fix text reset to defaults.'
+      }
+    }
+  )
+
   toolbarSpacing.addEventListener(
     'input',
     () => updateSetting(
@@ -2726,6 +2864,11 @@ export function setup(ctx) {
           chatId: payload.chatId,
           messageId: payload.messageId,
           generationId: payload.generationId || null,
+          config: {
+            boundaryText: settings.ffThinkBoundaryText,
+            openText: settings.ffThinkOpenText,
+            closeText: settings.ffThinkCloseText,
+          },
         })
       }
     )
@@ -2743,13 +2886,13 @@ export function setup(ctx) {
 
       if (payload.status === 'fixed') {
         ffThinkStatus.textContent =
-          'Fixed the latest Task 0 thinking block.'
+          'Wrapped everything before the latest RP boundary as thinking.'
       } else if (payload.status === 'no_match') {
         ffThinkStatus.textContent =
-          'No matching Task 0 + --- block in the latest reply.'
+          'No matching RP boundary marker in the latest reply.'
       } else if (payload.status === 'already_fixed') {
         ffThinkStatus.textContent =
-          'Latest Task 0 block was already wrapped.'
+          'Latest pre-boundary block was already wrapped.'
       } else if (payload.status === 'not_assistant') {
         ffThinkStatus.textContent =
           'Skipped: generated message was not an assistant reply.'
