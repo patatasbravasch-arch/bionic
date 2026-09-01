@@ -1,15 +1,14 @@
 {
-  "version": "0.24.0",
+  "version": "0.25.0",
   "name": "Bionic Reading & Fonts",
   "identifier": "bionic_style_reading",
   "author": "patatasbravasch-arch",
   "github": "https://github.com/patatasbravasch-arch/bionic",
   "homepage": "https://github.com/patatasbravasch-arch/bionic",
-  "description": "Bionic reading, font overrides, long-form typography, compact collapsible settings, chat-toolbar controls, adjustable toolbar spacing, attachment/paperclip visibility, and FF think fix with deterministic manual targeting, backend health reporting, hard timeouts, and native reasoning mutation.",
+  "description": "Bionic reading, font overrides, long-form typography, compact collapsible settings, chat-toolbar controls, adjustable toolbar spacing, attachment/paperclip visibility, and FF think fix with a minimal backend health path and authoritative latest-assistant repair.",
   "permissions": [
     "generation",
-    "chat_mutation",
-    "chats"
+    "chat_mutation"
   ],
   "entry_backend": "dist/backend.js",
   "entry_frontend": "dist/frontend.js"

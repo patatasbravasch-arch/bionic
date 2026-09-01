@@ -1,7 +1,8 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.24'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.25'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.24',
     'lumiverse:bionic-style-reading:v0.23',
     'lumiverse:bionic-style-reading:v0.22',
     'lumiverse:bionic-style-reading:v0.21',
@@ -20,7 +21,7 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.24'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.25'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -2735,130 +2736,6 @@ export function setup(ctx) {
     )
   )
 
-  function withFrontendTimeout(
-    promise,
-    ms,
-    label
-  ) {
-    let timer = null
-
-    return Promise.race([
-      Promise.resolve(promise),
-      new Promise((_, reject) => {
-        timer = setTimeout(() => {
-          reject(
-            new Error(
-              `${label} timed out after ${Math.round(ms / 1000)}s`
-            )
-          )
-        }, ms)
-      }),
-    ]).finally(() => {
-      if (timer) clearTimeout(timer)
-    })
-  }
-
-  function isSystemLikeMessage(message) {
-    const extra =
-      message?.extra &&
-      typeof message.extra === 'object'
-        ? message.extra
-        : {}
-
-    const spindleMeta =
-      extra.spindle_metadata &&
-      typeof extra.spindle_metadata === 'object'
-        ? extra.spindle_metadata
-        : null
-
-    return (
-      spindleMeta?.role === 'system' ||
-      spindleMeta?.is_system === true
-    )
-  }
-
-  async function getLatestAssistantSnapshot(chatId) {
-    if (typeof ctx.messages?.list === 'function') {
-      const messages =
-        await withFrontendTimeout(
-          ctx.messages.list(chatId),
-          5000,
-          'Reading chat messages'
-        )
-
-      for (
-        let i = messages.length - 1;
-        i >= 0;
-        i--
-      ) {
-        const message = messages[i]
-
-        if (message?.is_user === true) continue
-        if (isSystemLikeMessage(message)) continue
-
-        return {
-          id: message.id,
-          content:
-            typeof message.content === 'string'
-              ? message.content
-              : '',
-          extra:
-            message.extra &&
-            typeof message.extra === 'object'
-              ? message.extra
-              : {},
-        }
-      }
-    }
-
-    /*
-      Older hosts may expose get() + the local logical ID list
-      without exposing list(). Walk backwards until we find a
-      non-user, non-system message.
-    */
-    const ids =
-      typeof ctx.messages?.listMessageIds === 'function'
-        ? ctx.messages.listMessageIds()
-        : []
-
-    if (
-      ids.length &&
-      typeof ctx.messages?.get === 'function'
-    ) {
-      for (
-        let i = ids.length - 1;
-        i >= 0;
-        i--
-      ) {
-        const message =
-          await withFrontendTimeout(
-            ctx.messages.get(ids[i]),
-            2500,
-            'Reading latest message'
-          )
-
-        if (!message) continue
-        if (message.is_user === true) continue
-        if (isSystemLikeMessage(message)) continue
-
-        return {
-          id: message.id,
-          content:
-            typeof message.content === 'string'
-              ? message.content
-              : '',
-          extra:
-            message.extra &&
-            typeof message.extra === 'object'
-              ? message.extra
-              : {},
-        }
-      }
-    }
-
-    return null
-  }
-
   function syncFFThinkBackendConfig() {
     ctx.sendToBackend({
       type: 'ff_think_fix_config',
@@ -2942,59 +2819,30 @@ export function setup(ctx) {
 
   ffThinkRunNow.addEventListener(
     'click',
-    async () => {
+    () => {
       let chatId = null
+      let latestMessageId = null
 
       try {
         const active =
-          ctx.getActiveChat?.()
+          ctx.getActiveChat()
 
         chatId =
           typeof active?.chatId === 'string'
             ? active.chatId
             : null
+
+        latestMessageId =
+          ctx.messages?.getLatestMessageId?.() || null
       } catch {
         chatId = null
+        latestMessageId = null
       }
 
       if (!chatId) {
         if (ffThinkStatus) {
           ffThinkStatus.textContent =
             'Manual FF fix could not detect the current chat.'
-        }
-        return
-      }
-
-      ffThinkRunNow.disabled = true
-
-      if (ffThinkStatus) {
-        ffThinkStatus.textContent =
-          '▶ Resolving the latest assistant message locally…'
-      }
-
-      let snapshot = null
-
-      try {
-        snapshot =
-          await getLatestAssistantSnapshot(chatId)
-      } catch (error) {
-        finishFFManualRequest()
-
-        if (ffThinkStatus) {
-          ffThinkStatus.textContent =
-            `Manual FF fix could not read the chat: ${
-              error?.message || 'unknown error'
-            }`
-        }
-        return
-      }
-
-      if (!snapshot) {
-        finishFFManualRequest()
-
-        if (ffThinkStatus) {
-          ffThinkStatus.textContent =
-            'Manual FF fix: no assistant message was found in this chat.'
         }
         return
       }
@@ -3007,10 +2855,13 @@ export function setup(ctx) {
         }`
 
       ffManualRequestId = requestId
+      ffThinkRunNow.disabled = true
 
       if (ffThinkStatus) {
         ffThinkStatus.textContent =
-          '▶ Target found. Sending exact message to FF backend…'
+          latestMessageId
+            ? `▶ Current chat found. Latest logical message: ${latestMessageId.slice(0, 8)}… Asking backend for the latest assistant.`
+            : '▶ Current chat found. Asking backend for the latest assistant.'
       }
 
       try {
@@ -3018,7 +2869,7 @@ export function setup(ctx) {
           type: 'ff_think_fix_manual',
           requestId,
           chatId,
-          message: snapshot,
+          latestMessageId,
           config: {
             boundaryText: settings.ffThinkBoundaryText,
           },
@@ -3047,7 +2898,7 @@ export function setup(ctx) {
 
           if (ffThinkStatus) {
             ffThinkStatus.textContent =
-              'Manual FF fix timed out waiting for the backend. Disable/re-enable the extension or restart Lumiverse so the v0.24 backend reloads.'
+              'Manual FF fix timed out: the backend did not answer within 9 seconds. If the FF backend line still says checking, the backend bundle is not running.'
           }
         }, 9000)
     }
@@ -3090,15 +2941,10 @@ export function setup(ctx) {
         'ff_think_fix_health'
       ) {
         if (ffThinkBackendStatus) {
-          const granted =
-            Array.isArray(payload.permissions)
-              ? payload.permissions.join(', ')
-              : 'unknown'
-
           ffThinkBackendStatus.textContent =
             `FF backend: connected v${
               payload.version || '?'
-            } · permissions: ${granted}`
+            }`
         }
         return
       }
@@ -3114,9 +2960,9 @@ export function setup(ctx) {
         ) {
           if (ffThinkStatus) {
             ffThinkStatus.textContent =
-              `▶ Backend v${
-                payload.version || '?'
-              } received the request — applying native reasoning update…`
+              payload.stage === 'reading'
+                ? `▶ Backend v${payload.version || '?'} received the request — reading saved chat messages…`
+                : `▶ Backend v${payload.version || '?'} found the assistant — applying native reasoning update…`
           }
         }
         return
@@ -3183,6 +3029,14 @@ export function setup(ctx) {
         'FF backend: frontend could not send a health check.'
     }
   }
+
+  /*
+    Explicitly release any backend->frontend startup messages instead of
+    relying on legacy auto-ready timing.
+  */
+  try {
+    ctx.ready?.()
+  } catch {}
 
   const observer =
     new MutationObserver(
