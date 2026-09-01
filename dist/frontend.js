@@ -1,7 +1,8 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.22'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.23'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.22',
     'lumiverse:bionic-style-reading:v0.21',
     'lumiverse:bionic-style-reading:v0.20',
     'lumiverse:bionic-style-reading:v0.19',
@@ -18,7 +19,7 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.22'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.23'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -1912,14 +1913,21 @@ export function setup(ctx) {
           >
         </div>
 
-        <button type="button" id="lb-ff-reset-pattern">
-          Reset boundary marker
-        </button>
+        <div class="lumibionic-toolbar-actions">
+          <button type="button" id="lb-ff-run-now">
+            ▶ Run FF think fix now
+          </button>
+          <button type="button" id="lb-ff-reset-pattern">
+            Reset boundary marker
+          </button>
+        </div>
 
         <div class="lumibionic-muted">
-          Default boundary: <code>[ 🕰️ Time</code>.
-          The fix now uses Lumiverse's native reasoning field instead of
-          inserting <code>&lt;think&gt;</code> tags.
+          Manual run ignores the automatic toggle and repairs the latest
+          assistant message in the currently open chat. Default boundary:
+          <code>[ 🕰️ Time</code>. The fix uses Lumiverse's native
+          reasoning field instead of inserting
+          <code>&lt;think&gt;</code> tags.
         </div>
 
         <div class="lumibionic-muted" id="lb-ff-think-status">
@@ -2038,6 +2046,7 @@ export function setup(ctx) {
 
   const ffThinkFix = $('#lb-ff-think-fix')
   const ffThinkBoundaryText = $('#lb-ff-boundary-text')
+  const ffThinkRunNow = $('#lb-ff-run-now')
   const ffThinkResetPattern = $('#lb-ff-reset-pattern')
   const ffThinkStatus = $('#lb-ff-think-status')
 
@@ -2720,6 +2729,16 @@ export function setup(ctx) {
     )
   )
 
+  function syncFFThinkBackendConfig() {
+    ctx.sendToBackend({
+      type: 'ff_think_fix_config',
+      enabled: Boolean(settings.ffThinkFixEnabled),
+      config: {
+        boundaryText: settings.ffThinkBoundaryText,
+      },
+    })
+  }
+
   ffThinkFix.addEventListener(
     'change',
     () => {
@@ -2730,11 +2749,13 @@ export function setup(ctx) {
         false
       )
 
+      syncFFThinkBackendConfig()
+
       if (ffThinkStatus) {
         ffThinkStatus.textContent =
           ffThinkFix.checked
-            ? 'Enabled — waiting for the next completed AI reply.'
-            : 'Disabled.'
+            ? 'Enabled — backend auto-fix is armed for the next completed AI reply.'
+            : 'Automatic fix disabled. Manual ▶ still works.'
       }
     }
   )
@@ -2750,6 +2771,7 @@ export function setup(ctx) {
         [key]: input.value,
       }
       saveSettings()
+      syncFFThinkBackendConfig()
     })
   }
 
@@ -2763,11 +2785,52 @@ export function setup(ctx) {
 
       saveSettings()
       syncControls()
+      syncFFThinkBackendConfig()
 
       if (ffThinkStatus) {
         ffThinkStatus.textContent =
-          'FF think fix text reset to defaults.'
+          'FF think fix boundary reset to default.'
       }
+    }
+  )
+
+  ffThinkRunNow.addEventListener(
+    'click',
+    () => {
+      let chatId = null
+
+      try {
+        const active =
+          ctx.getActiveChat?.()
+
+        chatId =
+          typeof active?.chatId === 'string'
+            ? active.chatId
+            : null
+      } catch {
+        chatId = null
+      }
+
+      if (!chatId) {
+        if (ffThinkStatus) {
+          ffThinkStatus.textContent =
+            'Manual fix could not detect the current chat. Grant the chats permission, then reload the extension.'
+        }
+        return
+      }
+
+      if (ffThinkStatus) {
+        ffThinkStatus.textContent =
+          '▶ Checking the latest assistant message in this chat…'
+      }
+
+      ctx.sendToBackend({
+        type: 'ff_think_fix_manual',
+        chatId,
+        config: {
+          boundaryText: settings.ffThinkBoundaryText,
+        },
+      })
     }
   )
 
@@ -2797,30 +2860,9 @@ export function setup(ctx) {
     }
   )
 
-  const unsubGenerationEnded =
-    ctx.events.on(
-      'GENERATION_ENDED',
-      payload => {
-        if (!settings.ffThinkFixEnabled) return
-        if (!payload?.chatId || !payload?.messageId) return
-        if (payload?.error) return
-
-        if (ffThinkStatus) {
-          ffThinkStatus.textContent =
-            'Checking completed AI reply…'
-        }
-
-        ctx.sendToBackend({
-          type: 'ff_think_fix_after_generation',
-          chatId: payload.chatId,
-          messageId: payload.messageId,
-          generationId: payload.generationId || null,
-          config: {
-            boundaryText: settings.ffThinkBoundaryText,
-          },
-        })
-      }
-    )
+  // Automatic FF fixing is handled by the backend GENERATION_ENDED listener.
+  // Sync the saved user choice/config as soon as the frontend loads.
+  syncFFThinkBackendConfig()
 
   const unsubBackendMessage =
     ctx.onBackendMessage(payload => {
@@ -2833,21 +2875,32 @@ export function setup(ctx) {
 
       if (!ffThinkStatus) return
 
+      const sourceLabel =
+        payload.source === 'manual'
+          ? 'Manual'
+          : 'Automatic'
+
       if (payload.status === 'fixed') {
         ffThinkStatus.textContent =
-          'Moved the pre-boundary text into Lumiverse native reasoning.'
+          `${sourceLabel} FF fix succeeded — moved pre-boundary text into native reasoning.`
       } else if (payload.status === 'no_match') {
         ffThinkStatus.textContent =
-          'No matching RP boundary marker in the latest reply.'
+          `${sourceLabel} FF fix: no matching RP boundary marker in the target reply.`
       } else if (payload.status === 'already_fixed') {
         ffThinkStatus.textContent =
-          'Latest reply was already split into native reasoning.'
+          `${sourceLabel} FF fix: target reply is already split into native reasoning.`
+      } else if (payload.status === 'no_assistant') {
+        ffThinkStatus.textContent =
+          'Manual FF fix: no assistant message was found in this chat.'
       } else if (payload.status === 'not_assistant') {
         ffThinkStatus.textContent =
-          'Skipped: generated message was not an assistant reply.'
+          'Automatic FF fix skipped: generated target was not an assistant reply.'
+      } else if (payload.status === 'no_current_chat') {
+        ffThinkStatus.textContent =
+          'Manual FF fix could not resolve the current chat.'
       } else if (payload.status === 'error') {
         ffThinkStatus.textContent =
-          `FF think fix failed: ${payload.error || 'unknown error'}`
+          `${sourceLabel} FF fix failed: ${payload.error || 'unknown error'}`
       }
     })
 
@@ -2879,7 +2932,6 @@ export function setup(ctx) {
 
   return () => {
     observer.disconnect()
-    unsubGenerationEnded?.()
     unsubBackendMessage?.()
 
     unwrap()
