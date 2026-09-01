@@ -61,6 +61,8 @@ spindle.on('MESSAGE_DELETED', () => renderCache.clear())
 
 
 
+const FF_THINK_FIX_VERSION = '0.24.0'
+
 const ffThinkFixInFlight = new Set<string>()
 
 type FFThinkFixStatus =
@@ -69,6 +71,7 @@ type FFThinkFixStatus =
   | 'already_fixed'
   | 'not_assistant'
   | 'no_assistant'
+  | 'busy'
   | 'error'
 
 type FFThinkFixSource =
@@ -82,6 +85,12 @@ type FFThinkFixConfig = {
 type FFThinkRuntimeConfig = {
   enabled: boolean
   config: FFThinkFixConfig
+}
+
+type FFThinkMessageSnapshot = {
+  id: string
+  content: string
+  extra?: Record<string, unknown>
 }
 
 const DEFAULT_FF_THINK_CONFIG: FFThinkFixConfig = {
@@ -132,7 +141,7 @@ function repairFFThinkBlock(
 ): {
   status: Exclude<
     FFThinkFixStatus,
-    'not_assistant' | 'no_assistant' | 'error'
+    'not_assistant' | 'no_assistant' | 'busy' | 'error'
   >
   content?: string
   reasoning?: string
@@ -189,6 +198,32 @@ function repairFFThinkBlock(
   }
 }
 
+async function withBackendTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(
+          () => reject(
+            new Error(
+              `${label} timed out after ${Math.round(ms / 1000)}s`,
+            ),
+          ),
+          ms,
+        )
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 function sendFFThinkFixResult(
   userId: string,
   source: FFThinkFixSource,
@@ -198,134 +233,119 @@ function sendFFThinkFixResult(
     {
       type: 'ff_think_fix_result',
       source,
+      version: FF_THINK_FIX_VERSION,
       ...payload,
     },
     userId,
   )
 }
 
-async function runFFThinkFix(
+function sendFFThinkFixProgress(
+  userId: string,
+  source: FFThinkFixSource,
+  requestId?: string,
+): void {
+  spindle.sendToFrontend(
+    {
+      type: 'ff_think_fix_progress',
+      source,
+      requestId: requestId || null,
+      version: FF_THINK_FIX_VERSION,
+    },
+    userId,
+  )
+}
+
+async function applyFFThinkFixSnapshot(
   userId: string,
   chatId: string,
+  snapshot: FFThinkMessageSnapshot,
   options: {
-    messageId?: string
     config?: any
     source: FFThinkFixSource
+    requestId?: string
   },
 ): Promise<void> {
-  const source =
-    options.source
+  const source = options.source
+  const key =
+    `${userId}:${chatId}:${snapshot.id}`
+
+  if (ffThinkFixInFlight.has(key)) {
+    sendFFThinkFixResult(
+      userId,
+      source,
+      {
+        status: 'busy',
+        requestId: options.requestId || null,
+        chatId,
+        messageId: snapshot.id,
+      },
+    )
+    return
+  }
+
+  ffThinkFixInFlight.add(key)
+  sendFFThinkFixProgress(
+    userId,
+    source,
+    options.requestId,
+  )
 
   try {
-    const messages =
-      await spindle.chat.getMessages(chatId)
+    const result =
+      repairFFThinkBlock(
+        snapshot.content || '',
+        snapshot.extra,
+        options.config,
+      )
 
-    const message =
-      options.messageId
-        ? messages.find(
-            item => item.id === options.messageId
-          )
-        : [...messages]
-            .reverse()
-            .find(
-              item => item.role === 'assistant'
-            )
-
-    if (!message) {
+    if (
+      result.status !== 'fixed' ||
+      typeof result.content !== 'string' ||
+      typeof result.reasoning !== 'string'
+    ) {
       sendFFThinkFixResult(
         userId,
         source,
         {
-          status:
-            options.messageId
-              ? 'error'
-              : 'no_assistant',
-          error:
-            options.messageId
-              ? 'Saved generated message was not found.'
-              : undefined,
+          status: result.status,
+          requestId: options.requestId || null,
           chatId,
-          messageId:
-            options.messageId || null,
+          messageId: snapshot.id,
         },
       )
       return
     }
 
-    if (message.role !== 'assistant') {
-      sendFFThinkFixResult(
-        userId,
-        source,
-        {
-          status: 'not_assistant',
-          chatId,
-          messageId: message.id,
-        },
-      )
-      return
-    }
-
-    const key =
-      `${userId}:${chatId}:${message.id}`
-
-    if (ffThinkFixInFlight.has(key)) {
-      return
-    }
-
-    ffThinkFixInFlight.add(key)
-
-    try {
-      const result =
-        repairFFThinkBlock(
-          message.content || '',
-          message.extra,
-          options.config,
-        )
-
-      if (
-        result.status !== 'fixed' ||
-        typeof result.content !== 'string' ||
-        typeof result.reasoning !== 'string'
-      ) {
-        sendFFThinkFixResult(
-          userId,
-          source,
-          {
-            status: result.status,
-            chatId,
-            messageId: message.id,
-          },
-        )
-        return
-      }
-
-      await spindle.chat.updateMessage(
+    await withBackendTimeout(
+      spindle.chat.updateMessage(
         chatId,
-        message.id,
+        snapshot.id,
         {
           content: result.content,
           reasoning: {
             text: result.reasoning,
           },
         },
-      )
+      ),
+      7000,
+      'Updating the message',
+    )
 
-      sendFFThinkFixResult(
-        userId,
-        source,
-        {
-          status: 'fixed',
-          chatId,
-          messageId: message.id,
-        },
-      )
+    sendFFThinkFixResult(
+      userId,
+      source,
+      {
+        status: 'fixed',
+        requestId: options.requestId || null,
+        chatId,
+        messageId: snapshot.id,
+      },
+    )
 
-      spindle.log.info(
-        `FF think fix (${source}) moved leaked text into native reasoning for ${message.id} in chat ${chatId}`,
-      )
-    } finally {
-      ffThinkFixInFlight.delete(key)
-    }
+    spindle.log.info(
+      `FF think fix (${source}) moved leaked text into native reasoning for ${snapshot.id} in chat ${chatId}`,
+    )
   } catch (error: any) {
     const message =
       error?.message ||
@@ -341,17 +361,73 @@ async function runFFThinkFix(
       source,
       {
         status: 'error',
+        requestId: options.requestId || null,
         error: message,
         chatId,
-        messageId:
-          options.messageId || null,
+        messageId: snapshot.id,
       },
     )
+  } finally {
+    ffThinkFixInFlight.delete(key)
+  }
+}
+
+async function getSavedMessageSnapshot(
+  chatId: string,
+  messageId: string,
+): Promise<FFThinkMessageSnapshot | null> {
+  const messages =
+    await withBackendTimeout(
+      spindle.chat.getMessages(chatId),
+      2500,
+      'Reading the saved message',
+    )
+
+  const message =
+    messages.find(
+      item => item.id === messageId
+    )
+
+  if (!message) return null
+  if (message.role !== 'assistant') return null
+
+  return {
+    id: message.id,
+    content: message.content || '',
+    extra: message.extra || {},
   }
 }
 
 spindle.onFrontendMessage(
   async (payload: any, userId: string) => {
+    if (
+      payload?.type ===
+      'ff_think_fix_health'
+    ) {
+      let permissions: string[] = []
+
+      try {
+        permissions =
+          await withBackendTimeout(
+            spindle.permissions.getGranted(),
+            2500,
+            'Reading permissions',
+          )
+      } catch {
+        permissions = []
+      }
+
+      spindle.sendToFrontend(
+        {
+          type: 'ff_think_fix_health',
+          version: FF_THINK_FIX_VERSION,
+          permissions,
+        },
+        userId,
+      )
+      return
+    }
+
     if (
       payload?.type ===
       'ff_think_fix_config'
@@ -379,23 +455,59 @@ spindle.onFrontendMessage(
           ? payload.chatId
           : ''
 
-      if (!chatId) {
+      const rawMessage =
+        payload?.message &&
+        typeof payload.message === 'object'
+          ? payload.message
+          : null
+
+      const messageId =
+        typeof rawMessage?.id === 'string'
+          ? rawMessage.id
+          : ''
+
+      const content =
+        typeof rawMessage?.content === 'string'
+          ? rawMessage.content
+          : ''
+
+      const extra =
+        rawMessage?.extra &&
+        typeof rawMessage.extra === 'object'
+          ? rawMessage.extra
+          : {}
+
+      if (!chatId || !messageId) {
         sendFFThinkFixResult(
           userId,
           'manual',
           {
             status: 'error',
-            error: 'No current chat ID was provided.',
+            requestId:
+              typeof payload.requestId === 'string'
+                ? payload.requestId
+                : null,
+            error:
+              'The frontend did not provide a current chat and exact message snapshot.',
           },
         )
         return
       }
 
-      await runFFThinkFix(
+      await applyFFThinkFixSnapshot(
         userId,
         chatId,
         {
+          id: messageId,
+          content,
+          extra,
+        },
+        {
           source: 'manual',
+          requestId:
+            typeof payload.requestId === 'string'
+              ? payload.requestId
+              : undefined,
           config: payload.config,
         },
       )
@@ -403,8 +515,8 @@ spindle.onFrontendMessage(
     }
 
     /*
-      Keep compatibility with v0.22 frontends briefly: if an old
-      frontend sends the generation result directly, still repair it.
+      Compatibility with older frontends that still send the
+      finished message id directly.
     */
     if (
       payload?.type ===
@@ -422,15 +534,52 @@ spindle.onFrontendMessage(
 
       if (!chatId || !messageId) return
 
-      await runFFThinkFix(
-        userId,
-        chatId,
-        {
-          source: 'auto',
-          messageId,
-          config: payload.config,
-        },
-      )
+      try {
+        const snapshot =
+          await getSavedMessageSnapshot(
+            chatId,
+            messageId,
+          )
+
+        if (!snapshot) {
+          sendFFThinkFixResult(
+            userId,
+            'auto',
+            {
+              status: 'error',
+              error:
+                'Saved generated assistant message was not found.',
+              chatId,
+              messageId,
+            },
+          )
+          return
+        }
+
+        await applyFFThinkFixSnapshot(
+          userId,
+          chatId,
+          snapshot,
+          {
+            source: 'auto',
+            config: payload.config,
+          },
+        )
+      } catch (error: any) {
+        sendFFThinkFixResult(
+          userId,
+          'auto',
+          {
+            status: 'error',
+            error:
+              error?.message ||
+              String(error) ||
+              'Unknown error',
+            chatId,
+            messageId,
+          },
+        )
+      }
     }
   },
 )
@@ -458,6 +607,7 @@ function tryRegisterFFGenerationEvents(): void {
         ffThinkRuntimeByUser.get(userId)
 
       if (!runtime?.enabled) return
+      if (payload?.error) return
 
       const chatId =
         typeof payload?.chatId === 'string'
@@ -470,14 +620,64 @@ function tryRegisterFFGenerationEvents(): void {
           : ''
 
       if (!chatId || !messageId) return
-      if (payload?.error) return
 
-      await runFFThinkFix(
+      let snapshot: FFThinkMessageSnapshot | null = null
+
+      /*
+        Prefer the saved row so any existing native reasoning is
+        preserved. If that read stalls, fall back to the final content
+        carried by GENERATION_ENDED so automatic mode still works.
+      */
+      try {
+        snapshot =
+          await getSavedMessageSnapshot(
+            chatId,
+            messageId,
+          )
+      } catch (error) {
+        spindle.log.warn(
+          `FF think fix auto read fallback: ${
+            error instanceof Error
+              ? error.message
+              : String(error)
+          }`,
+        )
+      }
+
+      if (!snapshot) {
+        const content =
+          typeof payload?.content === 'string'
+            ? payload.content
+            : ''
+
+        if (!content) {
+          sendFFThinkFixResult(
+            userId,
+            'auto',
+            {
+              status: 'error',
+              error:
+                'Generation ended but neither the saved message nor final content could be read.',
+              chatId,
+              messageId,
+            },
+          )
+          return
+        }
+
+        snapshot = {
+          id: messageId,
+          content,
+          extra: {},
+        }
+      }
+
+      await applyFFThinkFixSnapshot(
         userId,
         chatId,
+        snapshot,
         {
           source: 'auto',
-          messageId,
           config: runtime.config,
         },
       )

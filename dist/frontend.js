@@ -1,7 +1,8 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.23'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.24'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.23',
     'lumiverse:bionic-style-reading:v0.22',
     'lumiverse:bionic-style-reading:v0.21',
     'lumiverse:bionic-style-reading:v0.20',
@@ -19,7 +20,7 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.23'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.24'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -1930,6 +1931,10 @@ export function setup(ctx) {
           <code>&lt;think&gt;</code> tags.
         </div>
 
+        <div class="lumibionic-muted" id="lb-ff-backend-status">
+          FF backend: checking…
+        </div>
+
         <div class="lumibionic-muted" id="lb-ff-think-status">
           Waiting for the next completed AI reply.
         </div>
@@ -2048,6 +2053,7 @@ export function setup(ctx) {
   const ffThinkBoundaryText = $('#lb-ff-boundary-text')
   const ffThinkRunNow = $('#lb-ff-run-now')
   const ffThinkResetPattern = $('#lb-ff-reset-pattern')
+  const ffThinkBackendStatus = $('#lb-ff-backend-status')
   const ffThinkStatus = $('#lb-ff-think-status')
 
   const preview = $('#lb-preview')
@@ -2729,6 +2735,130 @@ export function setup(ctx) {
     )
   )
 
+  function withFrontendTimeout(
+    promise,
+    ms,
+    label
+  ) {
+    let timer = null
+
+    return Promise.race([
+      Promise.resolve(promise),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          reject(
+            new Error(
+              `${label} timed out after ${Math.round(ms / 1000)}s`
+            )
+          )
+        }, ms)
+      }),
+    ]).finally(() => {
+      if (timer) clearTimeout(timer)
+    })
+  }
+
+  function isSystemLikeMessage(message) {
+    const extra =
+      message?.extra &&
+      typeof message.extra === 'object'
+        ? message.extra
+        : {}
+
+    const spindleMeta =
+      extra.spindle_metadata &&
+      typeof extra.spindle_metadata === 'object'
+        ? extra.spindle_metadata
+        : null
+
+    return (
+      spindleMeta?.role === 'system' ||
+      spindleMeta?.is_system === true
+    )
+  }
+
+  async function getLatestAssistantSnapshot(chatId) {
+    if (typeof ctx.messages?.list === 'function') {
+      const messages =
+        await withFrontendTimeout(
+          ctx.messages.list(chatId),
+          5000,
+          'Reading chat messages'
+        )
+
+      for (
+        let i = messages.length - 1;
+        i >= 0;
+        i--
+      ) {
+        const message = messages[i]
+
+        if (message?.is_user === true) continue
+        if (isSystemLikeMessage(message)) continue
+
+        return {
+          id: message.id,
+          content:
+            typeof message.content === 'string'
+              ? message.content
+              : '',
+          extra:
+            message.extra &&
+            typeof message.extra === 'object'
+              ? message.extra
+              : {},
+        }
+      }
+    }
+
+    /*
+      Older hosts may expose get() + the local logical ID list
+      without exposing list(). Walk backwards until we find a
+      non-user, non-system message.
+    */
+    const ids =
+      typeof ctx.messages?.listMessageIds === 'function'
+        ? ctx.messages.listMessageIds()
+        : []
+
+    if (
+      ids.length &&
+      typeof ctx.messages?.get === 'function'
+    ) {
+      for (
+        let i = ids.length - 1;
+        i >= 0;
+        i--
+      ) {
+        const message =
+          await withFrontendTimeout(
+            ctx.messages.get(ids[i]),
+            2500,
+            'Reading latest message'
+          )
+
+        if (!message) continue
+        if (message.is_user === true) continue
+        if (isSystemLikeMessage(message)) continue
+
+        return {
+          id: message.id,
+          content:
+            typeof message.content === 'string'
+              ? message.content
+              : '',
+          extra:
+            message.extra &&
+            typeof message.extra === 'object'
+              ? message.extra
+              : {},
+        }
+      }
+    }
+
+    return null
+  }
+
   function syncFFThinkBackendConfig() {
     ctx.sendToBackend({
       type: 'ff_think_fix_config',
@@ -2737,6 +2867,22 @@ export function setup(ctx) {
         boundaryText: settings.ffThinkBoundaryText,
       },
     })
+  }
+
+  let ffManualRequestId = null
+  let ffManualTimeout = null
+
+  function finishFFManualRequest() {
+    if (ffManualTimeout) {
+      clearTimeout(ffManualTimeout)
+      ffManualTimeout = null
+    }
+
+    ffManualRequestId = null
+
+    if (ffThinkRunNow) {
+      ffThinkRunNow.disabled = false
+    }
   }
 
   ffThinkFix.addEventListener(
@@ -2796,7 +2942,7 @@ export function setup(ctx) {
 
   ffThinkRunNow.addEventListener(
     'click',
-    () => {
+    async () => {
       let chatId = null
 
       try {
@@ -2814,23 +2960,96 @@ export function setup(ctx) {
       if (!chatId) {
         if (ffThinkStatus) {
           ffThinkStatus.textContent =
-            'Manual fix could not detect the current chat. Grant the chats permission, then reload the extension.'
+            'Manual FF fix could not detect the current chat.'
         }
         return
       }
 
+      ffThinkRunNow.disabled = true
+
       if (ffThinkStatus) {
         ffThinkStatus.textContent =
-          '▶ Checking the latest assistant message in this chat…'
+          '▶ Resolving the latest assistant message locally…'
       }
 
-      ctx.sendToBackend({
-        type: 'ff_think_fix_manual',
-        chatId,
-        config: {
-          boundaryText: settings.ffThinkBoundaryText,
-        },
-      })
+      let snapshot = null
+
+      try {
+        snapshot =
+          await getLatestAssistantSnapshot(chatId)
+      } catch (error) {
+        finishFFManualRequest()
+
+        if (ffThinkStatus) {
+          ffThinkStatus.textContent =
+            `Manual FF fix could not read the chat: ${
+              error?.message || 'unknown error'
+            }`
+        }
+        return
+      }
+
+      if (!snapshot) {
+        finishFFManualRequest()
+
+        if (ffThinkStatus) {
+          ffThinkStatus.textContent =
+            'Manual FF fix: no assistant message was found in this chat.'
+        }
+        return
+      }
+
+      const requestId =
+        `manual:${Date.now()}:${
+          Math.random()
+            .toString(36)
+            .slice(2, 9)
+        }`
+
+      ffManualRequestId = requestId
+
+      if (ffThinkStatus) {
+        ffThinkStatus.textContent =
+          '▶ Target found. Sending exact message to FF backend…'
+      }
+
+      try {
+        ctx.sendToBackend({
+          type: 'ff_think_fix_manual',
+          requestId,
+          chatId,
+          message: snapshot,
+          config: {
+            boundaryText: settings.ffThinkBoundaryText,
+          },
+        })
+      } catch (error) {
+        finishFFManualRequest()
+
+        if (ffThinkStatus) {
+          ffThinkStatus.textContent =
+            `Manual FF fix could not contact the backend: ${
+              error?.message || 'unknown error'
+            }`
+        }
+        return
+      }
+
+      ffManualTimeout =
+        setTimeout(() => {
+          if (
+            ffManualRequestId !== requestId
+          ) {
+            return
+          }
+
+          finishFFManualRequest()
+
+          if (ffThinkStatus) {
+            ffThinkStatus.textContent =
+              'Manual FF fix timed out waiting for the backend. Disable/re-enable the extension or restart Lumiverse so the v0.24 backend reloads.'
+          }
+        }, 9000)
     }
   )
 
@@ -2867,10 +3086,55 @@ export function setup(ctx) {
   const unsubBackendMessage =
     ctx.onBackendMessage(payload => {
       if (
+        payload?.type ===
+        'ff_think_fix_health'
+      ) {
+        if (ffThinkBackendStatus) {
+          const granted =
+            Array.isArray(payload.permissions)
+              ? payload.permissions.join(', ')
+              : 'unknown'
+
+          ffThinkBackendStatus.textContent =
+            `FF backend: connected v${
+              payload.version || '?'
+            } · permissions: ${granted}`
+        }
+        return
+      }
+
+      if (
+        payload?.type ===
+        'ff_think_fix_progress'
+      ) {
+        if (
+          payload.source === 'manual' &&
+          ffManualRequestId &&
+          payload.requestId === ffManualRequestId
+        ) {
+          if (ffThinkStatus) {
+            ffThinkStatus.textContent =
+              `▶ Backend v${
+                payload.version || '?'
+              } received the request — applying native reasoning update…`
+          }
+        }
+        return
+      }
+
+      if (
         payload?.type !==
         'ff_think_fix_result'
       ) {
         return
+      }
+
+      if (
+        payload.source === 'manual' &&
+        ffManualRequestId &&
+        payload.requestId === ffManualRequestId
+      ) {
+        finishFFManualRequest()
       }
 
       if (!ffThinkStatus) return
@@ -2895,14 +3159,30 @@ export function setup(ctx) {
       } else if (payload.status === 'not_assistant') {
         ffThinkStatus.textContent =
           'Automatic FF fix skipped: generated target was not an assistant reply.'
-      } else if (payload.status === 'no_current_chat') {
+      } else if (payload.status === 'busy') {
         ffThinkStatus.textContent =
-          'Manual FF fix could not resolve the current chat.'
+          `${sourceLabel} FF fix: that message is already being repaired.`
       } else if (payload.status === 'error') {
         ffThinkStatus.textContent =
           `${sourceLabel} FF fix failed: ${payload.error || 'unknown error'}`
       }
     })
+
+  /*
+    Ask the backend to identify itself after the receiver is installed.
+    If an old backend is still running, this line stays on "checking…",
+    which makes a stale hot-reload obvious.
+  */
+  try {
+    ctx.sendToBackend({
+      type: 'ff_think_fix_health',
+    })
+  } catch {
+    if (ffThinkBackendStatus) {
+      ffThinkBackendStatus.textContent =
+        'FF backend: frontend could not send a health check.'
+    }
+  }
 
   const observer =
     new MutationObserver(
