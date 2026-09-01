@@ -1,7 +1,8 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.17'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.18'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.17',
     'lumiverse:bionic-style-reading:v0.16',
     'lumiverse:bionic-style-reading:v0.15',
     'lumiverse:bionic-style-reading:v0.14',
@@ -13,7 +14,7 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.17'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.18'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -77,9 +78,6 @@ export function setup(ctx) {
     wordSpacing: 0,
     textSize: 100,
     lineHeight: 1.55,
-
-    replacementsEnabled: false,
-    replacementRules: '',
 
     toolbarSpacing: 4,
     toolbarHidden: { ...DEFAULT_TOOLBAR_HIDDEN },
@@ -176,7 +174,6 @@ export function setup(ctx) {
     '[contenteditable="true"]',
     '[data-lumiverse-html-island]',
     '[data-lumibionic-word]',
-    '[data-lumibionic-replacement-structural]',
   ].join(',')
 
   let loadedFontFace = null
@@ -184,22 +181,6 @@ export function setup(ctx) {
   let settings = loadSettings()
   let scheduled = false
   let rebuilding = false
-
-  const REPLACEMENT_SOURCE_ATTR =
-    'data-lumibionic-replacement-source'
-
-  const REPLACEMENT_STRUCTURAL_ATTR =
-    'data-lumibionic-replacement-structural'
-
-  const replacementOriginals = new WeakMap()
-  const replacementRendered = new WeakMap()
-  const replacementStructuralOriginals = new WeakMap()
-
-  let replacementCacheKey = null
-  let replacementCache = {
-    rules: [],
-    errors: [],
-  }
 
   const segmenter =
     typeof Intl.Segmenter === 'function'
@@ -329,16 +310,6 @@ export function setup(ctx) {
         textSize: clamp(saved.textSize, 80, 140, DEFAULTS.textSize),
         lineHeight: clamp(saved.lineHeight, 1.1, 2.2, DEFAULTS.lineHeight),
 
-        replacementsEnabled:
-          typeof saved.replacementsEnabled === 'boolean'
-            ? saved.replacementsEnabled
-            : DEFAULTS.replacementsEnabled,
-
-        replacementRules:
-          typeof saved.replacementRules === 'string'
-            ? saved.replacementRules
-            : DEFAULTS.replacementRules,
-
         toolbarSpacing: clamp(
           saved.toolbarSpacing,
           0,
@@ -364,478 +335,6 @@ export function setup(ctx) {
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
     } catch {}
-  }
-
-  function parseRegexRule(spec, lineNumber) {
-    if (!spec.startsWith('/')) return null
-
-    let slash = -1
-    let escaped = false
-
-    for (let i = spec.length - 1; i > 0; i--) {
-      const char = spec[i]
-
-      if (char === '/' && !escaped) {
-        slash = i
-        break
-      }
-
-      escaped = char === '\\' && !escaped
-
-      if (char !== '\\') {
-        escaped = false
-      }
-    }
-
-    if (slash <= 0) {
-      throw new Error(
-        `Line ${lineNumber}: regex is missing its closing /`
-      )
-    }
-
-    const pattern = spec.slice(1, slash)
-    const flags = spec.slice(slash + 1).trim()
-
-    try {
-      return new RegExp(pattern, flags)
-    } catch (error) {
-      throw new Error(
-        `Line ${lineNumber}: ${error?.message || 'invalid regex'}`
-      )
-    }
-  }
-
-  function compileReplacementRules() {
-    const key = settings.replacementRules || ''
-
-    if (replacementCacheKey === key) {
-      return replacementCache
-    }
-
-    const rules = []
-    const errors = []
-
-    key
-      .split(/\r?\n/)
-      .forEach((rawLine, index) => {
-        const lineNumber = index + 1
-        const line = rawLine.trim()
-
-        if (!line || line.startsWith('#')) return
-
-        const delimiter = line.indexOf('=>')
-
-        if (delimiter < 0) {
-          errors.push(
-            `Line ${lineNumber}: expected "find => replacement"`
-          )
-          return
-        }
-
-        const find = line.slice(0, delimiter).trim()
-        const replacement =
-          line.slice(delimiter + 2).trim()
-
-        if (!find) {
-          errors.push(
-            `Line ${lineNumber}: find pattern is empty`
-          )
-          return
-        }
-
-        try {
-          const regex = parseRegexRule(
-            find,
-            lineNumber
-          )
-
-          if (regex) {
-            rules.push({
-              type: 'regex',
-              regex,
-              replacement,
-            })
-          } else {
-            rules.push({
-              type: 'literal',
-              find,
-              replacement,
-            })
-          }
-        } catch (error) {
-          errors.push(
-            error?.message ||
-            `Line ${lineNumber}: invalid rule`
-          )
-        }
-      })
-
-    replacementCacheKey = key
-    replacementCache = {
-      rules,
-      errors,
-    }
-
-    return replacementCache
-  }
-
-  function replaceRenderedText(value, rules) {
-    let result = value
-
-    for (const rule of rules) {
-      if (rule.type === 'regex') {
-        result = result.replace(
-          rule.regex,
-          rule.replacement
-        )
-      } else {
-        result = result
-          .split(rule.find)
-          .join(rule.replacement)
-      }
-    }
-
-    return result
-  }
-
-  function replacementSkipSelector() {
-    return [
-      'code',
-      'pre',
-      'kbd',
-      'samp',
-      'button',
-      'textarea',
-      'input',
-      'select',
-      'option',
-      'script',
-      'style',
-      'svg',
-      'math',
-      '[contenteditable="true"]',
-      '[data-lumiverse-html-island]',
-      '[data-lumibionic-word]',
-      `[${REPLACEMENT_STRUCTURAL_ATTR}]`,
-    ].join(',')
-  }
-
-  function restoreReplacementStructures(
-    root = document
-  ) {
-    root
-      .querySelectorAll?.(
-        `[${REPLACEMENT_STRUCTURAL_ATTR}]`
-      )
-      .forEach(wrapper => {
-        const original =
-          replacementStructuralOriginals.get(wrapper)
-
-        if (original) {
-          wrapper.replaceWith(original)
-        } else {
-          wrapper.replaceWith(
-            document.createTextNode(
-              wrapper.textContent || ''
-            )
-          )
-        }
-      })
-  }
-
-  function replaceStructuralNode(
-    originalNode,
-    replacement,
-    sourceToken
-  ) {
-    const parent = originalNode.parentNode
-    if (!parent) return
-
-    const wrapper =
-      document.createElement('span')
-
-    wrapper.setAttribute(
-      REPLACEMENT_STRUCTURAL_ATTR,
-      ''
-    )
-
-    replacementStructuralOriginals.set(
-      wrapper,
-      originalNode
-    )
-
-    const tokenIndex =
-      replacement.indexOf(sourceToken)
-
-    /*
-      Put the wrapper into the DOM before moving the original
-      rendered Markdown node into it.
-    */
-    parent.replaceChild(wrapper, originalNode)
-
-    if (tokenIndex >= 0) {
-      const before =
-        replacement.slice(0, tokenIndex)
-
-      const after =
-        replacement.slice(
-          tokenIndex + sourceToken.length
-        )
-
-      if (before) {
-        wrapper.appendChild(
-          document.createTextNode(before)
-        )
-      }
-
-      wrapper.appendChild(originalNode)
-
-      if (after) {
-        wrapper.appendChild(
-          document.createTextNode(after)
-        )
-      }
-    } else {
-      wrapper.textContent = replacement
-    }
-  }
-
-  function applyMarkdownAwareReplacements(
-    root,
-    rules
-  ) {
-    for (const rule of rules) {
-      if (rule.type !== 'literal') continue
-
-      /*
-        **Task 0:** has already become
-        <strong>Task 0:</strong> before Spindle sees it.
-      */
-      const strongMatch =
-        rule.find.match(/^\*\*([\s\S]+)\*\*$/)
-
-      if (strongMatch) {
-        const wanted = strongMatch[1]
-
-        root
-          .querySelectorAll('strong, b')
-          .forEach(strong => {
-            if (
-              strong.closest(
-                `[${REPLACEMENT_STRUCTURAL_ATTR}]`
-              )
-            ) {
-              return
-            }
-
-            if (
-              (strong.textContent || '') !== wanted
-            ) {
-              return
-            }
-
-            replaceStructuralNode(
-              strong,
-              rule.replacement,
-              rule.find
-            )
-          })
-
-        continue
-      }
-
-      /*
-        --- has already become <hr>.
-      */
-      if (rule.find === '---') {
-        root
-          .querySelectorAll('hr')
-          .forEach(hr => {
-            if (
-              hr.closest(
-                `[${REPLACEMENT_STRUCTURAL_ATTR}]`
-              )
-            ) {
-              return
-            }
-
-            replaceStructuralNode(
-              hr,
-              rule.replacement,
-              rule.find
-            )
-          })
-      }
-    }
-  }
-
-  function restoreReplacementSources(
-    root = document,
-    removeWrappers = true
-  ) {
-    root
-      .querySelectorAll?.(
-        `[${REPLACEMENT_SOURCE_ATTR}]`
-      )
-      .forEach(source => {
-        const original =
-          replacementOriginals.get(source) ??
-          source.textContent ??
-          ''
-
-        if (removeWrappers) {
-          source.replaceWith(
-            document.createTextNode(original)
-          )
-        } else if (
-          source.textContent !== original
-        ) {
-          source.textContent = original
-        }
-      })
-  }
-
-  function applyTextReplacements(root) {
-    const compiled = compileReplacementRules()
-    const active =
-      settings.replacementsEnabled &&
-      compiled.rules.length > 0
-
-    /*
-      Refresh wrappers already owned by us first. The original
-      string stays in a WeakMap, so changing a rule can restore
-      or re-run against the pre-replacement text.
-    */
-    root
-      .querySelectorAll(
-        `[${REPLACEMENT_SOURCE_ATTR}]`
-      )
-      .forEach(source => {
-        let original =
-          replacementOriginals.get(source)
-
-        const current =
-          source.textContent || ''
-
-        const lastRendered =
-          replacementRendered.get(source)
-
-        /*
-          If Lumiverse changed the text under our wrapper
-          (for example while a message was streaming), adopt
-          that new text as the source rather than fighting it.
-        */
-        if (
-          typeof original !== 'string' ||
-          (
-            typeof lastRendered === 'string' &&
-            current !== lastRendered
-          )
-        ) {
-          original = current
-          replacementOriginals.set(
-            source,
-            original
-          )
-        }
-
-        const next = active
-          ? replaceRenderedText(
-              original,
-              compiled.rules
-            )
-          : original
-
-        if (next === original) {
-          source.replaceWith(
-            document.createTextNode(original)
-          )
-          return
-        }
-
-        if (current !== next) {
-          source.textContent = next
-        }
-
-        replacementRendered.set(
-          source,
-          next
-        )
-      })
-
-    if (!active) return
-
-    applyMarkdownAwareReplacements(
-      root,
-      compiled.rules
-    )
-
-    const walker = document.createTreeWalker(
-      root,
-      NodeFilter.SHOW_TEXT
-    )
-
-    const nodes = []
-
-    while (walker.nextNode()) {
-      nodes.push(walker.currentNode)
-    }
-
-    const skipSelector =
-      replacementSkipSelector()
-
-    for (const node of nodes) {
-      const parent = node.parentElement
-
-      if (!parent) continue
-
-      if (
-        parent.closest(
-          `[${REPLACEMENT_SOURCE_ATTR}]`
-        )
-      ) {
-        continue
-      }
-
-      if (parent.closest(skipSelector)) {
-        continue
-      }
-
-      const original =
-        node.nodeValue || ''
-
-      if (!original) continue
-
-      const next =
-        replaceRenderedText(
-          original,
-          compiled.rules
-        )
-
-      if (next === original) continue
-
-      const source =
-        document.createElement('span')
-
-      source.setAttribute(
-        REPLACEMENT_SOURCE_ATTR,
-        ''
-      )
-
-      source.textContent = next
-
-      replacementOriginals.set(
-        source,
-        original
-      )
-
-      replacementRendered.set(
-        source,
-        next
-      )
-
-      node.replaceWith(source)
-    }
   }
 
   function graphemes(value) {
@@ -1599,8 +1098,6 @@ export function setup(ctx) {
       Math.abs(settings.wordSpacing) > 0.0001
     )
 
-    applyTextReplacements(root)
-
     if (!settings.bionicEnabled) return
 
     const walker =
@@ -1944,8 +1441,6 @@ export function setup(ctx) {
   function rebuildAll() {
     rebuilding = true
     unwrap()
-    restoreReplacementSources(document, true)
-    restoreReplacementStructures(document)
     rebuilding = false
 
     applyCssSettings()
@@ -2330,52 +1825,6 @@ export function setup(ctx) {
       <div class="lumibionic-section">
 
         <div class="lumibionic-section-title">
-          Text replacements
-        </div>
-
-        <label class="lumibionic-check">
-          <input id="lb-replacements-enabled" type="checkbox">
-          <span>Enable automatic text replacements</span>
-        </label>
-
-        <div class="lumibionic-control" id="lb-replacement-options">
-          <label for="lb-replacement-rules">
-            Replacement rules
-          </label>
-
-          <textarea
-            id="lb-replacement-rules"
-            rows="7"
-            spellcheck="false"
-            placeholder="Thinking: =>&#10;/^Thoughts?:.*$/gi =>&#10;/Name: (.+)/g => $1"
-          ></textarea>
-
-          <div class="lumibionic-muted">
-            One rule per line: <code>find =&gt; replacement</code>.
-            Use <code>/regex/flags</code> on the left for regex.
-            Leave the right side empty to remove matching text.
-            Regex capture replacements such as <code>$1</code> work.
-          </div>
-
-          <div
-            class="lumibionic-muted"
-            id="lb-replacement-status"
-          ></div>
-
-          <div class="lumibionic-muted">
-            Visual only: stored messages are not edited.
-            Markdown-aware matching recognizes rendered forms
-            such as <code>**bold**</code> and <code>---</code>.
-            Patterns spanning several separate rendered
-            paragraphs may still need separate rules.
-          </div>
-        </div>
-
-      </div>
-
-      <div class="lumibionic-section">
-
-        <div class="lumibionic-section-title">
           Message typography
         </div>
 
@@ -2504,11 +1953,6 @@ export function setup(ctx) {
   const sizeValue = $('#lb-size-value')
   const line = $('#lb-line')
   const lineValue = $('#lb-line-value')
-
-  const replacementsEnabled = $('#lb-replacements-enabled')
-  const replacementOptions = $('#lb-replacement-options')
-  const replacementRules = $('#lb-replacement-rules')
-  const replacementStatus = $('#lb-replacement-status')
 
   const preview = $('#lb-preview')
   const reset = $('#lb-reset')
@@ -2803,33 +2247,6 @@ export function setup(ctx) {
 
     line.value = String(settings.lineHeight)
     lineValue.textContent = settings.lineHeight.toFixed(2)
-
-    replacementsEnabled.checked =
-      settings.replacementsEnabled
-
-    replacementRules.value =
-      settings.replacementRules
-
-    replacementOptions.classList.toggle(
-      'lumibionic-hidden',
-      !settings.replacementsEnabled
-    )
-
-    const replacementResult =
-      compileReplacementRules()
-
-    if (replacementResult.errors.length) {
-      replacementStatus.textContent =
-        replacementResult.errors.join(' · ')
-      replacementStatus.dataset.error = 'true'
-    } else {
-      const count =
-        replacementResult.rules.length
-
-      replacementStatus.textContent =
-        `${count} valid rule${count === 1 ? '' : 's'}`
-      replacementStatus.dataset.error = 'false'
-    }
 
     toolbarSpacing.value = String(settings.toolbarSpacing)
     toolbarSpacingValue.textContent = `${settings.toolbarSpacing}px`
@@ -3209,37 +2626,6 @@ export function setup(ctx) {
     )
   )
 
-  replacementsEnabled.addEventListener(
-    'change',
-    () => updateSetting(
-      'replacementsEnabled',
-      replacementsEnabled.checked,
-      true,
-      false
-    )
-  )
-
-  let replacementInputTimer = null
-
-  replacementRules.addEventListener(
-    'input',
-    () => {
-      clearTimeout(replacementInputTimer)
-
-      replacementInputTimer =
-        setTimeout(() => {
-          replacementCacheKey = null
-
-          updateSetting(
-            'replacementRules',
-            replacementRules.value,
-            true,
-            false
-          )
-        }, 250)
-    }
-  )
-
   toolbarSpacing.addEventListener(
     'input',
     () => updateSetting(
@@ -3296,8 +2682,6 @@ export function setup(ctx) {
     observer.disconnect()
 
     unwrap()
-    restoreReplacementSources(document, true)
-    restoreReplacementStructures(document)
     unloadLocalFont(false)
     clearToolbarVisibility()
 
