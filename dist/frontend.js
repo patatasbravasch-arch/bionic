@@ -1,7 +1,8 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.14'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.15'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.14',
     'lumiverse:bionic-style-reading:v0.13',
     'lumiverse:bionic-style-reading:v0.12',
     'lumiverse:bionic-style-reading:v0.11',
@@ -10,7 +11,7 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.14'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.15'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -1150,7 +1151,33 @@ export function setup(ctx) {
       .trim()
   }
 
+  function isAttachmentButton(button) {
+    if (!button?.matches?.('button')) return false
+    if (!button.closest('[data-component="InputArea"]')) return false
+
+    const previous = button.previousElementSibling
+    if (
+      previous?.matches?.(
+        '[data-spindle-mount="chat_input_tools_left"]'
+      )
+    ) {
+      return true
+    }
+
+    return Boolean(
+      button.querySelector(
+        'svg.lucide-paperclip, svg[class*="paperclip"]'
+      )
+    )
+  }
+
   function toolbarItemForButton(button) {
+    if (isAttachmentButton(button)) {
+      return TOOLBAR_BUTTONS.find(
+        item => item.key === 'attachments'
+      ) || null
+    }
+
     const label =
       toolbarButtonLabel(button).toLocaleLowerCase()
 
@@ -1844,19 +1871,7 @@ export function setup(ctx) {
           </div>
         </div>
 
-        <div class="lumibionic-toolbar-grid" id="lb-toolbar-grid">
-          <button type="button" class="lumibionic-toolbar-toggle" data-toolbar-key="backHome"><span>Back to home</span><small>Shown</small></button>
-          <button type="button" class="lumibionic-toolbar-toggle" data-toolbar-key="regenerate"><span>Regenerate</span><small>Shown</small></button>
-          <button type="button" class="lumibionic-toolbar-toggle" data-toolbar-key="continue"><span>Continue</span><small>Shown</small></button>
-          <button type="button" class="lumibionic-toolbar-toggle" data-toolbar-key="oneLiner"><span>One-liner nudge</span><small>Shown</small></button>
-          <button type="button" class="lumibionic-toolbar-toggle" data-toolbar-key="persona"><span>Switch persona</span><small>Shown</small></button>
-          <button type="button" class="lumibionic-toolbar-toggle" data-toolbar-key="connection"><span>Connection</span><small>Shown</small></button>
-          <button type="button" class="lumibionic-toolbar-toggle" data-toolbar-key="alternateFields"><span>Alternate fields</span><small>Shown</small></button>
-          <button type="button" class="lumibionic-toolbar-toggle" data-toolbar-key="guidedGenerations"><span>Guided generations</span><small>Shown</small></button>
-          <button type="button" class="lumibionic-toolbar-toggle" data-toolbar-key="quickReplies"><span>Quick replies</span><small>Shown</small></button>
-          <button type="button" class="lumibionic-toolbar-toggle" data-toolbar-key="tools"><span>Tools</span><small>Shown</small></button>
-          <button type="button" class="lumibionic-toolbar-toggle" data-toolbar-key="extras"><span>Extras</span><small>Shown</small></button>
-        </div>
+<div class="lumibionic-toolbar-grid" id="lb-toolbar-grid"></div>
 
         <div class="lumibionic-toolbar-actions">
           <button type="button" id="lb-toolbar-hide-all">Hide all listed</button>
@@ -1944,6 +1959,27 @@ export function setup(ctx) {
   const toolbarGrid = $('#lb-toolbar-grid')
   const toolbarHideAll = $('#lb-toolbar-hide-all')
   const toolbarShowAll = $('#lb-toolbar-show-all')
+
+  if (toolbarGrid) {
+    toolbarGrid.replaceChildren()
+
+    for (const item of TOOLBAR_BUTTONS) {
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.className = 'lumibionic-toolbar-toggle'
+      button.dataset.toolbarKey = item.key
+
+      const label = document.createElement('span')
+      label.textContent = item.label
+
+      const state = document.createElement('small')
+      state.textContent = 'Shown'
+
+      button.append(label, state)
+      toolbarGrid.appendChild(button)
+    }
+  }
+
   const toolbarToggleButtons = Array.from(
     tab.root.querySelectorAll('[data-toolbar-key]')
   )
