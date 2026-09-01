@@ -52,22 +52,35 @@ const ffThinkFixInFlight = new Set();
 
 const DEFAULT_FF_THINK_CONFIG = {
     boundaryText: '[ 🕰️ Time',
-    openText: '<think>',
-    closeText: '</think>',
 };
 
 function cleanFFThinkConfig(raw) {
-    const text = (value, fallback) => typeof value === 'string'
-        ? value.slice(0, 1000)
-        : fallback;
     return {
-        boundaryText: text(raw?.boundaryText, DEFAULT_FF_THINK_CONFIG.boundaryText),
-        openText: text(raw?.openText, DEFAULT_FF_THINK_CONFIG.openText),
-        closeText: text(raw?.closeText, DEFAULT_FF_THINK_CONFIG.closeText),
+        boundaryText: typeof raw?.boundaryText === 'string'
+            ? raw.boundaryText.slice(0, 1000)
+            : DEFAULT_FF_THINK_CONFIG.boundaryText,
     };
 }
 
-function repairFFThinkBlock(content, rawConfig) {
+function normalizeExistingReasoning(extra) {
+    const value = extra?.reasoning;
+    return typeof value === 'string'
+        ? value.trim()
+        : '';
+}
+
+function mergeReasoning(existing, leakedPrefix) {
+    const prefix = leakedPrefix.trim();
+    if (!existing)
+        return prefix;
+    if (!prefix)
+        return existing;
+    if (existing.includes(prefix))
+        return existing;
+    return `${existing}\n\n${prefix}`;
+}
+
+function repairFFThinkBlock(content, extra, rawConfig) {
     const config = cleanFFThinkConfig(rawConfig);
     const boundary = config.boundaryText;
     if (!boundary) {
@@ -77,36 +90,23 @@ function repairFFThinkBlock(content, rawConfig) {
     if (boundaryIndex < 0) {
         return { status: 'no_match' };
     }
-    const beforeBoundary = content.slice(0, boundaryIndex);
-    if (beforeBoundary.trim().length === 0) {
+    const leakedPrefix = content.slice(0, boundaryIndex);
+    if (!leakedPrefix.trim()) {
+        const existingReasoning = normalizeExistingReasoning(extra);
+        return existingReasoning
+            ? { status: 'already_fixed' }
+            : { status: 'no_match' };
+    }
+    const visibleContent = content.slice(boundaryIndex);
+    const existingReasoning = normalizeExistingReasoning(extra);
+    const reasoning = mergeReasoning(existingReasoning, leakedPrefix);
+    if (!reasoning.trim()) {
         return { status: 'no_match' };
-    }
-    if (config.openText &&
-        beforeBoundary.startsWith(config.openText)) {
-        const closeIndex = config.closeText
-            ? beforeBoundary.lastIndexOf(config.closeText)
-            : config.openText.length;
-        if (!config.closeText ||
-            closeIndex >= config.openText.length) {
-            return { status: 'already_fixed' };
-        }
-    }
-    const lowerBefore = beforeBoundary.toLowerCase();
-    if (lowerBefore.trimStart().startsWith('<think>') &&
-        lowerBefore.includes('</think>')) {
-        return { status: 'already_fixed' };
-    }
-    const repaired = config.openText +
-        beforeBoundary +
-        config.closeText +
-        '\n' +
-        content.slice(boundaryIndex);
-    if (repaired === content) {
-        return { status: 'already_fixed' };
     }
     return {
         status: 'fixed',
-        content: repaired,
+        content: visibleContent,
+        reasoning,
     };
 }
 
@@ -155,10 +155,12 @@ spindle.onFrontendMessage(async (payload, userId) => {
         }
         const result = repairFFThinkBlock(
             message.content || '',
+            message.extra,
             payload.config
         );
         if (result.status !== 'fixed' ||
-            typeof result.content !== 'string') {
+            typeof result.content !== 'string' ||
+            typeof result.reasoning !== 'string') {
             sendFFThinkFixResult(userId, {
                 status: result.status,
                 chatId,
@@ -168,13 +170,16 @@ spindle.onFrontendMessage(async (payload, userId) => {
         }
         await spindle.chat.updateMessage(chatId, messageId, {
             content: result.content,
+            reasoning: {
+                text: result.reasoning,
+            },
         });
         sendFFThinkFixResult(userId, {
             status: 'fixed',
             chatId,
             messageId,
         });
-        spindle.log.info(`FF think fix repaired assistant message ${messageId} in chat ${chatId}`);
+        spindle.log.info(`FF think fix moved leaked text into native reasoning for ${messageId} in chat ${chatId}`);
     }
     catch (error) {
         const message = error?.message ||

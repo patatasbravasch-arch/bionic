@@ -1,7 +1,8 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.21'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.22'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.21',
     'lumiverse:bionic-style-reading:v0.20',
     'lumiverse:bionic-style-reading:v0.19',
     'lumiverse:bionic-style-reading:v0.18',
@@ -17,7 +18,7 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.21'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.22'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -84,8 +85,6 @@ export function setup(ctx) {
 
     ffThinkFixEnabled: false,
     ffThinkBoundaryText: '[ 🕰️ Time',
-    ffThinkOpenText: '<think>',
-    ffThinkCloseText: '</think>',
 
     toolbarSpacing: 4,
     toolbarHidden: { ...DEFAULT_TOOLBAR_HIDDEN },
@@ -327,24 +326,6 @@ export function setup(ctx) {
           typeof saved.ffThinkBoundaryText === 'string'
             ? saved.ffThinkBoundaryText
             : DEFAULTS.ffThinkBoundaryText,
-
-        ffThinkOpenText:
-          typeof saved.ffThinkOpenText === 'string'
-            ? saved.ffThinkOpenText
-            : (
-                typeof saved.ffThinkInsertBefore === 'string'
-                  ? saved.ffThinkInsertBefore
-                  : DEFAULTS.ffThinkOpenText
-              ),
-
-        ffThinkCloseText:
-          typeof saved.ffThinkCloseText === 'string'
-            ? saved.ffThinkCloseText
-            : (
-                typeof saved.ffThinkReplaceEnd === 'string'
-                  ? saved.ffThinkReplaceEnd
-                  : DEFAULTS.ffThinkCloseText
-              ),
 
         toolbarSpacing: clamp(
           saved.toolbarSpacing,
@@ -1912,14 +1893,14 @@ export function setup(ctx) {
 
         <label class="lumibionic-check">
           <input id="lb-ff-think-fix" type="checkbox">
-          <span>Wrap everything before the RP boundary as thinking</span>
+          <span>Move everything before the RP boundary into native reasoning</span>
         </label>
 
         <div class="lumibionic-muted">
-          After the AI finishes, the extension edits the newly saved
-          assistant message. Everything before the first boundary marker
-          is wrapped; the boundary and everything after it stay outside.
-          These are literal text values, not regex.
+          After the AI finishes, the extension edits the saved assistant
+          message using Lumiverse's native reasoning field. Everything before
+          the first boundary marker becomes the collapsible reasoning block;
+          the boundary and the RP after it remain normal message content.
         </div>
 
         <div class="lumibionic-control">
@@ -1931,36 +1912,14 @@ export function setup(ctx) {
           >
         </div>
 
-        <div class="lumibionic-ff-grid">
-
-          <div class="lumibionic-control">
-            <label for="lb-ff-open-text">Thinking open text</label>
-            <input
-              id="lb-ff-open-text"
-              type="text"
-              spellcheck="false"
-            >
-          </div>
-
-          <div class="lumibionic-control">
-            <label for="lb-ff-close-text">Thinking close text</label>
-            <input
-              id="lb-ff-close-text"
-              type="text"
-              spellcheck="false"
-            >
-          </div>
-
-        </div>
-
         <button type="button" id="lb-ff-reset-pattern">
-          Reset FF think fix text
+          Reset boundary marker
         </button>
 
         <div class="lumibionic-muted">
-          Default: everything before <code>[ 🕰️ Time</code> becomes
-          <code>&lt;think&gt;…&lt;/think&gt;</code>. The time marker
-          itself is preserved unchanged.
+          Default boundary: <code>[ 🕰️ Time</code>.
+          The fix now uses Lumiverse's native reasoning field instead of
+          inserting <code>&lt;think&gt;</code> tags.
         </div>
 
         <div class="lumibionic-muted" id="lb-ff-think-status">
@@ -2079,8 +2038,6 @@ export function setup(ctx) {
 
   const ffThinkFix = $('#lb-ff-think-fix')
   const ffThinkBoundaryText = $('#lb-ff-boundary-text')
-  const ffThinkOpenText = $('#lb-ff-open-text')
-  const ffThinkCloseText = $('#lb-ff-close-text')
   const ffThinkResetPattern = $('#lb-ff-reset-pattern')
   const ffThinkStatus = $('#lb-ff-think-status')
 
@@ -2384,8 +2341,6 @@ export function setup(ctx) {
 
     ffThinkFix.checked = settings.ffThinkFixEnabled
     ffThinkBoundaryText.value = settings.ffThinkBoundaryText
-    ffThinkOpenText.value = settings.ffThinkOpenText
-    ffThinkCloseText.value = settings.ffThinkCloseText
 
     toolbarSpacing.value = String(settings.toolbarSpacing)
     toolbarSpacingValue.textContent = `${settings.toolbarSpacing}px`
@@ -2786,8 +2741,6 @@ export function setup(ctx) {
 
   const ffTextBindings = [
     [ffThinkBoundaryText, 'ffThinkBoundaryText'],
-    [ffThinkOpenText, 'ffThinkOpenText'],
-    [ffThinkCloseText, 'ffThinkCloseText'],
   ]
 
   for (const [input, key] of ffTextBindings) {
@@ -2806,8 +2759,6 @@ export function setup(ctx) {
       settings = {
         ...settings,
         ffThinkBoundaryText: DEFAULTS.ffThinkBoundaryText,
-        ffThinkOpenText: DEFAULTS.ffThinkOpenText,
-        ffThinkCloseText: DEFAULTS.ffThinkCloseText,
       }
 
       saveSettings()
@@ -2866,8 +2817,6 @@ export function setup(ctx) {
           generationId: payload.generationId || null,
           config: {
             boundaryText: settings.ffThinkBoundaryText,
-            openText: settings.ffThinkOpenText,
-            closeText: settings.ffThinkCloseText,
           },
         })
       }
@@ -2886,13 +2835,13 @@ export function setup(ctx) {
 
       if (payload.status === 'fixed') {
         ffThinkStatus.textContent =
-          'Wrapped everything before the latest RP boundary as thinking.'
+          'Moved the pre-boundary text into Lumiverse native reasoning.'
       } else if (payload.status === 'no_match') {
         ffThinkStatus.textContent =
           'No matching RP boundary marker in the latest reply.'
       } else if (payload.status === 'already_fixed') {
         ffThinkStatus.textContent =
-          'Latest pre-boundary block was already wrapped.'
+          'Latest reply was already split into native reasoning.'
       } else if (payload.status === 'not_assistant') {
         ffThinkStatus.textContent =
           'Skipped: generated message was not an assistant reply.'
