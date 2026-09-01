@@ -1,7 +1,8 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.13'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.14'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.13',
     'lumiverse:bionic-style-reading:v0.12',
     'lumiverse:bionic-style-reading:v0.11',
     'lumiverse:bionic-style-reading:v0.10',
@@ -9,7 +10,7 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.13'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.14'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -24,6 +25,23 @@ export function setup(ctx) {
     { key: 'quickReplies', label: 'Quick replies', title: 'Quick replies', className: 'lb-hide-toolbar-quick-replies' },
     { key: 'tools', label: 'Tools', title: 'Tools', className: 'lb-hide-toolbar-tools' },
     { key: 'extras', label: 'Extras', title: 'Extras', className: 'lb-hide-toolbar-extras' },
+    {
+      key: 'attachments',
+      label: 'Attachments / paperclip',
+      title: 'Attach',
+      titles: [
+        'attach',
+        'attachment',
+        'attachments',
+        'attach file',
+        'attach files',
+        'add attachment',
+        'add attachments',
+        'upload file',
+        'upload files'
+      ],
+      className: 'lb-hide-toolbar-attachments'
+    },
   ]
 
   const DEFAULT_TOOLBAR_HIDDEN = Object.fromEntries(
@@ -1124,18 +1142,32 @@ export function setup(ctx) {
     return [
       button.getAttribute('title') || '',
       button.getAttribute('aria-label') || '',
+      button.getAttribute('data-tooltip') || '',
+      button.getAttribute('data-title') || '',
     ]
       .filter(Boolean)
       .join(' ')
+      .trim()
   }
 
   function toolbarItemForButton(button) {
-    const label = toolbarButtonLabel(button)
+    const label =
+      toolbarButtonLabel(button).toLocaleLowerCase()
+
     if (!label) return null
 
-    return TOOLBAR_BUTTONS.find(
-      item => label.includes(item.title)
-    ) || null
+    return TOOLBAR_BUTTONS.find(item => {
+      const aliases =
+        Array.isArray(item.titles) && item.titles.length
+          ? item.titles
+          : [item.title]
+
+      return aliases.some(alias =>
+        label.includes(
+          String(alias).toLocaleLowerCase()
+        )
+      )
+    }) || null
   }
 
   function findToolbarButtons() {
@@ -2593,7 +2625,12 @@ export function setup(ctx) {
       subtree: true,
       characterData: true,
       attributes: true,
-      attributeFilter: ['title', 'aria-label'],
+      attributeFilter: [
+        'title',
+        'aria-label',
+        'data-tooltip',
+        'data-title'
+      ],
     }
   )
 
