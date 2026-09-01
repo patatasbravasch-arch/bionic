@@ -1,81 +1,6 @@
-import { transformMarkdownForBionic } from './transform'
-
 declare const spindle: import('lumiverse-spindle-types').SpindleAPI
 
-const CACHE_LIMIT = 512
-const renderCache = new Map<string, string>()
-
-function fnv1a(value: string): string {
-  let hash = 0x811c9dc5
-  for (let i = 0; i < value.length; i++) {
-    hash ^= value.charCodeAt(i)
-    hash = Math.imul(hash, 0x01000193)
-  }
-  return (hash >>> 0).toString(16)
-}
-
-function getCacheKey(ctx: {
-  userId: string
-  chatId: string
-  messageId?: string
-  content: string
-}): string {
-  return [
-    ctx.userId,
-    ctx.chatId,
-    ctx.messageId ?? 'no-message-id',
-    ctx.content.length,
-    fnv1a(ctx.content),
-  ].join(':')
-}
-
-function putCache(key: string, value: string): void {
-  if (renderCache.has(key)) renderCache.delete(key)
-  renderCache.set(key, value)
-
-  if (renderCache.size > CACHE_LIMIT) {
-    const oldest = renderCache.keys().next().value
-    if (oldest !== undefined) renderCache.delete(oldest)
-  }
-}
-
-spindle.registerMessageContentProcessor(async (ctx) => {
-  // Critical: render-only means stored history, prompts, memories, and exports stay untouched.
-  if (ctx.origin !== 'render' || !ctx.content) return
-
-  const key = getCacheKey(ctx)
-  const cached = renderCache.get(key)
-  if (cached !== undefined) return { content: cached }
-
-  const content = transformMarkdownForBionic(ctx.content)
-  putCache(key, content)
-  return { content }
-}, 100)
-
-// Lumiverse invokes render processing twice per visible message. Clear our small
-// dedupe cache when message state changes so stale transforms cannot linger.
-spindle.on('CHAT_CHANGED', () => renderCache.clear())
-spindle.on('MESSAGE_EDITED', () => renderCache.clear())
-spindle.on('MESSAGE_SWIPED', () => renderCache.clear())
-spindle.on('MESSAGE_DELETED', () => renderCache.clear())
-
-
-
-const FF_THINK_FIX_VERSION = '0.25.0'
-
-const ffThinkFixInFlight = new Set<string>()
-
-type FFThinkFixStatus =
-  | 'fixed'
-  | 'no_match'
-  | 'already_fixed'
-  | 'no_assistant'
-  | 'busy'
-  | 'error'
-
-type FFThinkFixSource =
-  | 'manual'
-  | 'auto'
+const FF_THINK_FIX_VERSION = '0.26.0'
 
 type FFThinkFixConfig = {
   boundaryText: string
@@ -86,16 +11,19 @@ type FFThinkRuntimeConfig = {
   config: FFThinkFixConfig
 }
 
+type FFThinkFixSource = 'manual' | 'auto'
+
 const DEFAULT_FF_THINK_CONFIG: FFThinkFixConfig = {
   boundaryText: '[ 🕰️ Time',
 }
 
-const ffThinkRuntimeByUser =
+const runtimeByUser =
   new Map<string, FFThinkRuntimeConfig>()
 
-function cleanFFThinkConfig(
-  raw: any,
-): FFThinkFixConfig {
+const inFlight =
+  new Set<string>()
+
+function cleanConfig(raw: any): FFThinkFixConfig {
   return {
     boundaryText:
       typeof raw?.boundaryText === 'string'
@@ -104,94 +32,102 @@ function cleanFFThinkConfig(
   }
 }
 
-function normalizeExistingReasoning(
-  extra: Record<string, unknown> | undefined,
-): string {
-  const value = extra?.reasoning
-
-  return typeof value === 'string'
-    ? value.trim()
+function existingReasoning(message: any): string {
+  return typeof message?.extra?.reasoning === 'string'
+    ? message.extra.reasoning.trim()
     : ''
 }
 
-function mergeReasoning(
-  existing: string,
-  leakedPrefix: string,
-): string {
-  const prefix = leakedPrefix.trim()
-
-  if (!existing) return prefix
-  if (!prefix) return existing
-  if (existing.includes(prefix)) return existing
-
-  return `${existing}\n\n${prefix}`
-}
-
-function repairFFThinkBlock(
-  content: string,
-  extra: Record<string, unknown> | undefined,
+function splitMessage(
+  message: any,
   rawConfig?: any,
 ): {
-  status: Exclude<
-    FFThinkFixStatus,
-    'no_assistant' | 'busy' | 'error'
-  >
+  status: 'fixed' | 'no_match' | 'already_fixed'
   content?: string
   reasoning?: string
 } {
-  const config =
-    cleanFFThinkConfig(rawConfig)
+  const config = cleanConfig(rawConfig)
 
-  const boundary =
-    config.boundaryText
-
-  if (!boundary) {
+  if (!config.boundaryText) {
     return { status: 'no_match' }
   }
 
+  const content =
+    typeof message?.content === 'string'
+      ? message.content
+      : ''
+
   const boundaryIndex =
-    content.indexOf(boundary)
+    content.indexOf(config.boundaryText)
 
   if (boundaryIndex < 0) {
     return { status: 'no_match' }
   }
 
-  const leakedPrefix =
+  const prefix =
     content.slice(0, boundaryIndex)
 
-  if (!leakedPrefix.trim()) {
-    const existingReasoning =
-      normalizeExistingReasoning(extra)
-
-    return existingReasoning
+  if (!prefix.trim()) {
+    return existingReasoning(message)
       ? { status: 'already_fixed' }
       : { status: 'no_match' }
   }
 
-  const visibleContent =
-    content.slice(boundaryIndex)
+  const prior =
+    existingReasoning(message)
 
-  const existingReasoning =
-    normalizeExistingReasoning(extra)
+  const leaked =
+    prefix.trim()
 
   const reasoning =
-    mergeReasoning(
-      existingReasoning,
-      leakedPrefix,
-    )
-
-  if (!reasoning.trim()) {
-    return { status: 'no_match' }
-  }
+    !prior
+      ? leaked
+      : prior.includes(leaked)
+        ? prior
+        : `${prior}\n\n${leaked}`
 
   return {
     status: 'fixed',
-    content: visibleContent,
+    content: content.slice(boundaryIndex),
     reasoning,
   }
 }
 
-async function withBackendTimeout<T>(
+function sendResult(
+  userId: string,
+  source: FFThinkFixSource,
+  payload: Record<string, unknown>,
+): void {
+  spindle.sendToFrontend(
+    {
+      type: 'ff_think_fix_result',
+      source,
+      version: FF_THINK_FIX_VERSION,
+      ...payload,
+    },
+    userId,
+  )
+}
+
+function sendProgress(
+  userId: string,
+  source: FFThinkFixSource,
+  stage: 'reading' | 'updating',
+  requestId?: string,
+): void {
+  spindle.sendToFrontend(
+    {
+      type: 'ff_think_fix_progress',
+      source,
+      stage,
+      requestId: requestId || null,
+      version: FF_THINK_FIX_VERSION,
+    },
+    userId,
+  )
+}
+
+async function timeout<T>(
   promise: Promise<T>,
   ms: number,
   label: string,
@@ -217,197 +153,21 @@ async function withBackendTimeout<T>(
   }
 }
 
-function sendFFThinkFixResult(
-  userId: string,
-  source: FFThinkFixSource,
-  payload: Record<string, unknown>,
-): void {
-  spindle.sendToFrontend(
-    {
-      type: 'ff_think_fix_result',
-      source,
-      version: FF_THINK_FIX_VERSION,
-      ...payload,
-    },
-    userId,
-  )
-}
-
-function sendFFThinkFixProgress(
-  userId: string,
-  source: FFThinkFixSource,
-  stage: 'reading' | 'updating',
-  requestId?: string,
-): void {
-  spindle.sendToFrontend(
-    {
-      type: 'ff_think_fix_progress',
-      source,
-      stage,
-      requestId: requestId || null,
-      version: FF_THINK_FIX_VERSION,
-    },
-    userId,
-  )
-}
-
-async function applyFFThinkFixMessage(
-  userId: string,
+async function latestAssistant(
   chatId: string,
-  message: any,
-  options: {
-    config?: any
-    source: FFThinkFixSource
-    requestId?: string
-  },
-): Promise<void> {
-  const source = options.source
-  const messageId =
-    typeof message?.id === 'string'
-      ? message.id
-      : ''
-
-  if (!messageId) {
-    sendFFThinkFixResult(
-      userId,
-      source,
-      {
-        status: 'error',
-        requestId: options.requestId || null,
-        error: 'Assistant message had no stable id.',
-        chatId,
-      },
-    )
-    return
-  }
-
-  const key =
-    `${userId}:${chatId}:${messageId}`
-
-  if (ffThinkFixInFlight.has(key)) {
-    sendFFThinkFixResult(
-      userId,
-      source,
-      {
-        status: 'busy',
-        requestId: options.requestId || null,
-        chatId,
-        messageId,
-      },
-    )
-    return
-  }
-
-  ffThinkFixInFlight.add(key)
-
-  try {
-    const result =
-      repairFFThinkBlock(
-        message.content || '',
-        message.extra || {},
-        options.config,
-      )
-
-    if (
-      result.status !== 'fixed' ||
-      typeof result.content !== 'string' ||
-      typeof result.reasoning !== 'string'
-    ) {
-      sendFFThinkFixResult(
-        userId,
-        source,
-        {
-          status: result.status,
-          requestId: options.requestId || null,
-          chatId,
-          messageId,
-        },
-      )
-      return
-    }
-
-    sendFFThinkFixProgress(
-      userId,
-      source,
-      'updating',
-      options.requestId,
-    )
-
-    await withBackendTimeout(
-      spindle.chat.updateMessage(
-        chatId,
-        messageId,
-        {
-          content: result.content,
-          reasoning: {
-            text: result.reasoning,
-          },
-        },
-      ),
-      6000,
-      'Updating the assistant message',
-    )
-
-    sendFFThinkFixResult(
-      userId,
-      source,
-      {
-        status: 'fixed',
-        requestId: options.requestId || null,
-        chatId,
-        messageId,
-      },
-    )
-
-    spindle.log.info(
-      `FF think fix (${source}) moved leaked text into native reasoning for ${messageId} in chat ${chatId}`,
-    )
-  } catch (error: any) {
-    const messageText =
-      error?.message ||
-      String(error) ||
-      'Unknown error'
-
-    spindle.log.error(
-      `FF think fix (${source}) failed: ${messageText}`,
-    )
-
-    sendFFThinkFixResult(
-      userId,
-      source,
-      {
-        status: 'error',
-        requestId: options.requestId || null,
-        error: messageText,
-        chatId,
-        messageId,
-      },
-    )
-  } finally {
-    ffThinkFixInFlight.delete(key)
-  }
-}
-
-async function findLatestAssistant(
-  chatId: string,
-  hintedLatestId?: string,
+  hintedMessageId?: string,
 ): Promise<any | null> {
   const messages =
-    await withBackendTimeout(
+    await timeout(
       spindle.chat.getMessages(chatId),
-      3500,
-      'Reading saved chat messages',
+      4000,
+      'Reading chat messages',
     )
 
-  /*
-    If the frontend's stable latest-id hint points to an assistant,
-    use it. Otherwise walk the authoritative normalized-role list
-    backwards and take the newest assistant.
-  */
-  if (hintedLatestId) {
+  if (hintedMessageId) {
     const hinted =
       messages.find(
-        item => item.id === hintedLatestId
+        message => message.id === hintedMessageId
       )
 
     if (hinted?.role === 'assistant') {
@@ -428,16 +188,147 @@ async function findLatestAssistant(
   return null
 }
 
+async function repairMessage(
+  userId: string,
+  chatId: string,
+  message: any,
+  source: FFThinkFixSource,
+  config: any,
+  requestId?: string,
+): Promise<void> {
+  const messageId =
+    typeof message?.id === 'string'
+      ? message.id
+      : ''
+
+  if (!messageId) {
+    sendResult(
+      userId,
+      source,
+      {
+        status: 'error',
+        requestId: requestId || null,
+        error: 'Assistant message has no id.',
+        chatId,
+      },
+    )
+    return
+  }
+
+  const key =
+    `${userId}:${chatId}:${messageId}`
+
+  if (inFlight.has(key)) {
+    sendResult(
+      userId,
+      source,
+      {
+        status: 'busy',
+        requestId: requestId || null,
+        chatId,
+        messageId,
+      },
+    )
+    return
+  }
+
+  inFlight.add(key)
+
+  try {
+    const split =
+      splitMessage(message, config)
+
+    if (split.status !== 'fixed') {
+      sendResult(
+        userId,
+        source,
+        {
+          status: split.status,
+          requestId: requestId || null,
+          chatId,
+          messageId,
+        },
+      )
+      return
+    }
+
+    sendProgress(
+      userId,
+      source,
+      'updating',
+      requestId,
+    )
+
+    /*
+      This is Lumiverse's documented Chat Mutation reasoning patch:
+      reasoning.text writes host-owned extra.reasoning independently
+      from normal message content.
+    */
+    await timeout(
+      spindle.chat.updateMessage(
+        chatId,
+        messageId,
+        {
+          content: split.content,
+          reasoning: {
+            text: split.reasoning,
+          },
+        },
+      ),
+      7000,
+      'Updating message reasoning',
+    )
+
+    sendResult(
+      userId,
+      source,
+      {
+        status: 'fixed',
+        requestId: requestId || null,
+        chatId,
+        messageId,
+      },
+    )
+
+    spindle.log.info(
+      `FF think fix (${source}) repaired ${messageId}`,
+    )
+  } catch (error: any) {
+    const messageText =
+      error?.message ||
+      String(error) ||
+      'Unknown error'
+
+    spindle.log.error(
+      `FF think fix (${source}) failed: ${messageText}`,
+    )
+
+    sendResult(
+      userId,
+      source,
+      {
+        status: 'error',
+        requestId: requestId || null,
+        error: messageText,
+        chatId,
+        messageId,
+      },
+    )
+  } finally {
+    inFlight.delete(key)
+  }
+}
+
+/*
+  Register frontend RPC first. This means the health ping is available
+  even if generation-event registration is rejected for permissions.
+*/
 spindle.onFrontendMessage(
   async (payload: any, userId: string) => {
     if (
       payload?.type ===
       'ff_think_fix_health'
     ) {
-      /*
-        Deliberately no RPCs here. If this response does not arrive,
-        the backend bundle itself is not running.
-      */
       spindle.sendToFrontend(
         {
           type: 'ff_think_fix_health',
@@ -452,188 +343,189 @@ spindle.onFrontendMessage(
       payload?.type ===
       'ff_think_fix_config'
     ) {
-      ffThinkRuntimeByUser.set(
+      runtimeByUser.set(
         userId,
         {
-          enabled:
-            Boolean(payload.enabled),
-          config:
-            cleanFFThinkConfig(
-              payload.config,
-            ),
+          enabled: Boolean(payload.enabled),
+          config: cleanConfig(payload.config),
         },
       )
       return
     }
 
     if (
-      payload?.type ===
+      payload?.type !==
       'ff_think_fix_manual'
     ) {
-      const chatId =
-        typeof payload.chatId === 'string'
-          ? payload.chatId
-          : ''
-
-      const requestId =
-        typeof payload.requestId === 'string'
-          ? payload.requestId
-          : undefined
-
-      if (!chatId) {
-        sendFFThinkFixResult(
-          userId,
-          'manual',
-          {
-            status: 'error',
-            requestId: requestId || null,
-            error: 'No current chat id was provided.',
-          },
-        )
-        return
-      }
-
-      sendFFThinkFixProgress(
-        userId,
-        'manual',
-        'reading',
-        requestId,
-      )
-
-      try {
-        const assistant =
-          await findLatestAssistant(
-            chatId,
-            typeof payload.latestMessageId === 'string'
-              ? payload.latestMessageId
-              : undefined,
-          )
-
-        if (!assistant) {
-          sendFFThinkFixResult(
-            userId,
-            'manual',
-            {
-              status: 'no_assistant',
-              requestId: requestId || null,
-              chatId,
-            },
-          )
-          return
-        }
-
-        await applyFFThinkFixMessage(
-          userId,
-          chatId,
-          assistant,
-          {
-            source: 'manual',
-            requestId,
-            config: payload.config,
-          },
-        )
-      } catch (error: any) {
-        sendFFThinkFixResult(
-          userId,
-          'manual',
-          {
-            status: 'error',
-            requestId: requestId || null,
-            error:
-              error?.message ||
-              String(error) ||
-              'Unknown error',
-            chatId,
-          },
-        )
-      }
       return
     }
-  },
-)
-
-/*
-  Register the generation event directly. The manifest already declares
-  `generation`; avoiding backend permission-introspection calls makes this
-  compatible with hosts whose runtime API lags the newest type package.
-*/
-spindle.on(
-  'GENERATION_ENDED',
-  async (
-    payload: any,
-    userId?: string,
-  ) => {
-    if (
-      typeof userId !== 'string' ||
-      !userId
-    ) {
-      return
-    }
-
-    const runtime =
-      ffThinkRuntimeByUser.get(userId)
-
-    if (!runtime?.enabled) return
-    if (payload?.error) return
 
     const chatId =
-      typeof payload?.chatId === 'string'
+      typeof payload.chatId === 'string'
         ? payload.chatId
         : ''
 
-    const messageId =
-      typeof payload?.messageId === 'string'
-        ? payload.messageId
-        : ''
+    const requestId =
+      typeof payload.requestId === 'string'
+        ? payload.requestId
+        : undefined
 
-    if (!chatId) return
+    if (!chatId) {
+      sendResult(
+        userId,
+        'manual',
+        {
+          status: 'error',
+          requestId: requestId || null,
+          error: 'No current chat id was provided.',
+        },
+      )
+      return
+    }
+
+    sendProgress(
+      userId,
+      'manual',
+      'reading',
+      requestId,
+    )
 
     try {
       const assistant =
-        await findLatestAssistant(
+        await latestAssistant(
           chatId,
-          messageId || undefined,
+          typeof payload.latestMessageId === 'string'
+            ? payload.latestMessageId
+            : undefined,
         )
 
       if (!assistant) {
-        sendFFThinkFixResult(
+        sendResult(
           userId,
-          'auto',
+          'manual',
           {
             status: 'no_assistant',
+            requestId: requestId || null,
             chatId,
-            messageId: messageId || null,
           },
         )
         return
       }
 
-      await applyFFThinkFixMessage(
+      await repairMessage(
         userId,
         chatId,
         assistant,
-        {
-          source: 'auto',
-          config: runtime.config,
-        },
+        'manual',
+        payload.config,
+        requestId,
       )
     } catch (error: any) {
-      sendFFThinkFixResult(
+      sendResult(
         userId,
-        'auto',
+        'manual',
         {
           status: 'error',
+          requestId: requestId || null,
           error:
             error?.message ||
             String(error) ||
             'Unknown error',
           chatId,
-          messageId: messageId || null,
         },
       )
     }
   },
 )
 
-spindle.log.info('Bionic-style Reading loaded')
+/*
+  Automatic mode is optional. A rejected generation subscription must
+  never prevent the backend's manual RPC/health path from loading.
+*/
+try {
+  spindle.on(
+    'GENERATION_ENDED',
+    async (
+      payload: any,
+      userId?: string,
+    ) => {
+      if (
+        typeof userId !== 'string' ||
+        !userId
+      ) {
+        return
+      }
+
+      const runtime =
+        runtimeByUser.get(userId)
+
+      if (!runtime?.enabled) return
+      if (payload?.error) return
+
+      const chatId =
+        typeof payload?.chatId === 'string'
+          ? payload.chatId
+          : ''
+
+      if (!chatId) return
+
+      try {
+        const assistant =
+          await latestAssistant(
+            chatId,
+            typeof payload?.messageId === 'string'
+              ? payload.messageId
+              : undefined,
+          )
+
+        if (!assistant) {
+          sendResult(
+            userId,
+            'auto',
+            {
+              status: 'no_assistant',
+              chatId,
+              messageId:
+                payload?.messageId || null,
+            },
+          )
+          return
+        }
+
+        await repairMessage(
+          userId,
+          chatId,
+          assistant,
+          'auto',
+          runtime.config,
+        )
+      } catch (error: any) {
+        sendResult(
+          userId,
+          'auto',
+          {
+            status: 'error',
+            error:
+              error?.message ||
+              String(error) ||
+              'Unknown error',
+            chatId,
+            messageId:
+              payload?.messageId || null,
+          },
+        )
+      }
+    },
+  )
+} catch (error: any) {
+  spindle.log.warn(
+    `FF automatic listener not registered: ${
+      error?.message || String(error)
+    }`,
+  )
+}
+
+spindle.log.info(
+  `Bionic Reading & Fonts FF backend v${FF_THINK_FIX_VERSION} loaded`,
+)
 

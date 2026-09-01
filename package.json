@@ -1,10 +1,12 @@
 {
   "name": "lumiverse-bionic-style-reading",
-  "version": "0.3.0",
+  "version": "0.26.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "bun build src/frontend.ts --outfile dist/frontend.js --target browser"
+    "build:backend": "bun build src/backend.ts --outfile dist/backend.js --target bun",
+    "build:frontend": "bun build src/frontend.ts --outfile dist/frontend.js --target browser",
+    "build": "bun run build:backend && bun run build:frontend"
   },
   "devDependencies": {
     "lumiverse-spindle-types": "latest",

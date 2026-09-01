@@ -1,7 +1,8 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.25'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.26'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.25',
     'lumiverse:bionic-style-reading:v0.24',
     'lumiverse:bionic-style-reading:v0.23',
     'lumiverse:bionic-style-reading:v0.22',
@@ -21,7 +22,7 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.25'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.26'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -1933,7 +1934,7 @@ export function setup(ctx) {
         </div>
 
         <div class="lumibionic-muted" id="lb-ff-backend-status">
-          FF backend: checking…
+          FF backend bundle: checking…
         </div>
 
         <div class="lumibionic-muted" id="lb-ff-think-status">
@@ -2898,7 +2899,7 @@ export function setup(ctx) {
 
           if (ffThinkStatus) {
             ffThinkStatus.textContent =
-              'Manual FF fix timed out: the backend did not answer within 9 seconds. If the FF backend line still says checking, the backend bundle is not running.'
+              'Manual FF fix timed out: the backend did not answer within 9 seconds. If the FF backend bundle line still says checking, the backend worker did not load.'
           }
         }, 9000)
     }
@@ -2942,7 +2943,7 @@ export function setup(ctx) {
       ) {
         if (ffThinkBackendStatus) {
           ffThinkBackendStatus.textContent =
-            `FF backend: connected v${
+            `FF backend bundle: connected v${
               payload.version || '?'
             }`
         }
