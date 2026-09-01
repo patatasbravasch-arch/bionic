@@ -1,12 +1,15 @@
 {
-  "version": "0.18.0",
+  "version": "0.19.0",
   "name": "Bionic Reading & Fonts",
   "identifier": "bionic_style_reading",
   "author": "patatasbravasch-arch",
   "github": "https://github.com/patatasbravasch-arch/bionic",
   "homepage": "https://github.com/patatasbravasch-arch/bionic",
-  "description": "Bionic reading, font overrides, compact live preview, long-form typography, direct chat-toolbar controls, adjustable toolbar spacing, and a robust attachment/paperclip visibility toggle. Text replacement experiments removed.",
-  "permissions": [],
+  "description": "Bionic reading, font overrides, long-form typography, chat-toolbar controls, adjustable toolbar spacing, attachment/paperclip visibility, and optional FF think fix that repairs Task 0 reasoning blocks after generation.",
+  "permissions": [
+    "generation",
+    "chat_mutation"
+  ],
   "entry_backend": "dist/backend.js",
   "entry_frontend": "dist/frontend.js"
 }

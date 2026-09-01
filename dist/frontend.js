@@ -1,7 +1,8 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.18'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.19'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.18',
     'lumiverse:bionic-style-reading:v0.17',
     'lumiverse:bionic-style-reading:v0.16',
     'lumiverse:bionic-style-reading:v0.15',
@@ -14,7 +15,7 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.18'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.19'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -78,6 +79,8 @@ export function setup(ctx) {
     wordSpacing: 0,
     textSize: 100,
     lineHeight: 1.55,
+
+    ffThinkFixEnabled: false,
 
     toolbarSpacing: 4,
     toolbarHidden: { ...DEFAULT_TOOLBAR_HIDDEN },
@@ -309,6 +312,11 @@ export function setup(ctx) {
 
         textSize: clamp(saved.textSize, 80, 140, DEFAULTS.textSize),
         lineHeight: clamp(saved.lineHeight, 1.1, 2.2, DEFAULTS.lineHeight),
+
+        ffThinkFixEnabled:
+          typeof saved.ffThinkFixEnabled === 'boolean'
+            ? saved.ffThinkFixEnabled
+            : DEFAULTS.ffThinkFixEnabled,
 
         toolbarSpacing: clamp(
           saved.toolbarSpacing,
@@ -1849,6 +1857,30 @@ export function setup(ctx) {
       <div class="lumibionic-section">
 
         <div class="lumibionic-section-title">
+          FF think fix
+        </div>
+
+        <label class="lumibionic-check">
+          <input id="lb-ff-think-fix" type="checkbox">
+          <span>Auto-fix Task 0 thinking after AI replies</span>
+        </label>
+
+        <div class="lumibionic-muted">
+          After generation finishes, a saved assistant message containing
+          <code>**Task 0:**</code> and the first later standalone
+          <code>---</code> is edited to wrap that block in
+          <code>&lt;think&gt;</code> and <code>&lt;/think&gt;</code>.
+        </div>
+
+        <div class="lumibionic-muted" id="lb-ff-think-status">
+          Waiting for the next completed AI reply.
+        </div>
+
+      </div>
+
+      <div class="lumibionic-section">
+
+        <div class="lumibionic-section-title">
           Chat toolbar
         </div>
 
@@ -1953,6 +1985,9 @@ export function setup(ctx) {
   const sizeValue = $('#lb-size-value')
   const line = $('#lb-line')
   const lineValue = $('#lb-line-value')
+
+  const ffThinkFix = $('#lb-ff-think-fix')
+  const ffThinkStatus = $('#lb-ff-think-status')
 
   const preview = $('#lb-preview')
   const reset = $('#lb-reset')
@@ -2247,6 +2282,8 @@ export function setup(ctx) {
 
     line.value = String(settings.lineHeight)
     lineValue.textContent = settings.lineHeight.toFixed(2)
+
+    ffThinkFix.checked = settings.ffThinkFixEnabled
 
     toolbarSpacing.value = String(settings.toolbarSpacing)
     toolbarSpacingValue.textContent = `${settings.toolbarSpacing}px`
@@ -2626,6 +2663,25 @@ export function setup(ctx) {
     )
   )
 
+  ffThinkFix.addEventListener(
+    'change',
+    () => {
+      updateSetting(
+        'ffThinkFixEnabled',
+        ffThinkFix.checked,
+        false,
+        false
+      )
+
+      if (ffThinkStatus) {
+        ffThinkStatus.textContent =
+          ffThinkFix.checked
+            ? 'Enabled — waiting for the next completed AI reply.'
+            : 'Disabled.'
+      }
+    }
+  )
+
   toolbarSpacing.addEventListener(
     'input',
     () => updateSetting(
@@ -2651,6 +2707,57 @@ export function setup(ctx) {
       renderPreview()
     }
   )
+
+  const unsubGenerationEnded =
+    ctx.events.on(
+      'GENERATION_ENDED',
+      payload => {
+        if (!settings.ffThinkFixEnabled) return
+        if (!payload?.chatId || !payload?.messageId) return
+        if (payload?.error) return
+
+        if (ffThinkStatus) {
+          ffThinkStatus.textContent =
+            'Checking completed AI reply…'
+        }
+
+        ctx.sendToBackend({
+          type: 'ff_think_fix_after_generation',
+          chatId: payload.chatId,
+          messageId: payload.messageId,
+          generationId: payload.generationId || null,
+        })
+      }
+    )
+
+  const unsubBackendMessage =
+    ctx.onBackendMessage(payload => {
+      if (
+        payload?.type !==
+        'ff_think_fix_result'
+      ) {
+        return
+      }
+
+      if (!ffThinkStatus) return
+
+      if (payload.status === 'fixed') {
+        ffThinkStatus.textContent =
+          'Fixed the latest Task 0 thinking block.'
+      } else if (payload.status === 'no_match') {
+        ffThinkStatus.textContent =
+          'No matching Task 0 + --- block in the latest reply.'
+      } else if (payload.status === 'already_fixed') {
+        ffThinkStatus.textContent =
+          'Latest Task 0 block was already wrapped.'
+      } else if (payload.status === 'not_assistant') {
+        ffThinkStatus.textContent =
+          'Skipped: generated message was not an assistant reply.'
+      } else if (payload.status === 'error') {
+        ffThinkStatus.textContent =
+          `FF think fix failed: ${payload.error || 'unknown error'}`
+      }
+    })
 
   const observer =
     new MutationObserver(
@@ -2680,6 +2787,8 @@ export function setup(ctx) {
 
   return () => {
     observer.disconnect()
+    unsubGenerationEnded?.()
+    unsubBackendMessage?.()
 
     unwrap()
     unloadLocalFont(false)
