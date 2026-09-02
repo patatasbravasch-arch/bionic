@@ -1,4 +1,4 @@
-const FF_THINK_FIX_VERSION = '0.27.0';
+const FF_THINK_FIX_VERSION = '0.28.0';
 const DEFAULT_FF_THINK_CONFIG = {
     boundaryText: '[ 🕰️ Time',
 };
@@ -312,7 +312,8 @@ catch (error) {
 }
 
 
-spindle.on('MESSAGE_SENT', async (payload, userId) => {
+// Ken sleep alert temporarily disabled in v0.28.
+if (false) spindle.on('MESSAGE_SENT', async (payload, userId) => {
     const chatId = typeof payload?.chatId === 'string'
         ? payload.chatId
         : (typeof payload?.message?.chat_id === 'string'

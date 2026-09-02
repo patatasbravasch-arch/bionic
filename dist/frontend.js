@@ -1,7 +1,8 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.27'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.28'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.27',
     'lumiverse:bionic-style-reading:v0.26',
     'lumiverse:bionic-style-reading:v0.25',
     'lumiverse:bionic-style-reading:v0.24',
@@ -23,7 +24,7 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.27'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.28'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -3008,6 +3009,9 @@ export function setup(ctx) {
   function handleKenSleepMessage(
     payload
   ) {
+    // Temporarily disabled in v0.28 while the final Ken settings are designed.
+    return
+
     const active =
       ctx.getActiveChat?.()
 

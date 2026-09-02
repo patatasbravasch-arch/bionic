@@ -1,11 +1,11 @@
 {
-  "version": "0.27.0",
+  "version": "0.28.0",
   "name": "Bionic Reading & Fonts",
   "identifier": "bionic_style_reading",
   "author": "patatasbravasch-arch",
   "github": "https://github.com/patatasbravasch-arch/bionic",
   "homepage": "https://github.com/patatasbravasch-arch/bionic",
-  "description": "Bionic reading and typography remain frontend-owned. FF think fix uses native reasoning mutation. Adds a device-local 06:00\u201312:00 Ken sleep reminder that checks the active Lumiverse persona and pops up every two new messages.",
+  "description": "Bionic reading, typography, toolbar controls, and FF think fix. The Ken sleep alert is temporarily disabled while its final settings are designed; the personas permission is intentionally retained for its return.",
   "permissions": [
     "generation",
     "chat_mutation",

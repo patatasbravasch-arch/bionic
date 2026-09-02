@@ -1,6 +1,6 @@
 declare const spindle: import('lumiverse-spindle-types').SpindleAPI
 
-const FF_THINK_FIX_VERSION = '0.27.0'
+const FF_THINK_FIX_VERSION = '0.28.0'
 
 type FFThinkFixConfig = {
   boundaryText: string
@@ -534,7 +534,8 @@ try {
   actual {{user}} identity, while the frontend itself performs the
   device-local time check.
 */
-spindle.on(
+// Ken sleep alert temporarily disabled in v0.28.
+if (false) spindle.on(
   'MESSAGE_SENT',
   async (
     payload: any,
