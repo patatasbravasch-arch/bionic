@@ -1,7 +1,8 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.31'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.32'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.31',
     'lumiverse:bionic-style-reading:v0.30',
     'lumiverse:bionic-style-reading:v0.29',
     'lumiverse:bionic-style-reading:v0.28',
@@ -27,7 +28,7 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.31'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.32'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -1197,273 +1198,47 @@ export function setup(ctx) {
   const SCROLL_LATEST_WRAPPER_ATTR =
     'data-lumibionic-scroll-latest-wrapper'
 
-  const CHAT_SCROLL_TO_BOTTOM_EVENT =
-    'lumiverse:chat-scroll-bottom'
-
-  function escapeCssAttributeValue(value) {
-    const text =
-      String(value ?? '')
-
-    if (
-      typeof CSS !== 'undefined' &&
-      typeof CSS.escape === 'function'
-    ) {
-      return CSS.escape(text)
-    }
-
-    return text.replace(
-      /["\\]/g,
-      '\\$&'
-    )
-  }
-
-  function getLatestHostMessageId() {
-    try {
-      const latest =
-        ctx.messages?.getLatestMessageId?.()
-
-      if (
-        typeof latest === 'string' &&
-        latest
-      ) {
-        return latest
-      }
-    } catch {}
-
-    try {
-      const ids =
-        ctx.messages?.listMessageIds?.()
-
-      if (
-        Array.isArray(ids) &&
-        ids.length
-      ) {
-        const latest =
-          ids[ids.length - 1]
-
-        return typeof latest === 'string'
-          ? latest
-          : null
-      }
-    } catch {}
-
-    return null
-  }
-
-  function findMessageRowById(messageId) {
-    if (!messageId) return null
-
-    return document.querySelector(
-      `[data-component="MessageList"] ` +
-      `[data-message-id="${escapeCssAttributeValue(messageId)}"]`
-    )
-  }
-
-  function getMessageScroller(row = null) {
-    return (
-      row?.closest?.(
-        '[data-component="MessageList"][data-chat-scroll="true"]'
-      ) ||
-      document.querySelector(
-        '[data-component="MessageList"][data-chat-scroll="true"]'
-      )
-    )
-  }
-
-  function getLumiverseUiScale() {
-    const raw =
-      getComputedStyle(
-        document.documentElement
-      ).getPropertyValue(
-        '--lumiverse-ui-scale'
-      )
-
-    const parsed =
-      Number.parseFloat(raw)
-
-    return (
-      Number.isFinite(parsed) &&
-      parsed > 0
-    )
-      ? parsed
-      : 1
-  }
-
-  function nextAnimationFrame() {
-    return new Promise(
-      resolve =>
-        requestAnimationFrame(resolve)
-    )
-  }
-
-  async function convergeMessageRowToTop(
-    messageId,
-    {
-      maxPasses = 12,
-      tolerance = 2,
-    } = {}
-  ) {
-    for (
-      let pass = 0;
-      pass < maxPasses;
-      pass += 1
-    ) {
-      const row =
-        findMessageRowById(messageId)
-
-      if (!row) {
-        await nextAnimationFrame()
-        continue
-      }
-
-      const scroller =
-        getMessageScroller(row)
-
-      if (!scroller) {
-        return false
-      }
-
-      const rowRect =
-        row.getBoundingClientRect()
-
-      const scrollerRect =
-        scroller.getBoundingClientRect()
-
-      const uiScale =
-        getLumiverseUiScale()
-
-      const delta =
-        (rowRect.top - scrollerRect.top) /
-        uiScale
-
-      if (
-        Number.isFinite(delta) &&
-        Math.abs(delta) <= tolerance
-      ) {
-        return true
-      }
-
-      /*
-        Use an immediate physical scrollTop write, then re-measure next
-        frame. MessageList owns a virtualized layout and may refine row
-        positions after any write; the loop deliberately converges on the
-        actual rendered row instead of trusting a one-shot estimate.
-      */
-      scroller.scrollTop =
-        Math.max(
-          0,
-          scroller.scrollTop + delta
+  function latestRenderedMessageTarget() {
+    const messages =
+      Array.from(
+        document.querySelectorAll(
+          MESSAGE_SELECTOR
         )
+      )
 
-      await nextAnimationFrame()
-    }
+    const content =
+      messages[messages.length - 1]
+
+    if (!content) return null
 
     /*
-      Final verification after the virtualizer has had several frames to
-      reconcile measured heights and direct-DOM row positioning.
+      Prefer the outer message shell so "top" means the avatar/name/header
+      as well as the prose. Falls back to MessageContent if the host changes
+      its outer wrapper.
     */
-    const row =
-      findMessageRowById(messageId)
-
-    const scroller =
-      getMessageScroller(row)
-
-    if (!row || !scroller) {
-      return false
-    }
-
-    const delta =
-      (
-        row.getBoundingClientRect().top -
-        scroller.getBoundingClientRect().top
-      ) /
-      getLumiverseUiScale()
-
     return (
-      Number.isFinite(delta) &&
-      Math.abs(delta) <= 4
+      content.closest(
+        '[data-component="BubbleMessage"], ' +
+        '[data-component="MinimalMessage"]'
+      ) ||
+      content
     )
   }
 
-  async function waitForLatestRow(
-    messageId,
-    timeoutMs = 1800
-  ) {
-    const started =
-      performance.now()
+  function scrollToLatestMessageTop() {
+    const target =
+      latestRenderedMessageTarget()
 
-    while (
-      performance.now() - started <
-      timeoutMs
-    ) {
-      const row =
-        findMessageRowById(messageId)
+    if (!target) return false
 
-      if (row) return row
+    target.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+      inline: 'nearest',
+    })
 
-      await nextAnimationFrame()
-    }
-
-    return null
+    return true
   }
-
-  async function scrollToLatestMessageTop() {
-    const messageId =
-      getLatestHostMessageId()
-
-    if (!messageId) {
-      return false
-    }
-
-    /*
-      First try the currently mounted tail row. If the latest message is
-      a long response and the user is somewhere inside it, this avoids any
-      trip to chat-bottom and simply aligns the row's real top.
-    */
-    if (
-      findMessageRowById(messageId)
-    ) {
-      return convergeMessageRowToTop(
-        messageId
-      )
-    }
-
-    /*
-      The latest row is outside the virtualized mount window. Ask
-      Lumiverse's own MessageList to navigate to history-bottom solely so
-      the row becomes mounted. We then take over and converge its exact top.
-    */
-    window.dispatchEvent(
-      new Event(
-        CHAT_SCROLL_TO_BOTTOM_EVENT
-      )
-    )
-
-    const mounted =
-      await waitForLatestRow(
-        messageId
-      )
-
-    if (!mounted) {
-      return false
-    }
-
-    /*
-      The host's bottom animation can still be completing when the row
-      first appears. One short settle interval avoids racing its final
-      forced-scroll frame, then the convergence loop wins deterministically.
-    */
-    await wait(120)
-
-    return convergeMessageRowToTop(
-      messageId,
-      {
-        maxPasses: 16,
-        tolerance: 2,
-      }
-    )
-  }
-
 
   function getNativeComposerActionBar() {
     /*
@@ -1579,31 +1354,14 @@ export function setup(ctx) {
 
       button.addEventListener(
         'click',
-        async () => {
-          if (button.disabled) return
+        () => {
+          const moved =
+            scrollToLatestMessageTop()
 
-          button.disabled = true
-          button.setAttribute(
-            'aria-busy',
-            'true'
-          )
-
-          try {
-            const moved =
-              await scrollToLatestMessageTop()
-
+          if (!moved) {
             button.setAttribute(
               'title',
-              moved
-                ? 'At top of latest message'
-                : 'Could not locate latest message'
-            )
-
-            button.setAttribute(
-              'aria-label',
-              moved
-                ? 'At top of latest message'
-                : 'Could not locate latest message'
+              'No message found'
             )
 
             setTimeout(() => {
@@ -1611,16 +1369,7 @@ export function setup(ctx) {
                 'title',
                 'Top of latest message'
               )
-              button.setAttribute(
-                'aria-label',
-                'Top of latest message'
-              )
-            }, 1600)
-          } finally {
-            button.removeAttribute(
-              'aria-busy'
-            )
-            button.disabled = false
+            }, 1200)
           }
         }
       )
