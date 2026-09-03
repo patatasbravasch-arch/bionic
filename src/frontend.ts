@@ -1,7 +1,8 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.29'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.30'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.29',
     'lumiverse:bionic-style-reading:v0.28',
     'lumiverse:bionic-style-reading:v0.27',
     'lumiverse:bionic-style-reading:v0.26',
@@ -25,11 +26,12 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.29'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.30'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
     { key: 'backHome', label: 'Back to home', title: 'Back to home', className: 'lb-hide-toolbar-back-home' },
+    { key: 'latestMessageTop', label: 'Top of latest message', title: 'Top of latest message', className: 'lb-hide-toolbar-latest-message-top' },
     { key: 'regenerate', label: 'Regenerate', title: 'Regenerate', className: 'lb-hide-toolbar-regenerate' },
     { key: 'continue', label: 'Continue', title: 'Continue', className: 'lb-hide-toolbar-continue' },
     { key: 'oneLiner', label: 'One-liner nudge', title: 'One-liner: Chat history + impersonation nudge only', className: 'lb-hide-toolbar-one-liner' },
@@ -1191,60 +1193,275 @@ export function setup(ctx) {
   const SCROLL_LATEST_BUTTON_ATTR =
     'data-lumibionic-scroll-latest'
 
-  function latestRenderedMessageTarget() {
-    const messages =
-      Array.from(
-        document.querySelectorAll(
-          MESSAGE_SELECTOR
-        )
-      )
+  const SCROLL_LATEST_WRAPPER_ATTR =
+    'data-lumibionic-scroll-latest-wrapper'
 
-    const content =
-      messages[messages.length - 1]
+  const CHAT_SCROLL_TO_BOTTOM_EVENT =
+    'lumiverse:chat-scroll-bottom'
 
-    if (!content) return null
+  function escapeCssAttributeValue(value) {
+    const text =
+      String(value ?? '')
 
-    /*
-      Prefer the outer message shell so "top" means the avatar/name/header
-      as well as the prose. Falls back to MessageContent if the host changes
-      its outer wrapper.
-    */
-    return (
-      content.closest(
-        '[data-component="BubbleMessage"], ' +
-        '[data-component="MinimalMessage"]'
-      ) ||
-      content
+    if (
+      typeof CSS !== 'undefined' &&
+      typeof CSS.escape === 'function'
+    ) {
+      return CSS.escape(text)
+    }
+
+    return text.replace(
+      /["\\]/g,
+      '\\$&'
     )
   }
 
-  function scrollToLatestMessageTop() {
-    const target =
-      latestRenderedMessageTarget()
+  function getLatestHostMessageId() {
+    try {
+      const latest =
+        ctx.messages?.getLatestMessageId?.()
 
-    if (!target) return false
+      if (
+        typeof latest === 'string' &&
+        latest
+      ) {
+        return latest
+      }
+    } catch {}
 
-    target.scrollIntoView({
+    try {
+      const ids =
+        ctx.messages?.listMessageIds?.()
+
+      if (
+        Array.isArray(ids) &&
+        ids.length
+      ) {
+        const latest =
+          ids[ids.length - 1]
+
+        return typeof latest === 'string'
+          ? latest
+          : null
+      }
+    } catch {}
+
+    return null
+  }
+
+  function findMessageRowById(messageId) {
+    if (!messageId) return null
+
+    return document.querySelector(
+      `[data-component="MessageList"] ` +
+      `[data-message-id="${escapeCssAttributeValue(messageId)}"]`
+    )
+  }
+
+  function getMessageScroller(row = null) {
+    return (
+      row?.closest?.(
+        '[data-component="MessageList"][data-chat-scroll="true"]'
+      ) ||
+      document.querySelector(
+        '[data-component="MessageList"][data-chat-scroll="true"]'
+      )
+    )
+  }
+
+  function getLumiverseUiScale() {
+    const raw =
+      getComputedStyle(
+        document.documentElement
+      ).getPropertyValue(
+        '--lumiverse-ui-scale'
+      )
+
+    const parsed =
+      Number.parseFloat(raw)
+
+    return (
+      Number.isFinite(parsed) &&
+      parsed > 0
+    )
+      ? parsed
+      : 1
+  }
+
+  function alignMessageRowToScrollerTop(row) {
+    const scroller =
+      getMessageScroller(row)
+
+    if (!row || !scroller) {
+      return false
+    }
+
+    const rowRect =
+      row.getBoundingClientRect()
+
+    const scrollerRect =
+      scroller.getBoundingClientRect()
+
+    /*
+      Lumiverse's own MessageList converts DOM rect deltas back through
+      --lumiverse-ui-scale when reconciling virtual rows. Do the same
+      so zoom/UI scaling does not overshoot.
+    */
+    const uiScale =
+      getLumiverseUiScale()
+
+    const targetTop =
+      Math.max(
+        0,
+        scroller.scrollTop +
+        (
+          (rowRect.top - scrollerRect.top) /
+          uiScale
+        )
+      )
+
+    /*
+      IMPORTANT: scroll the MessageList itself, not the page/window.
+      scrollIntoView() can choose an outer scrolling ancestor and was
+      the reason v0.29 could jump to the top of the whole chat.
+    */
+    scroller.scrollTo({
+      top: targetTop,
       behavior: 'smooth',
-      block: 'start',
-      inline: 'nearest',
     })
 
     return true
   }
 
-  function ensureScrollLatestToolbarButton() {
-    const mount =
-      document.querySelector(
-        '[data-spindle-mount="chat_toolbar"]'
+  function wait(ms) {
+    return new Promise(
+      resolve => setTimeout(resolve, ms)
+    )
+  }
+
+  async function scrollToLatestMessageTop() {
+    const messageId =
+      getLatestHostMessageId()
+
+    if (!messageId) {
+      return false
+    }
+
+    let row =
+      findMessageRowById(messageId)
+
+    if (!row) {
+      /*
+        MessageList is virtualized. If the tail row is not mounted,
+        ask Lumiverse's own MessageList to navigate to the tail first.
+        Its forced-scroll animation is capped at 700ms in current
+        staging, so wait for it to settle before aligning the exact row.
+      */
+      window.dispatchEvent(
+        new Event(
+          CHAT_SCROLL_TO_BOTTOM_EVENT
+        )
       )
 
-    if (!mount) return null
+      await wait(760)
+
+      row =
+        findMessageRowById(messageId)
+    }
+
+    if (!row) {
+      /*
+        One short retry covers delayed row mounting / height measurement
+        on slower mobile browsers.
+      */
+      await wait(180)
+
+      row =
+        findMessageRowById(messageId)
+    }
+
+    if (!row) {
+      return false
+    }
+
+    return alignMessageRowToScrollerTop(
+      row
+    )
+  }
+
+  function getNativeComposerActionBar() {
+    /*
+      Current Lumiverse staging renders data-spindle-mount="chat_actions"
+      as a direct child of ComposerActionBarLive. Its parent is therefore
+      the SAME no-wrap mobile toolbar row as Regenerate, Persona, Tools,
+      Extras, etc.
+    */
+    const chatActionsMount =
+      document.querySelector(
+        '[data-component="InputArea"] ' +
+        '[data-spindle-mount="chat_actions"]'
+      )
+
+    const actionBar =
+      chatActionsMount?.parentElement
+
+    return (
+      actionBar &&
+      actionBar.closest(
+        '[data-component="InputArea"]'
+      )
+    )
+      ? {
+          actionBar,
+          chatActionsMount,
+        }
+      : null
+  }
+
+  function ensureScrollLatestToolbarButton() {
+    const target =
+      getNativeComposerActionBar()
+
+    if (!target) {
+      return null
+    }
+
+    const {
+      actionBar,
+      chatActionsMount,
+    } = target
+
+    let wrapper =
+      actionBar.querySelector(
+        `[${SCROLL_LATEST_WRAPPER_ATTR}]`
+      )
 
     let button =
-      mount.querySelector(
+      wrapper?.querySelector?.(
         `[${SCROLL_LATEST_BUTTON_ATTR}]`
+      ) || null
+
+    if (!wrapper) {
+      wrapper =
+        document.createElement('span')
+
+      wrapper.setAttribute(
+        SCROLL_LATEST_WRAPPER_ATTR,
+        'true'
       )
+
+      /*
+        display:contents makes the button participate directly in the
+        native actionBar flex row without creating another layout box.
+      */
+      wrapper.style.display =
+        'contents'
+
+      actionBar.insertBefore(
+        wrapper,
+        chatActionsMount
+      )
+    }
 
     if (!button) {
       button =
@@ -1263,6 +1480,7 @@ export function setup(ctx) {
         'aria-label',
         'Top of latest message'
       )
+
       button.innerHTML = `
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -1285,36 +1503,44 @@ export function setup(ctx) {
 
       button.addEventListener(
         'click',
-        () => {
-          const moved =
-            scrollToLatestMessageTop()
+        async () => {
+          if (button.disabled) return
 
-          if (!moved) {
-            button.setAttribute(
-              'title',
-              'No message found'
-            )
+          button.disabled = true
 
-            setTimeout(() => {
+          try {
+            const moved =
+              await scrollToLatestMessageTop()
+
+            if (!moved) {
               button.setAttribute(
                 'title',
-                'Top of latest message'
+                'Latest message is not available'
               )
-            }, 1200)
+
+              setTimeout(() => {
+                button.setAttribute(
+                  'title',
+                  'Top of latest message'
+                )
+              }, 1400)
+            }
+          } finally {
+            button.disabled = false
           }
         }
       )
 
-      mount.appendChild(button)
+      wrapper.appendChild(button)
     }
 
     /*
-      Reuse the current Lumiverse button class so the injected control
-      visually tracks the host toolbar across Bubble/Minimal themes.
+      Copy Lumiverse's real action-button class rather than styling a
+      fake second toolbar. Prefer a native composer-action button.
     */
     const nativeButton =
       Array.from(
-        mount.querySelectorAll('button')
+        actionBar.querySelectorAll('button')
       ).find(
         candidate =>
           candidate !== button &&
@@ -2102,8 +2328,8 @@ export function setup(ctx) {
         </div>
 
         <div class="lumibionic-muted">
-          Tap an item to hide or show that exact Lumiverse toolbar button.
-          These use the same title matches as your CSS block.
+          Tap an item to hide or show that toolbar control.
+          This includes the extension's Top of latest message button.
         </div>
 
         <div class="lumibionic-control">
@@ -3387,6 +3613,12 @@ export function setup(ctx) {
     unwrap()
     unloadLocalFont(false)
     clearToolbarVisibility()
+
+    document
+      .querySelectorAll(
+        `[${SCROLL_LATEST_WRAPPER_ATTR}]`
+      )
+      .forEach(wrapper => wrapper.remove())
 
     document
       .querySelectorAll(
