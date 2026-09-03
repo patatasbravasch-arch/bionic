@@ -1,4 +1,4 @@
-const FF_THINK_FIX_VERSION = '0.30.0';
+const FF_THINK_FIX_VERSION = '0.31.0';
 const DEFAULT_FF_THINK_CONFIG = {
     boundaryText: '[ 🕰️ Time',
 };

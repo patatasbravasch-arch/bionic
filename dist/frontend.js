@@ -1,7 +1,8 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.30'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.31'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.30',
     'lumiverse:bionic-style-reading:v0.29',
     'lumiverse:bionic-style-reading:v0.28',
     'lumiverse:bionic-style-reading:v0.27',
@@ -26,7 +27,7 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.30'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.31'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -1288,7 +1289,82 @@ export function setup(ctx) {
       : 1
   }
 
-  function alignMessageRowToScrollerTop(row) {
+  function nextAnimationFrame() {
+    return new Promise(
+      resolve =>
+        requestAnimationFrame(resolve)
+    )
+  }
+
+  async function convergeMessageRowToTop(
+    messageId,
+    {
+      maxPasses = 12,
+      tolerance = 2,
+    } = {}
+  ) {
+    for (
+      let pass = 0;
+      pass < maxPasses;
+      pass += 1
+    ) {
+      const row =
+        findMessageRowById(messageId)
+
+      if (!row) {
+        await nextAnimationFrame()
+        continue
+      }
+
+      const scroller =
+        getMessageScroller(row)
+
+      if (!scroller) {
+        return false
+      }
+
+      const rowRect =
+        row.getBoundingClientRect()
+
+      const scrollerRect =
+        scroller.getBoundingClientRect()
+
+      const uiScale =
+        getLumiverseUiScale()
+
+      const delta =
+        (rowRect.top - scrollerRect.top) /
+        uiScale
+
+      if (
+        Number.isFinite(delta) &&
+        Math.abs(delta) <= tolerance
+      ) {
+        return true
+      }
+
+      /*
+        Use an immediate physical scrollTop write, then re-measure next
+        frame. MessageList owns a virtualized layout and may refine row
+        positions after any write; the loop deliberately converges on the
+        actual rendered row instead of trusting a one-shot estimate.
+      */
+      scroller.scrollTop =
+        Math.max(
+          0,
+          scroller.scrollTop + delta
+        )
+
+      await nextAnimationFrame()
+    }
+
+    /*
+      Final verification after the virtualizer has had several frames to
+      reconcile measured heights and direct-DOM row positioning.
+    */
+    const row =
+      findMessageRowById(messageId)
+
     const scroller =
       getMessageScroller(row)
 
@@ -1296,47 +1372,39 @@ export function setup(ctx) {
       return false
     }
 
-    const rowRect =
-      row.getBoundingClientRect()
-
-    const scrollerRect =
-      scroller.getBoundingClientRect()
-
-    /*
-      Lumiverse's own MessageList converts DOM rect deltas back through
-      --lumiverse-ui-scale when reconciling virtual rows. Do the same
-      so zoom/UI scaling does not overshoot.
-    */
-    const uiScale =
+    const delta =
+      (
+        row.getBoundingClientRect().top -
+        scroller.getBoundingClientRect().top
+      ) /
       getLumiverseUiScale()
 
-    const targetTop =
-      Math.max(
-        0,
-        scroller.scrollTop +
-        (
-          (rowRect.top - scrollerRect.top) /
-          uiScale
-        )
-      )
-
-    /*
-      IMPORTANT: scroll the MessageList itself, not the page/window.
-      scrollIntoView() can choose an outer scrolling ancestor and was
-      the reason v0.29 could jump to the top of the whole chat.
-    */
-    scroller.scrollTo({
-      top: targetTop,
-      behavior: 'smooth',
-    })
-
-    return true
+    return (
+      Number.isFinite(delta) &&
+      Math.abs(delta) <= 4
+    )
   }
 
-  function wait(ms) {
-    return new Promise(
-      resolve => setTimeout(resolve, ms)
-    )
+  async function waitForLatestRow(
+    messageId,
+    timeoutMs = 1800
+  ) {
+    const started =
+      performance.now()
+
+    while (
+      performance.now() - started <
+      timeoutMs
+    ) {
+      const row =
+        findMessageRowById(messageId)
+
+      if (row) return row
+
+      await nextAnimationFrame()
+    }
+
+    return null
   }
 
   async function scrollToLatestMessageTop() {
@@ -1347,47 +1415,55 @@ export function setup(ctx) {
       return false
     }
 
-    let row =
+    /*
+      First try the currently mounted tail row. If the latest message is
+      a long response and the user is somewhere inside it, this avoids any
+      trip to chat-bottom and simply aligns the row's real top.
+    */
+    if (
       findMessageRowById(messageId)
+    ) {
+      return convergeMessageRowToTop(
+        messageId
+      )
+    }
 
-    if (!row) {
-      /*
-        MessageList is virtualized. If the tail row is not mounted,
-        ask Lumiverse's own MessageList to navigate to the tail first.
-        Its forced-scroll animation is capped at 700ms in current
-        staging, so wait for it to settle before aligning the exact row.
-      */
-      window.dispatchEvent(
-        new Event(
-          CHAT_SCROLL_TO_BOTTOM_EVENT
-        )
+    /*
+      The latest row is outside the virtualized mount window. Ask
+      Lumiverse's own MessageList to navigate to history-bottom solely so
+      the row becomes mounted. We then take over and converge its exact top.
+    */
+    window.dispatchEvent(
+      new Event(
+        CHAT_SCROLL_TO_BOTTOM_EVENT
+      )
+    )
+
+    const mounted =
+      await waitForLatestRow(
+        messageId
       )
 
-      await wait(760)
-
-      row =
-        findMessageRowById(messageId)
-    }
-
-    if (!row) {
-      /*
-        One short retry covers delayed row mounting / height measurement
-        on slower mobile browsers.
-      */
-      await wait(180)
-
-      row =
-        findMessageRowById(messageId)
-    }
-
-    if (!row) {
+    if (!mounted) {
       return false
     }
 
-    return alignMessageRowToScrollerTop(
-      row
+    /*
+      The host's bottom animation can still be completing when the row
+      first appears. One short settle interval avoids racing its final
+      forced-scroll frame, then the convergence loop wins deterministically.
+    */
+    await wait(120)
+
+    return convergeMessageRowToTop(
+      messageId,
+      {
+        maxPasses: 16,
+        tolerance: 2,
+      }
     )
   }
+
 
   function getNativeComposerActionBar() {
     /*
@@ -1507,25 +1583,43 @@ export function setup(ctx) {
           if (button.disabled) return
 
           button.disabled = true
+          button.setAttribute(
+            'aria-busy',
+            'true'
+          )
 
           try {
             const moved =
               await scrollToLatestMessageTop()
 
-            if (!moved) {
+            button.setAttribute(
+              'title',
+              moved
+                ? 'At top of latest message'
+                : 'Could not locate latest message'
+            )
+
+            button.setAttribute(
+              'aria-label',
+              moved
+                ? 'At top of latest message'
+                : 'Could not locate latest message'
+            )
+
+            setTimeout(() => {
               button.setAttribute(
                 'title',
-                'Latest message is not available'
+                'Top of latest message'
               )
-
-              setTimeout(() => {
-                button.setAttribute(
-                  'title',
-                  'Top of latest message'
-                )
-              }, 1400)
-            }
+              button.setAttribute(
+                'aria-label',
+                'Top of latest message'
+              )
+            }, 1600)
           } finally {
+            button.removeAttribute(
+              'aria-busy'
+            )
             button.disabled = false
           }
         }

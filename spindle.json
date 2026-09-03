@@ -1,11 +1,11 @@
 {
-  "version": "0.30.0",
+  "version": "0.31.0",
   "name": "Bionic Reading & Fonts",
   "identifier": "bionic_style_reading",
   "author": "patatasbravasch-arch",
   "github": "https://github.com/patatasbravasch-arch/bionic",
   "homepage": "https://github.com/patatasbravasch-arch/bionic",
-  "description": "Bionic reading, typography, toolbar controls, FF think fix, and a hideable native-row toolbar button that jumps to the exact top of Lumiverse's latest message row using the virtualized MessageList scroller. Ken alert remains temporarily disabled; personas permission is retained.",
+  "description": "Bionic reading, typography, toolbar controls, FF think fix, and a hideable native-row latest-message jump button. The jump now converges against the actual virtualized message row over animation frames instead of using a one-shot smooth scroll. Ken alert remains disabled; personas permission retained.",
   "permissions": [
     "generation",
     "chat_mutation",
