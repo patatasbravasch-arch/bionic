@@ -1,7 +1,8 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.28'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.29'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.28',
     'lumiverse:bionic-style-reading:v0.27',
     'lumiverse:bionic-style-reading:v0.26',
     'lumiverse:bionic-style-reading:v0.25',
@@ -24,7 +25,7 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.28'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.29'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -1187,6 +1188,153 @@ export function setup(ctx) {
   }
 
 
+  const SCROLL_LATEST_BUTTON_ATTR =
+    'data-lumibionic-scroll-latest'
+
+  function latestRenderedMessageTarget() {
+    const messages =
+      Array.from(
+        document.querySelectorAll(
+          MESSAGE_SELECTOR
+        )
+      )
+
+    const content =
+      messages[messages.length - 1]
+
+    if (!content) return null
+
+    /*
+      Prefer the outer message shell so "top" means the avatar/name/header
+      as well as the prose. Falls back to MessageContent if the host changes
+      its outer wrapper.
+    */
+    return (
+      content.closest(
+        '[data-component="BubbleMessage"], ' +
+        '[data-component="MinimalMessage"]'
+      ) ||
+      content
+    )
+  }
+
+  function scrollToLatestMessageTop() {
+    const target =
+      latestRenderedMessageTarget()
+
+    if (!target) return false
+
+    target.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+      inline: 'nearest',
+    })
+
+    return true
+  }
+
+  function ensureScrollLatestToolbarButton() {
+    const mount =
+      document.querySelector(
+        '[data-spindle-mount="chat_toolbar"]'
+      )
+
+    if (!mount) return null
+
+    let button =
+      mount.querySelector(
+        `[${SCROLL_LATEST_BUTTON_ATTR}]`
+      )
+
+    if (!button) {
+      button =
+        document.createElement('button')
+
+      button.type = 'button'
+      button.setAttribute(
+        SCROLL_LATEST_BUTTON_ATTR,
+        'true'
+      )
+      button.setAttribute(
+        'title',
+        'Top of latest message'
+      )
+      button.setAttribute(
+        'aria-label',
+        'Top of latest message'
+      )
+      button.innerHTML = `
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M5 3h14"></path>
+          <path d="m18 13-6-6-6 6"></path>
+          <path d="M12 7v14"></path>
+        </svg>
+      `
+
+      button.addEventListener(
+        'click',
+        () => {
+          const moved =
+            scrollToLatestMessageTop()
+
+          if (!moved) {
+            button.setAttribute(
+              'title',
+              'No message found'
+            )
+
+            setTimeout(() => {
+              button.setAttribute(
+                'title',
+                'Top of latest message'
+              )
+            }, 1200)
+          }
+        }
+      )
+
+      mount.appendChild(button)
+    }
+
+    /*
+      Reuse the current Lumiverse button class so the injected control
+      visually tracks the host toolbar across Bubble/Minimal themes.
+    */
+    const nativeButton =
+      Array.from(
+        mount.querySelectorAll('button')
+      ).find(
+        candidate =>
+          candidate !== button &&
+          !candidate.hasAttribute(
+            SCROLL_LATEST_BUTTON_ATTR
+          )
+      )
+
+    if (
+      nativeButton &&
+      nativeButton.className
+    ) {
+      button.className =
+        nativeButton.className
+    }
+
+    return button
+  }
+
+
   function toolbarButtonLabel(button) {
     return [
       button.getAttribute('title') || '',
@@ -1259,6 +1407,8 @@ export function setup(ctx) {
   }
 
   function applyToolbarVisibility() {
+    ensureScrollLatestToolbarButton()
+
     let matched = 0
     let hidden = 0
 
@@ -3237,6 +3387,12 @@ export function setup(ctx) {
     unwrap()
     unloadLocalFont(false)
     clearToolbarVisibility()
+
+    document
+      .querySelectorAll(
+        `[${SCROLL_LATEST_BUTTON_ATTR}]`
+      )
+      .forEach(button => button.remove())
 
     document
       .querySelectorAll('.lumibionic-bubble-scope')
