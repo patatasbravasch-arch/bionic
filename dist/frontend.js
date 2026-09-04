@@ -1,7 +1,8 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.32'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.33'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.32',
     'lumiverse:bionic-style-reading:v0.31',
     'lumiverse:bionic-style-reading:v0.30',
     'lumiverse:bionic-style-reading:v0.29',
@@ -28,7 +29,7 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.32'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.33'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -1117,6 +1118,120 @@ export function setup(ctx) {
       })
   }
 
+  const LUMIREALM_FONT_LOCK_ATTR =
+    'data-lumibionic-font-lock'
+
+  const LUMIREALM_PROSE_SELECTOR = [
+    'p',
+    'li',
+    'blockquote',
+    'span',
+    'a',
+    'em',
+    'strong',
+    'b',
+    'i',
+    'u',
+    's',
+    'mark',
+    'small',
+    'h1',
+    'h2',
+    'h3',
+    'h4',
+    'h5',
+    'h6',
+    'dt',
+    'dd',
+    'figcaption',
+  ].join(',')
+
+  function shouldApplyMessageFontLock() {
+    return (
+      settings.fontEnabled &&
+      (
+        settings.scopeAll ||
+        settings.scopeMessages
+      )
+    )
+  }
+
+  function isProtectedFontElement(element) {
+    return Boolean(
+      element.closest(
+        'pre, code, kbd, samp, svg, math, ' +
+        'button, input, textarea, select, option, ' +
+        '[contenteditable="true"]'
+      )
+    )
+  }
+
+  function applyLumiRealmFontLock(root) {
+    if (
+      !root ||
+      !shouldApplyMessageFontLock()
+    ) {
+      return
+    }
+
+    const font =
+      currentFont()
+
+    /*
+      Compatibility experiment for extensions such as LumiRealm that
+      inject their own compiled CSS after normal message styles.
+
+      Inline !important outranks extension/theme stylesheets while we
+      deliberately touch only ordinary light-DOM prose. Embedded custom
+      HTML / Shadow DOM is not traversed, and code/control elements are
+      excluded.
+    */
+    const targets = [
+      root,
+      ...root.querySelectorAll(
+        LUMIREALM_PROSE_SELECTOR
+      ),
+    ]
+
+    for (const element of targets) {
+      if (
+        element !== root &&
+        isProtectedFontElement(element)
+      ) {
+        continue
+      }
+
+      element.style.setProperty(
+        'font-family',
+        font,
+        'important'
+      )
+
+      element.setAttribute(
+        LUMIREALM_FONT_LOCK_ATTR,
+        'true'
+      )
+    }
+  }
+
+  function clearLumiRealmFontLock(
+    root = document
+  ) {
+    root
+      .querySelectorAll(
+        `[${LUMIREALM_FONT_LOCK_ATTR}]`
+      )
+      .forEach(element => {
+        element.style.removeProperty(
+          'font-family'
+        )
+
+        element.removeAttribute(
+          LUMIREALM_FONT_LOCK_ATTR
+        )
+      })
+  }
+
   function processMessage(root) {
     root.classList.toggle(
       'lumibionic-justify',
@@ -1148,6 +1263,8 @@ export function setup(ctx) {
       Math.abs(settings.wordSpacing) > 0.0001
     )
 
+    applyLumiRealmFontLock(root)
+
     if (!settings.bionicEnabled) return
 
     const walker =
@@ -1168,6 +1285,8 @@ export function setup(ctx) {
   }
 
   function unwrap(root = document) {
+    clearLumiRealmFontLock(root)
+
     root
       .querySelectorAll('[data-lumibionic-word]')
       .forEach(el => {
@@ -1616,6 +1735,8 @@ export function setup(ctx) {
     const root = document.documentElement
     const fontFamily = currentFont()
 
+    clearLumiRealmFontLock()
+
     root.style.setProperty(
       '--lumibionic-weight',
       String(settings.weight)
@@ -1691,6 +1812,8 @@ export function setup(ctx) {
     applyToolbarVisibility()
   }
 
+  let fontCompatSettleTimer = null
+
   function processAll() {
     if (rebuilding) return
 
@@ -1700,6 +1823,29 @@ export function setup(ctx) {
 
     refreshBubbleScopes()
     applyToolbarVisibility()
+
+    if (fontCompatSettleTimer) {
+      clearTimeout(
+        fontCompatSettleTimer
+      )
+    }
+
+    fontCompatSettleTimer =
+      setTimeout(() => {
+        fontCompatSettleTimer = null
+
+        if (!shouldApplyMessageFontLock()) {
+          return
+        }
+
+        document
+          .querySelectorAll(
+            MESSAGE_SELECTOR
+          )
+          .forEach(
+            applyLumiRealmFontLock
+          )
+      }, 120)
   }
 
   function rebuildAll() {
@@ -3445,6 +3591,13 @@ export function setup(ctx) {
   return () => {
     observer.disconnect()
     unsubBackendMessage?.()
+
+    if (fontCompatSettleTimer) {
+      clearTimeout(
+        fontCompatSettleTimer
+      )
+      fontCompatSettleTimer = null
+    }
 
     if (kenSleepModal) {
       try {

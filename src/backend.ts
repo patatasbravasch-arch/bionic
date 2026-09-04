@@ -1,6 +1,6 @@
 declare const spindle: import('lumiverse-spindle-types').SpindleAPI
 
-const FF_THINK_FIX_VERSION = '0.32.0'
+const FF_THINK_FIX_VERSION = '0.33.0'
 
 type FFThinkFixConfig = {
   boundaryText: string

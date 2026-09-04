@@ -1,11 +1,11 @@
 {
-  "version": "0.32.0",
+  "version": "0.33.0",
   "name": "Bionic Reading & Fonts",
   "identifier": "bionic_style_reading",
   "author": "patatasbravasch-arch",
   "github": "https://github.com/patatasbravasch-arch/bionic",
   "homepage": "https://github.com/patatasbravasch-arch/bionic",
-  "description": "Bionic reading, typography, toolbar controls, FF think fix, and a hideable Top of latest message button. v0.32 keeps the native toolbar-row placement and hide/show setting from v0.30+, while restoring the empirically working v0.29 jump behavior. Ken alert remains disabled; personas permission retained.",
+  "description": "Bionic reading, typography, toolbar controls, FF think fix, and a LumiRealm compatibility experiment that locks the selected font inline on ordinary rendered message prose while excluding code, controls, and embedded custom HTML. Ken alert remains disabled; personas permission retained.",
   "permissions": [
     "generation",
     "chat_mutation",
