@@ -1,11 +1,11 @@
 {
-  "version": "0.36.0",
+  "version": "0.37.0",
   "name": "Bionic Reading & Fonts",
   "identifier": "bionic_style_reading",
   "author": "patatasbravasch-arch",
   "github": "https://github.com/patatasbravasch-arch/bionic",
   "homepage": "https://github.com/patatasbravasch-arch/bionic",
-  "description": "Bionic reading, typography, toolbar controls, FF think fix, LumiRealm font timing workaround, and a deep diagnostic that recursively inspects light DOM, open shadow roots, same-origin iframes, custom elements, and pseudo-element content for the latest rendered message. Ken alert remains disabled; personas permission retained.",
+  "description": "Bionic reading, typography, toolbar controls, FF think fix, and LumiRealm font compatibility. Bionic now crosses LumiRealm's open Shadow DOM boundary and applies the selected font to ordinary prose inside HTML islands while excluding code, controls, SVG, and other protected elements. Deep diagnostic retained. Ken alert remains disabled; personas permission retained.",
   "permissions": [
     "generation",
     "chat_mutation",

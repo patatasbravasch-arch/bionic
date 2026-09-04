@@ -1,7 +1,8 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.36'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.37'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.36',
     'lumiverse:bionic-style-reading:v0.35',
     'lumiverse:bionic-style-reading:v0.34',
     'lumiverse:bionic-style-reading:v0.33',
@@ -32,7 +33,7 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.36'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.37'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -1169,36 +1170,30 @@ export function setup(ctx) {
     )
   }
 
-  function applyLumiRealmFontLock(root) {
-    if (
-      !root ||
-      !shouldApplyMessageFontLock()
-    ) {
-      return
+  function applyFontLockToRoot(
+    root,
+    font
+  ) {
+    if (!root) return
+
+    const targets = []
+
+    if (root instanceof Element) {
+      targets.push(root)
     }
 
-    const font =
-      currentFont()
-
-    /*
-      Compatibility experiment for extensions such as LumiRealm that
-      inject their own compiled CSS after normal message styles.
-
-      Inline !important outranks extension/theme stylesheets while we
-      deliberately touch only ordinary light-DOM prose. Embedded custom
-      HTML / Shadow DOM is not traversed, and code/control elements are
-      excluded.
-    */
-    const targets = [
-      root,
-      ...root.querySelectorAll(
+    root
+      .querySelectorAll?.(
         LUMIREALM_PROSE_SELECTOR
-      ),
-    ]
+      )
+      .forEach(
+        element =>
+          targets.push(element)
+      )
 
     for (const element of targets) {
       if (
-        element !== root &&
+        element instanceof Element &&
         isProtectedFontElement(element)
       ) {
         continue
@@ -1215,13 +1210,43 @@ export function setup(ctx) {
         'true'
       )
     }
+
+    /*
+      LumiRealm renders HTML islands in OPEN shadow roots. Normal CSS
+      inheritance from MessageContent stops at that boundary, so recurse
+      into those roots explicitly and apply the selected Bionic font there.
+    */
+    root
+      .querySelectorAll?.('*')
+      .forEach(element => {
+        if (element.shadowRoot) {
+          applyFontLockToRoot(
+            element.shadowRoot,
+            font
+          )
+        }
+      })
   }
 
-  function clearLumiRealmFontLock(
-    root = document
-  ) {
+  function applyLumiRealmFontLock(root) {
+    if (
+      !root ||
+      !shouldApplyMessageFontLock()
+    ) {
+      return
+    }
+
+    applyFontLockToRoot(
+      root,
+      currentFont()
+    )
+  }
+
+  function clearFontLocksInRoot(root) {
+    if (!root) return
+
     root
-      .querySelectorAll(
+      .querySelectorAll?.(
         `[${LUMIREALM_FONT_LOCK_ATTR}]`
       )
       .forEach(element => {
@@ -1233,6 +1258,22 @@ export function setup(ctx) {
           LUMIREALM_FONT_LOCK_ATTR
         )
       })
+
+    root
+      .querySelectorAll?.('*')
+      .forEach(element => {
+        if (element.shadowRoot) {
+          clearFontLocksInRoot(
+            element.shadowRoot
+          )
+        }
+      })
+  }
+
+  function clearLumiRealmFontLock(
+    root = document
+  ) {
+    clearFontLocksInRoot(root)
   }
 
   function elementDescriptor(element) {
@@ -1656,7 +1697,7 @@ export function setup(ctx) {
       )
 
     const lines = [
-      'Bionic deep font diagnostic v0.36',
+      'Bionic deep font diagnostic v0.37',
       '',
       `Latest MessageContent: ${elementDescriptor(message)}`,
       `Message computed font: ${messageStyle.fontFamily}`,
