@@ -1,11 +1,11 @@
 {
-  "version": "0.35.0",
+  "version": "0.36.0",
   "name": "Bionic Reading & Fonts",
   "identifier": "bionic_style_reading",
   "author": "patatasbravasch-arch",
   "github": "https://github.com/patatasbravasch-arch/bionic",
   "homepage": "https://github.com/patatasbravasch-arch/bionic",
-  "description": "Bionic reading, typography, toolbar controls, FF think fix, and a LumiRealm font timing workaround. Font enforcement is reapplied after DOM mutation batches at 100 ms and 650 ms to catch post-generation renderer replacement. Diagnostic panel is retained for verification. Ken alert remains disabled; personas permission retained.",
+  "description": "Bionic reading, typography, toolbar controls, FF think fix, LumiRealm font timing workaround, and a deep diagnostic that recursively inspects light DOM, open shadow roots, same-origin iframes, custom elements, and pseudo-element content for the latest rendered message. Ken alert remains disabled; personas permission retained.",
   "permissions": [
     "generation",
     "chat_mutation",

@@ -1,7 +1,8 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.35'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.36'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.35',
     'lumiverse:bionic-style-reading:v0.34',
     'lumiverse:bionic-style-reading:v0.33',
     'lumiverse:bionic-style-reading:v0.32',
@@ -31,7 +32,7 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.35'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.36'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -1367,6 +1368,266 @@ export function setup(ctx) {
     return notes
   }
 
+  function cleanTextPreview(value) {
+    return String(value ?? '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 220)
+  }
+
+  function safePseudoContent(
+    element,
+    pseudo
+  ) {
+    try {
+      const value =
+        getComputedStyle(
+          element,
+          pseudo
+        ).content
+
+      if (
+        !value ||
+        value === 'none' ||
+        value === 'normal' ||
+        value === '""' ||
+        value === "''"
+      ) {
+        return null
+      }
+
+      return value
+    } catch {
+      return null
+    }
+  }
+
+  function isCustomElement(element) {
+    return (
+      element instanceof Element &&
+      element.tagName.includes('-')
+    )
+  }
+
+  function collectDeepFontCandidates(
+    root,
+    {
+      maxElements = 900,
+      maxCandidates = 80,
+    } = {}
+  ) {
+    const candidates = []
+    const special = []
+    let visited = 0
+
+    const seenRoots =
+      new Set()
+
+    function pushCandidate(
+      element,
+      context,
+      text
+    ) {
+      if (
+        candidates.length >=
+        maxCandidates
+      ) {
+        return
+      }
+
+      const style =
+        getComputedStyle(element)
+
+      const before =
+        safePseudoContent(
+          element,
+          '::before'
+        )
+
+      const after =
+        safePseudoContent(
+          element,
+          '::after'
+        )
+
+      candidates.push({
+        context,
+        descriptor:
+          elementDescriptor(
+            element
+          ),
+        text:
+          cleanTextPreview(text),
+        fontFamily:
+          style.fontFamily,
+        fontSize:
+          style.fontSize,
+        fontWeight:
+          style.fontWeight,
+        display:
+          style.display,
+        visibility:
+          style.visibility,
+        before,
+        after,
+        inlineFont:
+          element.style.getPropertyValue(
+            'font-family'
+          ),
+        inlinePriority:
+          element.style.getPropertyPriority(
+            'font-family'
+          ),
+      })
+    }
+
+    function inspectRoot(
+      currentRoot,
+      context
+    ) {
+      if (
+        !currentRoot ||
+        seenRoots.has(currentRoot) ||
+        visited >= maxElements
+      ) {
+        return
+      }
+
+      seenRoots.add(currentRoot)
+
+      const elements =
+        currentRoot instanceof Element
+          ? [
+              currentRoot,
+              ...currentRoot.querySelectorAll(
+                '*'
+              ),
+            ]
+          : Array.from(
+              currentRoot.querySelectorAll?.(
+                '*'
+              ) || []
+            )
+
+      for (const element of elements) {
+        if (
+          visited >= maxElements ||
+          candidates.length >= maxCandidates
+        ) {
+          return
+        }
+
+        visited += 1
+
+        const style =
+          getComputedStyle(element)
+
+        const visible =
+          style.display !== 'none' &&
+          style.visibility !== 'hidden'
+
+        const ownText =
+          cleanTextPreview(
+            Array.from(
+              element.childNodes
+            )
+              .filter(
+                node =>
+                  node.nodeType ===
+                  Node.TEXT_NODE
+              )
+              .map(
+                node =>
+                  node.textContent || ''
+              )
+              .join(' ')
+          )
+
+        const before =
+          safePseudoContent(
+            element,
+            '::before'
+          )
+
+        const after =
+          safePseudoContent(
+            element,
+            '::after'
+          )
+
+        const interesting =
+          visible &&
+          (
+            ownText ||
+            before ||
+            after ||
+            isCustomElement(element) ||
+            element.shadowRoot ||
+            element instanceof HTMLIFrameElement
+          )
+
+        if (interesting) {
+          pushCandidate(
+            element,
+            context,
+            ownText
+          )
+        }
+
+        if (element.shadowRoot) {
+          special.push(
+            `open shadow root on ${elementDescriptor(element)}`
+          )
+
+          inspectRoot(
+            element.shadowRoot,
+            `${context} > shadow(${elementDescriptor(element)})`
+          )
+        }
+
+        if (
+          element instanceof
+          HTMLIFrameElement
+        ) {
+          try {
+            const doc =
+              element.contentDocument
+
+            if (doc?.documentElement) {
+              special.push(
+                `same-origin iframe on ${elementDescriptor(element)}`
+              )
+
+              inspectRoot(
+                doc.documentElement,
+                `${context} > iframe(${elementDescriptor(element)})`
+              )
+            } else {
+              special.push(
+                `iframe present but document inaccessible: ${elementDescriptor(element)}`
+              )
+            }
+          } catch {
+            special.push(
+              `cross-origin/inaccessible iframe: ${elementDescriptor(element)}`
+            )
+          }
+        }
+      }
+    }
+
+    inspectRoot(
+      root,
+      'light DOM'
+    )
+
+    return {
+      candidates,
+      special,
+      visited,
+    }
+  }
+
   function inspectLatestMessageFont() {
     const messages =
       Array.from(
@@ -1386,95 +1647,70 @@ export function setup(ctx) {
       }
     }
 
-    const sample =
-      firstVisibleTextElement(
-        message
-      ) || message
-
     const messageStyle =
       getComputedStyle(message)
 
-    const sampleStyle =
-      getComputedStyle(sample)
-
-    const ancestry = []
-    let current =
-      sample
-
-    for (
-      let depth = 0;
-      current && depth < 10;
-      depth += 1
-    ) {
-      const style =
-        getComputedStyle(current)
-
-      ancestry.push(
-        `${depth}. ${elementDescriptor(current)}\n` +
-        `   font-family: ${style.fontFamily}\n` +
-        `   font-size: ${style.fontSize}\n` +
-        `   font-weight: ${style.fontWeight}`
+    const deep =
+      collectDeepFontCandidates(
+        message
       )
 
-      if (
-        current === message
-      ) {
-        break
-      }
-
-      current =
-        current.parentElement
-    }
-
-    const special =
-      detectSpecialRendering(sample)
-
-    const inlineFont =
-      sample.style.getPropertyValue(
-        'font-family'
-      )
-
-    const inlinePriority =
-      sample.style.getPropertyPriority(
-        'font-family'
-      )
-
-    const textPreview =
-      sample.textContent
-        ?.trim()
-        .replace(/\s+/g, ' ')
-        .slice(0, 180) || '(empty)'
-
-    const report = [
-      'Bionic font diagnostic v0.35',
+    const lines = [
+      'Bionic deep font diagnostic v0.36',
       '',
       `Latest MessageContent: ${elementDescriptor(message)}`,
       `Message computed font: ${messageStyle.fontFamily}`,
+      `Message textContent length: ${(message.textContent || '').length}`,
+      `Descendant element count: ${message.querySelectorAll('*').length}`,
+      `Elements visited deeply: ${deep.visited}`,
       '',
-      `Sample text element: ${elementDescriptor(sample)}`,
-      `Sample text: ${textPreview}`,
-      `Sample computed font: ${sampleStyle.fontFamily}`,
-      `Sample inline font: ${
-        inlineFont || '(none)'
-      }${
-        inlinePriority
-          ? ` !${inlinePriority}`
-          : ''
-      }`,
+      'Special rendering discovered:',
+      ...(deep.special.length
+        ? deep.special.map(
+            item => `- ${item}`
+          )
+        : ['- none detected']),
       '',
-      special.length
-        ? `Special rendering: ${special.join('; ')}`
-        : 'Special rendering: normal document/light DOM',
-      '',
-      'Ancestor font chain:',
-      ...ancestry,
-    ].join('\n')
+      'Deep visible/text/font candidates:',
+    ]
+
+    if (!deep.candidates.length) {
+      lines.push(
+        '- No visible text-bearing/custom/shadow/iframe candidates found.'
+      )
+    }
+
+    deep.candidates.forEach(
+      (item, index) => {
+        lines.push(
+          '',
+          `[${index + 1}] ${item.context}`,
+          `Element: ${item.descriptor}`,
+          `Own text: ${item.text || '(none)'}`,
+          `Computed font: ${item.fontFamily}`,
+          `Font size/weight: ${item.fontSize} / ${item.fontWeight}`,
+          `Display/visibility: ${item.display} / ${item.visibility}`,
+          `Inline font: ${
+            item.inlineFont || '(none)'
+          }${
+            item.inlinePriority
+              ? ` !${item.inlinePriority}`
+              : ''
+          }`,
+          `::before content: ${item.before || '(none)'}`,
+          `::after content: ${item.after || '(none)'}`,
+        )
+      }
+    )
+
+    const report =
+      lines.join('\n')
 
     console.info(
-      '[Bionic font diagnostic]',
+      '[Bionic deep font diagnostic]',
       {
         message,
-        sample,
+        deep,
         report,
       }
     )
@@ -1484,6 +1720,7 @@ export function setup(ctx) {
       text: report,
     }
   }
+
 
   function processMessage(root) {
     root.classList.toggle(
@@ -2640,15 +2877,16 @@ export function setup(ctx) {
         </div>
 
         <div class="lumibionic-muted">
-          Use this on a generated reply whose font looks wrong.
-          It only inspects the rendered DOM; it does not change styling.
+          Use this while the generated reply font looks wrong.
+          It now scans light DOM, open shadow roots, same-origin iframes,
+          custom elements, and pseudo-element content. It does not change styling.
         </div>
 
         <button
           type="button"
           id="lb-inspect-latest-font"
         >
-          Inspect latest message font
+          Deep inspect latest message font
         </button>
 
         <textarea
