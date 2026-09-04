@@ -1,7 +1,8 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.34'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.35'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.34',
     'lumiverse:bionic-style-reading:v0.33',
     'lumiverse:bionic-style-reading:v0.32',
     'lumiverse:bionic-style-reading:v0.31',
@@ -30,7 +31,7 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.34'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.35'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -1445,7 +1446,7 @@ export function setup(ctx) {
         .slice(0, 180) || '(empty)'
 
     const report = [
-      'Bionic font diagnostic v0.34',
+      'Bionic font diagnostic v0.35',
       '',
       `Latest MessageContent: ${elementDescriptor(message)}`,
       `Message computed font: ${messageStyle.fontFamily}`,
@@ -2065,6 +2066,53 @@ export function setup(ctx) {
   }
 
   let fontCompatSettleTimer = null
+  let fontCompatLateTimer = null
+
+  function reapplyMessageFonts() {
+    if (!shouldApplyMessageFontLock()) {
+      return
+    }
+
+    document
+      .querySelectorAll(
+        MESSAGE_SELECTOR
+      )
+      .forEach(
+        applyLumiRealmFontLock
+      )
+  }
+
+  function scheduleFontCompatSettle() {
+    if (fontCompatSettleTimer) {
+      clearTimeout(
+        fontCompatSettleTimer
+      )
+    }
+
+    if (fontCompatLateTimer) {
+      clearTimeout(
+        fontCompatLateTimer
+      )
+    }
+
+    /*
+      LumiRealm can replace/render the visible response after Lumiverse's
+      first message paint. A quick pass catches the usual replacement,
+      and a later pass catches the final post-generation renderer settle.
+      Both are debounced, so streaming tokens do not create a polling loop.
+    */
+    fontCompatSettleTimer =
+      setTimeout(() => {
+        fontCompatSettleTimer = null
+        reapplyMessageFonts()
+      }, 100)
+
+    fontCompatLateTimer =
+      setTimeout(() => {
+        fontCompatLateTimer = null
+        reapplyMessageFonts()
+      }, 650)
+  }
 
   function processAll() {
     if (rebuilding) return
@@ -2075,29 +2123,7 @@ export function setup(ctx) {
 
     refreshBubbleScopes()
     applyToolbarVisibility()
-
-    if (fontCompatSettleTimer) {
-      clearTimeout(
-        fontCompatSettleTimer
-      )
-    }
-
-    fontCompatSettleTimer =
-      setTimeout(() => {
-        fontCompatSettleTimer = null
-
-        if (!shouldApplyMessageFontLock()) {
-          return
-        }
-
-        document
-          .querySelectorAll(
-            MESSAGE_SELECTOR
-          )
-          .forEach(
-            applyLumiRealmFontLock
-          )
-      }, 120)
+    scheduleFontCompatSettle()
   }
 
   function rebuildAll() {
@@ -3901,7 +3927,10 @@ export function setup(ctx) {
 
   const observer =
     new MutationObserver(
-      scheduleProcess
+      () => {
+        scheduleProcess()
+        scheduleFontCompatSettle()
+      }
     )
 
   observer.observe(
@@ -3934,6 +3963,13 @@ export function setup(ctx) {
         fontCompatSettleTimer
       )
       fontCompatSettleTimer = null
+    }
+
+    if (fontCompatLateTimer) {
+      clearTimeout(
+        fontCompatLateTimer
+      )
+      fontCompatLateTimer = null
     }
 
     if (kenSleepModal) {
