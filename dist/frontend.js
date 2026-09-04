@@ -1,7 +1,8 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.33'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.34'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.33',
     'lumiverse:bionic-style-reading:v0.32',
     'lumiverse:bionic-style-reading:v0.31',
     'lumiverse:bionic-style-reading:v0.30',
@@ -29,7 +30,7 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.33'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.34'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -1232,6 +1233,257 @@ export function setup(ctx) {
       })
   }
 
+  function elementDescriptor(element) {
+    if (!(element instanceof Element)) {
+      return '(not an element)'
+    }
+
+    const parts = [
+      element.tagName.toLowerCase(),
+    ]
+
+    if (element.id) {
+      parts.push(`#${element.id}`)
+    }
+
+    const component =
+      element.getAttribute(
+        'data-component'
+      )
+
+    if (component) {
+      parts.push(
+        `[data-component="${component}"]`
+      )
+    }
+
+    const messageId =
+      element.getAttribute(
+        'data-message-id'
+      )
+
+    if (messageId) {
+      parts.push(
+        `[data-message-id="${messageId}"]`
+      )
+    }
+
+    const spindleMount =
+      element.getAttribute(
+        'data-spindle-mount'
+      )
+
+    if (spindleMount) {
+      parts.push(
+        `[data-spindle-mount="${spindleMount}"]`
+      )
+    }
+
+    if (element.classList?.length) {
+      parts.push(
+        '.' +
+        Array.from(element.classList)
+          .slice(0, 4)
+          .join('.')
+      )
+    }
+
+    return parts.join('')
+  }
+
+  function firstVisibleTextElement(root) {
+    if (!(root instanceof Element)) {
+      return null
+    }
+
+    const walker =
+      document.createTreeWalker(
+        root,
+        NodeFilter.SHOW_TEXT
+      )
+
+    let node
+
+    while (
+      (node = walker.nextNode())
+    ) {
+      const text =
+        node.textContent?.trim()
+
+      if (!text) continue
+
+      const parent =
+        node.parentElement
+
+      if (!parent) continue
+
+      if (
+        parent.closest(
+          'script, style, noscript, svg'
+        )
+      ) {
+        continue
+      }
+
+      const style =
+        getComputedStyle(parent)
+
+      if (
+        style.display === 'none' ||
+        style.visibility === 'hidden'
+      ) {
+        continue
+      }
+
+      return parent
+    }
+
+    return root
+  }
+
+  function detectSpecialRendering(element) {
+    const notes = []
+
+    const rootNode =
+      element?.getRootNode?.()
+
+    if (
+      typeof ShadowRoot !== 'undefined' &&
+      rootNode instanceof ShadowRoot
+    ) {
+      notes.push(
+        `inside ${rootNode.mode} shadow root`
+      )
+    }
+
+    const frame =
+      element?.closest?.('iframe')
+
+    if (frame) {
+      notes.push('inside iframe element')
+    }
+
+    return notes
+  }
+
+  function inspectLatestMessageFont() {
+    const messages =
+      Array.from(
+        document.querySelectorAll(
+          MESSAGE_SELECTOR
+        )
+      )
+
+    const message =
+      messages[messages.length - 1]
+
+    if (!message) {
+      return {
+        ok: false,
+        text:
+          'No rendered MessageContent element was found.',
+      }
+    }
+
+    const sample =
+      firstVisibleTextElement(
+        message
+      ) || message
+
+    const messageStyle =
+      getComputedStyle(message)
+
+    const sampleStyle =
+      getComputedStyle(sample)
+
+    const ancestry = []
+    let current =
+      sample
+
+    for (
+      let depth = 0;
+      current && depth < 10;
+      depth += 1
+    ) {
+      const style =
+        getComputedStyle(current)
+
+      ancestry.push(
+        `${depth}. ${elementDescriptor(current)}\n` +
+        `   font-family: ${style.fontFamily}\n` +
+        `   font-size: ${style.fontSize}\n` +
+        `   font-weight: ${style.fontWeight}`
+      )
+
+      if (
+        current === message
+      ) {
+        break
+      }
+
+      current =
+        current.parentElement
+    }
+
+    const special =
+      detectSpecialRendering(sample)
+
+    const inlineFont =
+      sample.style.getPropertyValue(
+        'font-family'
+      )
+
+    const inlinePriority =
+      sample.style.getPropertyPriority(
+        'font-family'
+      )
+
+    const textPreview =
+      sample.textContent
+        ?.trim()
+        .replace(/\s+/g, ' ')
+        .slice(0, 180) || '(empty)'
+
+    const report = [
+      'Bionic font diagnostic v0.34',
+      '',
+      `Latest MessageContent: ${elementDescriptor(message)}`,
+      `Message computed font: ${messageStyle.fontFamily}`,
+      '',
+      `Sample text element: ${elementDescriptor(sample)}`,
+      `Sample text: ${textPreview}`,
+      `Sample computed font: ${sampleStyle.fontFamily}`,
+      `Sample inline font: ${
+        inlineFont || '(none)'
+      }${
+        inlinePriority
+          ? ` !${inlinePriority}`
+          : ''
+      }`,
+      '',
+      special.length
+        ? `Special rendering: ${special.join('; ')}`
+        : 'Special rendering: normal document/light DOM',
+      '',
+      'Ancestor font chain:',
+      ...ancestry,
+    ].join('\n')
+
+    console.info(
+      '[Bionic font diagnostic]',
+      {
+        message,
+        sample,
+        report,
+      }
+    )
+
+    return {
+      ok: true,
+      text: report,
+    }
+  }
+
   function processMessage(root) {
     root.classList.toggle(
       'lumibionic-justify',
@@ -2357,6 +2609,45 @@ export function setup(ctx) {
       </div>
 
       <div class="lumibionic-section">
+        <div class="lumibionic-section-title">
+          LumiRealm font diagnostic
+        </div>
+
+        <div class="lumibionic-muted">
+          Use this on a generated reply whose font looks wrong.
+          It only inspects the rendered DOM; it does not change styling.
+        </div>
+
+        <button
+          type="button"
+          id="lb-inspect-latest-font"
+        >
+          Inspect latest message font
+        </button>
+
+        <textarea
+          id="lb-font-diagnostic-output"
+          readonly
+          spellcheck="false"
+          style="
+            width:100%;
+            min-height:220px;
+            resize:vertical;
+            font-family:monospace;
+            font-size:12px;
+          "
+          placeholder="Diagnostic output will appear here."
+        ></textarea>
+
+        <button
+          type="button"
+          id="lb-copy-font-diagnostic"
+        >
+          Copy diagnostic
+        </button>
+      </div>
+
+      <div class="lumibionic-section">
         <div class="lumibionic-control">
           <label>Preview</label>
           <div
@@ -2433,6 +2724,12 @@ export function setup(ctx) {
   const toolbarGrid = $('#lb-toolbar-grid')
   const toolbarHideAll = $('#lb-toolbar-hide-all')
   const toolbarShowAll = $('#lb-toolbar-show-all')
+  const inspectLatestFont =
+    $('#lb-inspect-latest-font')
+  const fontDiagnosticOutput =
+    $('#lb-font-diagnostic-output')
+  const copyFontDiagnostic =
+    $('#lb-copy-font-diagnostic')
 
   if (toolbarGrid) {
     toolbarGrid.replaceChildren()
@@ -2943,6 +3240,46 @@ export function setup(ctx) {
   toolbarShowAll?.addEventListener(
     'click',
     () => setAllToolbarHidden(false)
+  )
+
+  inspectLatestFont?.addEventListener(
+    'click',
+    () => {
+      const result =
+        inspectLatestMessageFont()
+
+      if (fontDiagnosticOutput) {
+        fontDiagnosticOutput.value =
+          result.text
+      }
+    }
+  )
+
+  copyFontDiagnostic?.addEventListener(
+    'click',
+    async () => {
+      const text =
+        fontDiagnosticOutput?.value || ''
+
+      if (!text) return
+
+      try {
+        await navigator.clipboard.writeText(
+          text
+        )
+
+        copyFontDiagnostic.textContent =
+          'Copied'
+
+        setTimeout(() => {
+          copyFontDiagnostic.textContent =
+            'Copy diagnostic'
+        }, 1200)
+      } catch {
+        fontDiagnosticOutput?.focus()
+        fontDiagnosticOutput?.select()
+      }
+    }
   )
 
   preset.addEventListener(
