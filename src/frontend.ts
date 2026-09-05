@@ -1,7 +1,8 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.37'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.38'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.37',
     'lumiverse:bionic-style-reading:v0.36',
     'lumiverse:bionic-style-reading:v0.35',
     'lumiverse:bionic-style-reading:v0.34',
@@ -33,7 +34,7 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.37'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.38'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -1170,16 +1171,33 @@ export function setup(ctx) {
     )
   }
 
+  function hasOwnVisibleText(element) {
+    return Array.from(
+      element.childNodes
+    ).some(node => {
+      return (
+        node.nodeType ===
+          Node.TEXT_NODE &&
+        Boolean(
+          node.textContent?.trim()
+        )
+      )
+    })
+  }
+
   function applyFontLockToRoot(
     root,
     font
   ) {
     if (!root) return
 
-    const targets = []
+    const targets =
+      new Set()
 
-    if (root instanceof Element) {
-      targets.push(root)
+    if (
+      root instanceof Element
+    ) {
+      targets.add(root)
     }
 
     root
@@ -1188,8 +1206,23 @@ export function setup(ctx) {
       )
       .forEach(
         element =>
-          targets.push(element)
+          targets.add(element)
       )
+
+    if (
+      typeof ShadowRoot !== 'undefined' &&
+      root instanceof ShadowRoot
+    ) {
+      root
+        .querySelectorAll?.('*')
+        .forEach(element => {
+          if (
+            hasOwnVisibleText(element)
+          ) {
+            targets.add(element)
+          }
+        })
+    }
 
     for (const element of targets) {
       if (
@@ -1211,11 +1244,6 @@ export function setup(ctx) {
       )
     }
 
-    /*
-      LumiRealm renders HTML islands in OPEN shadow roots. Normal CSS
-      inheritance from MessageContent stops at that boundary, so recurse
-      into those roots explicitly and apply the selected Bionic font there.
-    */
     root
       .querySelectorAll?.('*')
       .forEach(element => {
@@ -1227,6 +1255,7 @@ export function setup(ctx) {
         }
       })
   }
+
 
   function applyLumiRealmFontLock(root) {
     if (
@@ -1697,7 +1726,7 @@ export function setup(ctx) {
       )
 
     const lines = [
-      'Bionic deep font diagnostic v0.37',
+      'Bionic deep font diagnostic v0.38',
       '',
       `Latest MessageContent: ${elementDescriptor(message)}`,
       `Message computed font: ${messageStyle.fontFamily}`,
