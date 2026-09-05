@@ -1,7 +1,8 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.39'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.40'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.39',
     'lumiverse:bionic-style-reading:v0.38',
     'lumiverse:bionic-style-reading:v0.37',
     'lumiverse:bionic-style-reading:v0.36',
@@ -35,7 +36,7 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.39'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.40'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -1782,7 +1783,7 @@ export function setup(ctx) {
       )
 
     const lines = [
-      'Bionic deep font diagnostic v0.39',
+      'Bionic deep font diagnostic v0.40',
       '',
       `Latest MessageContent: ${elementDescriptor(message)}`,
       `Message computed font: ${messageStyle.fontFamily}`,
@@ -1947,11 +1948,15 @@ export function setup(ctx) {
     if (!content) return null
 
     /*
-      Prefer the outer message shell so "top" means the avatar/name/header
-      as well as the prose. Falls back to MessageContent if the host changes
-      its outer wrapper.
+      Prefer the stable virtual-row wrapper. LumiRealm renders visible
+      content inside a shadow root whose height can settle after the outer
+      MessageContent first mounts, but data-message-id stays attached to
+      the logical message row.
     */
     return (
+      content.closest(
+        '[data-message-id]'
+      ) ||
       content.closest(
         '[data-component="BubbleMessage"], ' +
         '[data-component="MinimalMessage"]'
@@ -1960,20 +1965,56 @@ export function setup(ctx) {
     )
   }
 
-  function scrollToLatestMessageTop() {
+  function alignLatestMessageTop(
+    behavior = 'auto'
+  ) {
     const target =
       latestRenderedMessageTarget()
 
     if (!target) return false
 
     target.scrollIntoView({
-      behavior: 'smooth',
+      behavior,
       block: 'start',
       inline: 'nearest',
     })
 
     return true
   }
+
+  function scrollToLatestMessageTop() {
+    const moved =
+      alignLatestMessageTop(
+        'smooth'
+      )
+
+    if (!moved) return false
+
+    /*
+      LumiRealm's HTML island lives in an open shadow root. Its content can
+      finish styling/measuring after the outer message row has already been
+      scrolled. Re-align the SAME logical message row after the short and
+      late settle windows used by the font compatibility pass.
+    */
+    setTimeout(
+      () =>
+        alignLatestMessageTop(
+          'auto'
+        ),
+      140
+    )
+
+    setTimeout(
+      () =>
+        alignLatestMessageTop(
+          'auto'
+        ),
+      720
+    )
+
+    return true
+  }
+
 
   function getNativeComposerActionBar() {
     /*

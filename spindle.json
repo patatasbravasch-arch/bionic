@@ -1,11 +1,11 @@
 {
-  "version": "0.39.0",
+  "version": "0.40.0",
   "name": "Bionic Reading & Fonts",
   "identifier": "bionic_style_reading",
   "author": "patatasbravasch-arch",
   "github": "https://github.com/patatasbravasch-arch/bionic",
   "homepage": "https://github.com/patatasbravasch-arch/bionic",
-  "description": "Bionic reading, typography, toolbar controls, FF think fix, and LumiRealm compatibility. The selected Bionic font family and message text size are applied inside LumiRealm open shadow roots while preserving code, controls, SVG, and other protected elements.",
+  "description": "Bionic reading, typography, toolbar controls, FF think fix, and LumiRealm compatibility. The selected font family and message size are applied inside LumiRealm shadow roots, and the latest-message toolbar jump now targets the stable message row and re-aligns after shadow-content layout settles.",
   "permissions": [
     "generation",
     "chat_mutation",
