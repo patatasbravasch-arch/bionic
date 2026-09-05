@@ -1,7 +1,8 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.38'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.39'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.38',
     'lumiverse:bionic-style-reading:v0.37',
     'lumiverse:bionic-style-reading:v0.36',
     'lumiverse:bionic-style-reading:v0.35',
@@ -34,7 +35,7 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.38'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.39'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -1185,9 +1186,24 @@ export function setup(ctx) {
     })
   }
 
+  function hasOwnVisibleText(element) {
+    return Array.from(
+      element.childNodes
+    ).some(node => {
+      return (
+        node.nodeType ===
+          Node.TEXT_NODE &&
+        Boolean(
+          node.textContent?.trim()
+        )
+      )
+    })
+  }
+
   function applyFontLockToRoot(
     root,
-    font
+    font,
+    messageSize
   ) {
     if (!root) return
 
@@ -1238,6 +1254,20 @@ export function setup(ctx) {
         'important'
       )
 
+      /*
+        LumiRealm's shadow stylesheet also sets its own text sizes
+        (14px and smaller in the diagnostic). Match the normal Bionic
+        MessageContent size so the same reply does not shrink merely
+        because it crossed into the HTML-island shadow root.
+      */
+      if (messageSize) {
+        element.style.setProperty(
+          'font-size',
+          messageSize,
+          'important'
+        )
+      }
+
       element.setAttribute(
         LUMIREALM_FONT_LOCK_ATTR,
         'true'
@@ -1250,7 +1280,8 @@ export function setup(ctx) {
         if (element.shadowRoot) {
           applyFontLockToRoot(
             element.shadowRoot,
-            font
+            font,
+            messageSize
           )
         }
       })
@@ -1265,9 +1296,31 @@ export function setup(ctx) {
       return
     }
 
+    const messageRoot =
+      root instanceof Element &&
+      root.matches?.(
+        MESSAGE_SELECTOR
+      )
+        ? root
+        : (
+            root instanceof Element
+              ? root.closest?.(
+                  MESSAGE_SELECTOR
+                )
+              : null
+          )
+
+    const messageSize =
+      messageRoot
+        ? getComputedStyle(
+            messageRoot
+          ).fontSize
+        : null
+
     applyFontLockToRoot(
       root,
-      currentFont()
+      currentFont(),
+      messageSize
     )
   }
 
@@ -1281,6 +1334,9 @@ export function setup(ctx) {
       .forEach(element => {
         element.style.removeProperty(
           'font-family'
+        )
+        element.style.removeProperty(
+          'font-size'
         )
 
         element.removeAttribute(
@@ -1726,7 +1782,7 @@ export function setup(ctx) {
       )
 
     const lines = [
-      'Bionic deep font diagnostic v0.38',
+      'Bionic deep font diagnostic v0.39',
       '',
       `Latest MessageContent: ${elementDescriptor(message)}`,
       `Message computed font: ${messageStyle.fontFamily}`,
