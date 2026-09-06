@@ -1,7 +1,8 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.40'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:settings'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.40',
     'lumiverse:bionic-style-reading:v0.39',
     'lumiverse:bionic-style-reading:v0.38',
     'lumiverse:bionic-style-reading:v0.37',
@@ -36,7 +37,7 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.40'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.41'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -205,6 +206,19 @@ export function setup(ctx) {
   let loadedFontFace = null
   let loadedFontUrl = null
   let settings = loadSettings()
+
+  /*
+    v0.41 moves preferences off release-numbered storage keys. If this
+    startup loaded v0.40 or any older key, immediately seed the permanent
+    key so future reloads and upgrades use one canonical saved state.
+  */
+  try {
+    localStorage.setItem(
+      SETTINGS_KEY,
+      JSON.stringify(settings)
+    )
+  } catch {}
+
   let scheduled = false
   let rebuilding = false
 
@@ -369,8 +383,27 @@ export function setup(ctx) {
 
   function saveSettings() {
     try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
-    } catch {}
+      const serialized =
+        JSON.stringify(settings)
+
+      localStorage.setItem(
+        SETTINGS_KEY,
+        serialized
+      )
+
+      /*
+        Verify the exact payload can be read back. This makes the manual
+        Save button meaningful instead of merely assuming localStorage
+        accepted the write.
+      */
+      return (
+        localStorage.getItem(
+          SETTINGS_KEY
+        ) === serialized
+      )
+    } catch {
+      return false
+    }
   }
 
   function graphemes(value) {
@@ -1783,7 +1816,7 @@ export function setup(ctx) {
       )
 
     const lines = [
-      'Bionic deep font diagnostic v0.40',
+      'Bionic deep font diagnostic v0.41',
       '',
       `Latest MessageContent: ${elementDescriptor(message)}`,
       `Message computed font: ${messageStyle.fontFamily}`,
@@ -2635,6 +2668,33 @@ export function setup(ctx) {
       </div>
 
       <div class="lumibionic-section">
+        <div class="lumibionic-section-title">
+          Saved settings
+        </div>
+
+        <div class="lumibionic-muted">
+          Changes still preview immediately. Use Save settings to explicitly
+          commit the complete current configuration for future reloads.
+        </div>
+
+        <button
+          type="button"
+          id="lb-save-settings"
+          style="width:100%; margin-top:8px;"
+        >
+          Save settings
+        </button>
+
+        <div
+          class="lumibionic-muted"
+          id="lb-save-settings-status"
+          style="margin-top:6px;"
+        >
+          Loaded saved settings.
+        </div>
+      </div>
+
+      <div class="lumibionic-section">
 
         <div class="lumibionic-section-title">
           Preset
@@ -3154,6 +3214,11 @@ export function setup(ctx) {
   const toolbarSpacingValue = $('#lb-toolbar-spacing-value')
   const toolbarGrid = $('#lb-toolbar-grid')
   const toolbarHideAll = $('#lb-toolbar-hide-all')
+  const saveSettingsButton =
+    $('#lb-save-settings')
+  const saveSettingsStatus =
+    $('#lb-save-settings-status')
+
   const toolbarShowAll = $('#lb-toolbar-show-all')
   const inspectLatestFont =
     $('#lb-inspect-latest-font')
@@ -3666,6 +3731,30 @@ export function setup(ctx) {
   toolbarHideAll?.addEventListener(
     'click',
     () => setAllToolbarHidden(true)
+  )
+
+  saveSettingsButton?.addEventListener(
+    'click',
+    () => {
+      const ok =
+        saveSettings()
+
+      if (saveSettingsStatus) {
+        if (ok) {
+          const now =
+            new Date()
+
+          saveSettingsStatus.textContent =
+            `Saved ✓ ${now.toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}`
+        } else {
+          saveSettingsStatus.textContent =
+            'Save failed — storage write could not be verified.'
+        }
+      }
+    }
   )
 
   toolbarShowAll?.addEventListener(
