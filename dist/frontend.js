@@ -1,7 +1,8 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:settings'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.42'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.41',
     'lumiverse:bionic-style-reading:v0.40',
     'lumiverse:bionic-style-reading:v0.39',
     'lumiverse:bionic-style-reading:v0.38',
@@ -212,19 +213,6 @@ export function setup(ctx) {
   let loadedFontFace = null
   let loadedFontUrl = null
   let settings = loadSettings()
-
-  /*
-    v0.41 moves preferences off release-numbered storage keys. If this
-    startup loaded v0.40 or any older key, immediately seed the permanent
-    key so future reloads and upgrades use one canonical saved state.
-  */
-  try {
-    localStorage.setItem(
-      SETTINGS_KEY,
-      JSON.stringify(settings)
-    )
-  } catch {}
-
   let scheduled = false
   let rebuilding = false
 
@@ -367,9 +355,9 @@ export function setup(ctx) {
             : DEFAULTS.ffThinkBoundaryText,
 
         ffThinkReasoningSide:
-          saved.ffThinkReasoningSide === 'after'
-            ? 'after'
-            : 'before',
+          ['before', 'after'].includes(saved.ffThinkReasoningSide)
+            ? saved.ffThinkReasoningSide
+            : DEFAULTS.ffThinkReasoningSide,
 
         autoRegenerateEnabled:
           typeof saved.autoRegenerateEnabled === 'boolean'
@@ -411,27 +399,8 @@ export function setup(ctx) {
 
   function saveSettings() {
     try {
-      const serialized =
-        JSON.stringify(settings)
-
-      localStorage.setItem(
-        SETTINGS_KEY,
-        serialized
-      )
-
-      /*
-        Verify the exact payload can be read back. This makes the manual
-        Save button meaningful instead of merely assuming localStorage
-        accepted the write.
-      */
-      return (
-        localStorage.getItem(
-          SETTINGS_KEY
-        ) === serialized
-      )
-    } catch {
-      return false
-    }
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
+    } catch {}
   }
 
   function graphemes(value) {
@@ -762,6 +731,55 @@ export function setup(ctx) {
     .lumibionic-section + .lumibionic-section {
       border-top: 1px solid rgba(127, 127, 127, 0.2);
       padding-top: 10px;
+    }
+
+    .lumibionic-group {
+      border: 1px solid var(--lumi-border, rgba(127,127,127,.22));
+      border-radius: 12px;
+      overflow: clip;
+      margin: 10px 0;
+    }
+
+    .lumibionic-group > summary {
+      cursor: pointer;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      font-weight: 800;
+      list-style: none;
+    }
+
+    .lumibionic-group > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .lumibionic-group > summary::after {
+      content: '▾';
+      opacity: .7;
+      transform: rotate(-90deg);
+      transition: transform 120ms ease;
+    }
+
+    .lumibionic-group[open] > summary::after {
+      transform: rotate(0deg);
+    }
+
+    .lumibionic-group-body {
+      padding: 0 12px 12px;
+    }
+
+    .lumibionic-status-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 2px 9px;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
     }
 
     .lumibionic-section-title {
@@ -1556,358 +1574,6 @@ export function setup(ctx) {
     return notes
   }
 
-  function cleanTextPreview(value) {
-    return String(value ?? '')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 220)
-  }
-
-  function safePseudoContent(
-    element,
-    pseudo
-  ) {
-    try {
-      const value =
-        getComputedStyle(
-          element,
-          pseudo
-        ).content
-
-      if (
-        !value ||
-        value === 'none' ||
-        value === 'normal' ||
-        value === '""' ||
-        value === "''"
-      ) {
-        return null
-      }
-
-      return value
-    } catch {
-      return null
-    }
-  }
-
-  function isCustomElement(element) {
-    return (
-      element instanceof Element &&
-      element.tagName.includes('-')
-    )
-  }
-
-  function collectDeepFontCandidates(
-    root,
-    {
-      maxElements = 900,
-      maxCandidates = 80,
-    } = {}
-  ) {
-    const candidates = []
-    const special = []
-    let visited = 0
-
-    const seenRoots =
-      new Set()
-
-    function pushCandidate(
-      element,
-      context,
-      text
-    ) {
-      if (
-        candidates.length >=
-        maxCandidates
-      ) {
-        return
-      }
-
-      const style =
-        getComputedStyle(element)
-
-      const before =
-        safePseudoContent(
-          element,
-          '::before'
-        )
-
-      const after =
-        safePseudoContent(
-          element,
-          '::after'
-        )
-
-      candidates.push({
-        context,
-        descriptor:
-          elementDescriptor(
-            element
-          ),
-        text:
-          cleanTextPreview(text),
-        fontFamily:
-          style.fontFamily,
-        fontSize:
-          style.fontSize,
-        fontWeight:
-          style.fontWeight,
-        display:
-          style.display,
-        visibility:
-          style.visibility,
-        before,
-        after,
-        inlineFont:
-          element.style.getPropertyValue(
-            'font-family'
-          ),
-        inlinePriority:
-          element.style.getPropertyPriority(
-            'font-family'
-          ),
-      })
-    }
-
-    function inspectRoot(
-      currentRoot,
-      context
-    ) {
-      if (
-        !currentRoot ||
-        seenRoots.has(currentRoot) ||
-        visited >= maxElements
-      ) {
-        return
-      }
-
-      seenRoots.add(currentRoot)
-
-      const elements =
-        currentRoot instanceof Element
-          ? [
-              currentRoot,
-              ...currentRoot.querySelectorAll(
-                '*'
-              ),
-            ]
-          : Array.from(
-              currentRoot.querySelectorAll?.(
-                '*'
-              ) || []
-            )
-
-      for (const element of elements) {
-        if (
-          visited >= maxElements ||
-          candidates.length >= maxCandidates
-        ) {
-          return
-        }
-
-        visited += 1
-
-        const style =
-          getComputedStyle(element)
-
-        const visible =
-          style.display !== 'none' &&
-          style.visibility !== 'hidden'
-
-        const ownText =
-          cleanTextPreview(
-            Array.from(
-              element.childNodes
-            )
-              .filter(
-                node =>
-                  node.nodeType ===
-                  Node.TEXT_NODE
-              )
-              .map(
-                node =>
-                  node.textContent || ''
-              )
-              .join(' ')
-          )
-
-        const before =
-          safePseudoContent(
-            element,
-            '::before'
-          )
-
-        const after =
-          safePseudoContent(
-            element,
-            '::after'
-          )
-
-        const interesting =
-          visible &&
-          (
-            ownText ||
-            before ||
-            after ||
-            isCustomElement(element) ||
-            element.shadowRoot ||
-            element instanceof HTMLIFrameElement
-          )
-
-        if (interesting) {
-          pushCandidate(
-            element,
-            context,
-            ownText
-          )
-        }
-
-        if (element.shadowRoot) {
-          special.push(
-            `open shadow root on ${elementDescriptor(element)}`
-          )
-
-          inspectRoot(
-            element.shadowRoot,
-            `${context} > shadow(${elementDescriptor(element)})`
-          )
-        }
-
-        if (
-          element instanceof
-          HTMLIFrameElement
-        ) {
-          try {
-            const doc =
-              element.contentDocument
-
-            if (doc?.documentElement) {
-              special.push(
-                `same-origin iframe on ${elementDescriptor(element)}`
-              )
-
-              inspectRoot(
-                doc.documentElement,
-                `${context} > iframe(${elementDescriptor(element)})`
-              )
-            } else {
-              special.push(
-                `iframe present but document inaccessible: ${elementDescriptor(element)}`
-              )
-            }
-          } catch {
-            special.push(
-              `cross-origin/inaccessible iframe: ${elementDescriptor(element)}`
-            )
-          }
-        }
-      }
-    }
-
-    inspectRoot(
-      root,
-      'light DOM'
-    )
-
-    return {
-      candidates,
-      special,
-      visited,
-    }
-  }
-
-  function inspectLatestMessageFont() {
-    const messages =
-      Array.from(
-        document.querySelectorAll(
-          MESSAGE_SELECTOR
-        )
-      )
-
-    const message =
-      messages[messages.length - 1]
-
-    if (!message) {
-      return {
-        ok: false,
-        text:
-          'No rendered MessageContent element was found.',
-      }
-    }
-
-    const messageStyle =
-      getComputedStyle(message)
-
-    const deep =
-      collectDeepFontCandidates(
-        message
-      )
-
-    const lines = [
-      'Bionic deep font diagnostic v0.41',
-      '',
-      `Latest MessageContent: ${elementDescriptor(message)}`,
-      `Message computed font: ${messageStyle.fontFamily}`,
-      `Message textContent length: ${(message.textContent || '').length}`,
-      `Descendant element count: ${message.querySelectorAll('*').length}`,
-      `Elements visited deeply: ${deep.visited}`,
-      '',
-      'Special rendering discovered:',
-      ...(deep.special.length
-        ? deep.special.map(
-            item => `- ${item}`
-          )
-        : ['- none detected']),
-      '',
-      'Deep visible/text/font candidates:',
-    ]
-
-    if (!deep.candidates.length) {
-      lines.push(
-        '- No visible text-bearing/custom/shadow/iframe candidates found.'
-      )
-    }
-
-    deep.candidates.forEach(
-      (item, index) => {
-        lines.push(
-          '',
-          `[${index + 1}] ${item.context}`,
-          `Element: ${item.descriptor}`,
-          `Own text: ${item.text || '(none)'}`,
-          `Computed font: ${item.fontFamily}`,
-          `Font size/weight: ${item.fontSize} / ${item.fontWeight}`,
-          `Display/visibility: ${item.display} / ${item.visibility}`,
-          `Inline font: ${
-            item.inlineFont || '(none)'
-          }${
-            item.inlinePriority
-              ? ` !${item.inlinePriority}`
-              : ''
-          }`,
-          `::before content: ${item.before || '(none)'}`,
-          `::after content: ${item.after || '(none)'}`,
-        )
-      }
-    )
-
-    const report =
-      lines.join('\n')
-
-    console.info(
-      '[Bionic deep font diagnostic]',
-      {
-        message,
-        deep,
-        report,
-      }
-    )
-
-    return {
-      ok: true,
-      text: report,
-    }
-  }
 
 
   function processMessage(root) {
@@ -2247,30 +1913,94 @@ export function setup(ctx) {
   const AUTO_REGENERATE_WRAPPER_ATTR =
     'data-lumibionic-auto-regenerate-wrapper'
 
-  function syncAutoRegenerateToolbarButton(button) {
+  function autoRegenerateUiState() {
+    const trigger =
+      settings.autoRegenerateTriggerText
+        .trim()
+
+    if (!trigger) {
+      return {
+        key: 'not-configured',
+        label: 'NOT CONFIGURED',
+        enabled: false,
+      }
+    }
+
+    if (!settings.autoRegenerateEnabled) {
+      return {
+        key: 'off',
+        label: 'OFF',
+        enabled: false,
+      }
+    }
+
+    return {
+      key: 'armed',
+      label: 'ARMED',
+      enabled: true,
+    }
+  }
+
+  function syncAutoRegenerateStatus() {
+    const state =
+      autoRegenerateUiState()
+
+    if (autoRegenStatus) {
+      autoRegenStatus.textContent =
+        state.label
+      autoRegenStatus.dataset.state =
+        state.key
+      autoRegenStatus.title =
+        state.key === 'armed'
+          ? `Watching for: ${settings.autoRegenerateTriggerText.trim()}`
+          : (
+              state.key === 'not-configured'
+                ? 'Set trigger text before enabling Auto Regenerate.'
+                : 'Auto Regenerate is disabled.'
+            )
+    }
+  }
+
+  function syncAutoRegenerateToolbarButton(
+    button
+  ) {
     if (!button) return
 
-    const enabled =
-      Boolean(settings.autoRegenerateEnabled)
+    const state =
+      autoRegenerateUiState()
 
     button.setAttribute(
       'aria-pressed',
-      String(enabled)
+      String(state.enabled)
     )
-
     button.setAttribute(
       'title',
-      enabled
-        ? 'Auto regenerate: ON'
-        : 'Auto regenerate: OFF'
+      `Auto regenerate: ${state.label}`
     )
-
     button.setAttribute(
       'aria-label',
-      enabled
-        ? 'Auto regenerate on'
-        : 'Auto regenerate off'
+      `Auto regenerate: ${state.label}`
     )
+    button.dataset.state =
+      state.key
+
+    const label =
+      button.querySelector(
+        '[data-lumibionic-auto-regenerate-label]'
+      )
+
+    if (label) {
+      label.textContent =
+        state.key === 'armed'
+          ? '↻A ON'
+          : (
+              state.key === 'not-configured'
+                ? '↻A ?'
+                : '↻A OFF'
+            )
+    }
+
+    syncAutoRegenerateStatus()
   }
 
   function ensureAutoRegenerateToolbarButton() {
@@ -2323,33 +2053,30 @@ export function setup(ctx) {
       button.innerHTML = `
         <span
           aria-hidden="true"
-          style="font-size:14px;font-weight:700;line-height:1"
-        >↻A</span>
+          data-lumibionic-auto-regenerate-label
+          style="font-size:12px;font-weight:700;line-height:1"
+        >↻A OFF</span>
       `
 
       button.addEventListener(
         'click',
         () => {
+          const trigger =
+            settings.autoRegenerateTriggerText
+              .trim()
+
           settings = {
             ...settings,
             autoRegenerateEnabled:
-              !settings.autoRegenerateEnabled,
+              trigger
+                ? !settings.autoRegenerateEnabled
+                : false,
           }
 
           saveSettings()
           syncControls()
           applyToolbarVisibility()
-
-          if (autoRegenStatus) {
-            autoRegenStatus.textContent =
-              settings.autoRegenerateEnabled
-                ? (
-                    settings.autoRegenerateTriggerText.trim()
-                      ? 'Auto regenerate armed.'
-                      : 'Auto regenerate is on, but no trigger text is set.'
-                  )
-                : 'Auto regenerate is off.'
-          }
+          syncAutoRegenerateStatus()
         }
       )
 
@@ -2458,12 +2185,13 @@ export function setup(ctx) {
   function findNativeRegenerateButton() {
     const candidates =
       findToolbarButtons()
-        .filter(button =>
-          !button.hasAttribute(
-            AUTO_REGENERATE_BUTTON_ATTR
-          ) &&
-          toolbarItemForButton(button)?.key ===
-            'regenerate'
+        .filter(
+          button =>
+            !button.hasAttribute(
+              AUTO_REGENERATE_BUTTON_ATTR
+            ) &&
+            toolbarItemForButton(button)?.key ===
+              'regenerate'
         )
 
     return (
@@ -2873,33 +2601,9 @@ export function setup(ctx) {
         </div>
       </div>
 
-      <div class="lumibionic-section">
-        <div class="lumibionic-section-title">
-          Saved settings
-        </div>
-
-        <div class="lumibionic-muted">
-          Changes still preview immediately. Use Save settings to explicitly
-          commit the complete current configuration for future reloads.
-        </div>
-
-        <button
-          type="button"
-          id="lb-save-settings"
-          style="width:100%; margin-top:8px;"
-        >
-          Save settings
-        </button>
-
-        <div
-          class="lumibionic-muted"
-          id="lb-save-settings-status"
-          style="margin-top:6px;"
-        >
-          Loaded saved settings.
-        </div>
-      </div>
-
+      <details class="lumibionic-group" data-lumibionic-group="Reading & Typography" open>
+        <summary>Reading & Typography</summary>
+        <div class="lumibionic-group-body">
       <div class="lumibionic-section">
 
         <div class="lumibionic-section-title">
@@ -3203,7 +2907,12 @@ export function setup(ctx) {
         </div>
 
       </div>
+        </div>
+      </details>
 
+      <details class="lumibionic-group" data-lumibionic-group="FF5 Thinking Fix">
+        <summary>FF5 Thinking Fix</summary>
+        <div class="lumibionic-group-body">
       <div class="lumibionic-section">
 
         <div class="lumibionic-section-title">
@@ -3238,7 +2947,7 @@ export function setup(ctx) {
             <option value="after">Text after the marker</option>
           </select>
           <div class="lumibionic-muted">
-            The marker itself remains visible in the message.
+            The marker itself stays in normal message content.
           </div>
         </div>
 
@@ -3268,7 +2977,12 @@ export function setup(ctx) {
         </div>
 
       </div>
+        </div>
+      </details>
 
+      <details class="lumibionic-group" data-lumibionic-group="Automation">
+        <summary>Automation</summary>
+        <div class="lumibionic-group-body">
       <div class="lumibionic-section">
 
         <div class="lumibionic-section-title">
@@ -3286,32 +3000,38 @@ export function setup(ctx) {
             id="lb-auto-regen-trigger"
             rows="3"
             spellcheck="false"
-            placeholder="Text that should cause an automatic regeneration"
+            placeholder="If a completed AI reply contains this text, regenerate it"
           ></textarea>
           <div class="lumibionic-muted">
-            Case-insensitive substring match against the completed saved assistant reply.
+            Matching is case-insensitive and checks the completed generation text,
+            including replies displayed through LumiRealm.
           </div>
         </div>
 
         <div class="lumibionic-control">
           <div class="lumibionic-row">
-            <label for="lb-auto-regen-max">Maximum automatic retries</label>
+            <label for="lb-auto-regen-max">Maximum retries for the same reply</label>
             <span class="lumibionic-value" id="lb-auto-regen-max-value"></span>
           </div>
           <input id="lb-auto-regen-max" type="range" min="1" max="10" step="1">
         </div>
 
         <div class="lumibionic-muted">
-          The ↻A composer button toggles this automation. It invokes Lumiverse's
-          native Regenerate action and stops at the retry limit.
+          The ↻A chat-toolbar button turns the automation on or off.
+          It uses Lumiverse's native Regenerate action and stops at the retry limit.
         </div>
 
-        <div class="lumibionic-muted" id="lb-auto-regen-status">
-          Auto regenerate is off.
+        <div>
+          <span class="lumibionic-status-pill" id="lb-auto-regen-status">OFF</span>
         </div>
 
       </div>
+        </div>
+      </details>
 
+      <details class="lumibionic-group" data-lumibionic-group="Chat Toolbar">
+        <summary>Chat Toolbar</summary>
+        <div class="lumibionic-group-body">
       <div class="lumibionic-section">
 
         <div class="lumibionic-section-title">
@@ -3357,46 +3077,10 @@ export function setup(ctx) {
         </div>
 
       </div>
-
-      <div class="lumibionic-section">
-        <div class="lumibionic-section-title">
-          LumiRealm font diagnostic
         </div>
+      </details>
 
-        <div class="lumibionic-muted">
-          Use this while the generated reply font looks wrong.
-          It now scans light DOM, open shadow roots, same-origin iframes,
-          custom elements, and pseudo-element content. It does not change styling.
-        </div>
 
-        <button
-          type="button"
-          id="lb-inspect-latest-font"
-        >
-          Deep inspect latest message font
-        </button>
-
-        <textarea
-          id="lb-font-diagnostic-output"
-          readonly
-          spellcheck="false"
-          style="
-            width:100%;
-            min-height:220px;
-            resize:vertical;
-            font-family:monospace;
-            font-size:12px;
-          "
-          placeholder="Diagnostic output will appear here."
-        ></textarea>
-
-        <button
-          type="button"
-          id="lb-copy-font-diagnostic"
-        >
-          Copy diagnostic
-        </button>
-      </div>
 
       <div class="lumibionic-section">
         <div class="lumibionic-control">
@@ -3481,18 +3165,7 @@ export function setup(ctx) {
   const toolbarSpacingValue = $('#lb-toolbar-spacing-value')
   const toolbarGrid = $('#lb-toolbar-grid')
   const toolbarHideAll = $('#lb-toolbar-hide-all')
-  const saveSettingsButton =
-    $('#lb-save-settings')
-  const saveSettingsStatus =
-    $('#lb-save-settings-status')
-
   const toolbarShowAll = $('#lb-toolbar-show-all')
-  const inspectLatestFont =
-    $('#lb-inspect-latest-font')
-  const fontDiagnosticOutput =
-    $('#lb-font-diagnostic-output')
-  const copyFontDiagnostic =
-    $('#lb-copy-font-diagnostic')
 
   if (toolbarGrid) {
     toolbarGrid.replaceChildren()
@@ -3791,6 +3464,7 @@ export function setup(ctx) {
     autoRegenTrigger.value = settings.autoRegenerateTriggerText
     autoRegenMax.value = String(settings.autoRegenerateMaxAttempts)
     autoRegenMaxValue.textContent = String(settings.autoRegenerateMaxAttempts)
+    syncAutoRegenerateStatus()
 
     toolbarSpacing.value = String(settings.toolbarSpacing)
     toolbarSpacingValue.textContent = `${settings.toolbarSpacing}px`
@@ -4007,74 +3681,12 @@ export function setup(ctx) {
     () => setAllToolbarHidden(true)
   )
 
-  saveSettingsButton?.addEventListener(
-    'click',
-    () => {
-      const ok =
-        saveSettings()
-
-      if (saveSettingsStatus) {
-        if (ok) {
-          const now =
-            new Date()
-
-          saveSettingsStatus.textContent =
-            `Saved ✓ ${now.toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit',
-            })}`
-        } else {
-          saveSettingsStatus.textContent =
-            'Save failed — storage write could not be verified.'
-        }
-      }
-    }
-  )
-
   toolbarShowAll?.addEventListener(
     'click',
     () => setAllToolbarHidden(false)
   )
 
-  inspectLatestFont?.addEventListener(
-    'click',
-    () => {
-      const result =
-        inspectLatestMessageFont()
 
-      if (fontDiagnosticOutput) {
-        fontDiagnosticOutput.value =
-          result.text
-      }
-    }
-  )
-
-  copyFontDiagnostic?.addEventListener(
-    'click',
-    async () => {
-      const text =
-        fontDiagnosticOutput?.value || ''
-
-      if (!text) return
-
-      try {
-        await navigator.clipboard.writeText(
-          text
-        )
-
-        copyFontDiagnostic.textContent =
-          'Copied'
-
-        setTimeout(() => {
-          copyFontDiagnostic.textContent =
-            'Copy diagnostic'
-        }, 1200)
-      } catch {
-        fontDiagnosticOutput?.focus()
-        fontDiagnosticOutput?.select()
-      }
-    }
-  )
 
   preset.addEventListener(
     'change',
@@ -4301,8 +3913,8 @@ export function setup(ctx) {
       if (ffThinkStatus) {
         ffThinkStatus.textContent =
           settings.ffThinkReasoningSide === 'after'
-            ? 'FF split: text after the marker goes into reasoning.'
-            : 'FF split: text before the marker goes into reasoning.'
+            ? 'FF split set to move text after the marker into reasoning.'
+            : 'FF split set to move text before the marker into reasoning.'
       }
     }
   )
@@ -4396,6 +4008,7 @@ export function setup(ctx) {
           latestMessageId,
           config: {
             boundaryText: settings.ffThinkBoundaryText,
+        reasoningSide: settings.ffThinkReasoningSide,
             reasoningSide: settings.ffThinkReasoningSide,
           },
         })
@@ -4429,14 +4042,24 @@ export function setup(ctx) {
     }
   )
 
-  const autoRegenAttemptsByChat =
+  const autoRegenAttempts =
     new Map()
 
   let pendingAutoRegenTimer = null
 
-  function triggerMatchesAutoRegenerate(content) {
+  function autoRegenKey(payload) {
+    return [
+      payload?.chatId || 'chat',
+      payload?.messageId || 'message',
+    ].join(':')
+  }
+
+  function triggerMatchesAutoRegen(
+    content
+  ) {
     const trigger =
-      settings.autoRegenerateTriggerText.trim()
+      settings.autoRegenerateTriggerText
+        .trim()
 
     if (!trigger) return false
 
@@ -4447,7 +4070,22 @@ export function setup(ctx) {
       )
   }
 
-  function handleAutoRegenerateCandidate(payload) {
+  function pruneAutoRegenAttempts() {
+    while (
+      autoRegenAttempts.size > 50
+    ) {
+      const firstKey =
+        autoRegenAttempts.keys()
+          .next().value
+
+      if (!firstKey) break
+      autoRegenAttempts.delete(firstKey)
+    }
+  }
+
+  function scheduleAutoRegenerate(
+    payload
+  ) {
     if (
       !settings.autoRegenerateEnabled ||
       payload?.error
@@ -4455,28 +4093,21 @@ export function setup(ctx) {
       return
     }
 
-    const chatId =
-      typeof payload?.chatId === 'string'
-        ? payload.chatId
-        : 'current'
+    const key =
+      autoRegenKey(payload)
 
     if (
-      !triggerMatchesAutoRegenerate(
+      !triggerMatchesAutoRegen(
         payload?.content
       )
     ) {
-      autoRegenAttemptsByChat.delete(chatId)
-
-      if (autoRegenStatus) {
-        autoRegenStatus.textContent =
-          'Latest completed reply did not match the trigger.'
-      }
+      autoRegenAttempts.delete(key)
       return
     }
 
     const current =
       Number(
-        autoRegenAttemptsByChat.get(chatId) || 0
+        autoRegenAttempts.get(key) || 0
       )
 
     const maxAttempts =
@@ -4490,15 +4121,16 @@ export function setup(ctx) {
     if (current >= maxAttempts) {
       if (autoRegenStatus) {
         autoRegenStatus.textContent =
-          `Auto regenerate stopped after ${maxAttempts} retries.`
+          `Auto regenerate stopped after ${maxAttempts} retries for this reply.`
       }
       return
     }
 
-    autoRegenAttemptsByChat.set(
-      chatId,
+    autoRegenAttempts.set(
+      key,
       current + 1
     )
+    pruneAutoRegenAttempts()
 
     if (pendingAutoRegenTimer) {
       clearTimeout(
@@ -4527,7 +4159,7 @@ export function setup(ctx) {
         if (autoRegenStatus) {
           autoRegenStatus.textContent =
             clicked
-              ? `Regeneration ${current + 1}/${maxAttempts} started.`
+              ? `Trigger matched — regeneration ${current + 1}/${maxAttempts} started.`
               : 'Trigger matched, but the native Regenerate button was not found.'
         }
       }, 900)
@@ -4536,56 +4168,60 @@ export function setup(ctx) {
   autoRegenEnabled.addEventListener(
     'change',
     () => {
+      const trigger =
+        autoRegenTrigger.value
+          .trim()
+
       updateSetting(
         'autoRegenerateEnabled',
-        autoRegenEnabled.checked,
+        Boolean(
+          autoRegenEnabled.checked &&
+          trigger
+        ),
         false,
         false
       )
 
-      if (!autoRegenEnabled.checked) {
-        autoRegenAttemptsByChat.clear()
-      }
-
-      if (autoRegenStatus) {
-        autoRegenStatus.textContent =
-          autoRegenEnabled.checked
-            ? (
-                settings.autoRegenerateTriggerText.trim()
-                  ? 'Auto regenerate armed.'
-                  : 'Auto regenerate is on, but no trigger text is set.'
-              )
-            : 'Auto regenerate is off.'
-      }
+      syncAutoRegenerateStatus()
+      applyToolbarVisibility()
     }
   )
 
   autoRegenTrigger.addEventListener(
     'input',
     () => {
+      const value =
+        autoRegenTrigger.value
+
       settings = {
         ...settings,
         autoRegenerateTriggerText:
-          autoRegenTrigger.value,
+          value,
+        ...(
+          value.trim()
+            ? {}
+            : {
+                autoRegenerateEnabled:
+                  false,
+              }
+        ),
       }
 
       saveSettings()
-      autoRegenAttemptsByChat.clear()
+      syncControls()
+      syncAutoRegenerateStatus()
+      applyToolbarVisibility()
     }
   )
 
   autoRegenMax.addEventListener(
     'input',
-    () => {
-      updateSetting(
-        'autoRegenerateMaxAttempts',
-        Number(autoRegenMax.value),
-        false,
-        false
-      )
-
-      autoRegenAttemptsByChat.clear()
-    }
+    () => updateSetting(
+      'autoRegenerateMaxAttempts',
+      Number(autoRegenMax.value),
+      false,
+      false
+    )
   )
 
   toolbarSpacing.addEventListener(
@@ -4764,16 +4400,16 @@ export function setup(ctx) {
     }
   }
 
+  const unsubAutoRegenerate =
+    ctx.events?.on?.(
+      'GENERATION_ENDED',
+      payload => {
+        scheduleAutoRegenerate(payload)
+      }
+    )
+
   const unsubBackendMessage =
     ctx.onBackendMessage(payload => {
-      if (
-        payload?.type ===
-        'auto_regen_generation_ended'
-      ) {
-        handleAutoRegenerateCandidate(payload)
-        return
-      }
-
       if (
         payload?.type ===
         'ken_sleep_message_sent'
@@ -4914,6 +4550,56 @@ export function setup(ctx) {
     }
   )
 
+  const GROUP_STATE_KEY = `${UI_STATE_KEY}:groups`
+
+  let groupState = {}
+  try {
+    groupState = JSON.parse(
+      localStorage.getItem(
+        GROUP_STATE_KEY
+      ) || '{}'
+    )
+  } catch {
+    groupState = {}
+  }
+
+  document
+    .querySelectorAll(
+      '.lumibionic-group'
+    )
+    .forEach(details => {
+      const key =
+        details.getAttribute(
+          'data-lumibionic-group'
+        )
+
+      if (
+        key &&
+        typeof groupState[key] ===
+          'boolean'
+      ) {
+        details.open =
+          groupState[key]
+      }
+
+      details.addEventListener(
+        'toggle',
+        () => {
+          if (!key) return
+          groupState[key] =
+            details.open
+          try {
+            localStorage.setItem(
+              GROUP_STATE_KEY,
+              JSON.stringify(
+                groupState
+              )
+            )
+          } catch {}
+        }
+      )
+    })
+
   applyCssSettings()
   syncControls()
   renderPreview()
@@ -4922,9 +4608,12 @@ export function setup(ctx) {
   return () => {
     observer.disconnect()
     unsubBackendMessage?.()
+    unsubAutoRegenerate?.()
 
     if (pendingAutoRegenTimer) {
-      clearTimeout(pendingAutoRegenTimer)
+      clearTimeout(
+        pendingAutoRegenTimer
+      )
       pendingAutoRegenTimer = null
     }
 

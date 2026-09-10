@@ -252,8 +252,6 @@ async function repairMessage(
         requestId: requestId || null,
         chatId,
         messageId,
-        reasoningSide:
-          split.reasoningSide,
       },
     )
     return
@@ -314,6 +312,8 @@ async function repairMessage(
         requestId: requestId || null,
         chatId,
         messageId,
+        reasoningSide:
+          split.reasoningSide,
       },
     )
 
@@ -483,6 +483,10 @@ try {
         return
       }
 
+      const runtime =
+        runtimeByUser.get(userId)
+
+      if (!runtime?.enabled) return
       if (payload?.error) return
 
       const chatId =
@@ -500,29 +504,6 @@ try {
               ? payload.messageId
               : undefined,
           )
-
-        spindle.sendToFrontend(
-          {
-            type:
-              'auto_regen_generation_ended',
-            chatId,
-            messageId:
-              assistant?.id ||
-              payload?.messageId ||
-              null,
-            content:
-              typeof assistant?.content ===
-                'string'
-                ? assistant.content
-                : '',
-          },
-          userId,
-        )
-
-        const runtime =
-          runtimeByUser.get(userId)
-
-        if (!runtime?.enabled) return
 
         if (!assistant) {
           sendResult(

@@ -5,7 +5,7 @@
   "author": "patatasbravasch-arch",
   "github": "https://github.com/patatasbravasch-arch/bionic",
   "homepage": "https://github.com/patatasbravasch-arch/bionic",
-  "description": "Bionic reading, typography, toolbar controls, FF think fix, LumiRealm compatibility, persistent saved preferences, and configurable auto-regeneration. Auto Regenerate watches completed assistant replies for user-defined trigger text and invokes Lumiverse's native Regenerate action with a retry limit. FF think fix can move either text before or text after the chosen boundary marker into native reasoning.",
+  "description": "Bionic reading, typography, toolbar controls, FF think fix, LumiRealm compatibility, and configurable auto-regeneration. Settings are organized into collapsible groups, Auto Regenerate has one synchronized ARMED/OFF/NOT CONFIGURED state across settings and toolbar, and the diagnostic panel has been removed.",
   "permissions": [
     "generation",
     "chat_mutation",
