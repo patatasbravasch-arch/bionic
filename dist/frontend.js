@@ -1,7 +1,8 @@
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:v0.42'
+  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:settings'
   const LEGACY_SETTINGS_KEYS = [
+    'lumiverse:bionic-style-reading:v0.42',
     'lumiverse:bionic-style-reading:v0.41',
     'lumiverse:bionic-style-reading:v0.40',
     'lumiverse:bionic-style-reading:v0.39',
@@ -38,7 +39,7 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.42'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.44'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -108,10 +109,13 @@ export function setup(ctx) {
     ffThinkFixEnabled: false,
     ffThinkBoundaryText: '[ 🕰️ Time',
     ffThinkReasoningSide: 'before',
+    ffThinkIncludeMarker: false,
 
     autoRegenerateEnabled: false,
     autoRegenerateTriggerText: '',
     autoRegenerateMaxAttempts: 3,
+
+    settingsPersistenceMode: 'account',
 
     toolbarSpacing: 4,
     toolbarHidden: { ...DEFAULT_TOOLBAR_HIDDEN },
@@ -359,6 +363,11 @@ export function setup(ctx) {
             ? saved.ffThinkReasoningSide
             : DEFAULTS.ffThinkReasoningSide,
 
+        ffThinkIncludeMarker:
+          typeof saved.ffThinkIncludeMarker === 'boolean'
+            ? saved.ffThinkIncludeMarker
+            : DEFAULTS.ffThinkIncludeMarker,
+
         autoRegenerateEnabled:
           typeof saved.autoRegenerateEnabled === 'boolean'
             ? saved.autoRegenerateEnabled
@@ -375,6 +384,11 @@ export function setup(ctx) {
           10,
           DEFAULTS.autoRegenerateMaxAttempts
         ),
+
+        settingsPersistenceMode:
+          saved.settingsPersistenceMode === 'browser'
+            ? 'browser'
+            : 'account',
 
         toolbarSpacing: clamp(
           saved.toolbarSpacing,
@@ -397,10 +411,53 @@ export function setup(ctx) {
     }
   }
 
+  let applyingAccountSettings = false
+
   function saveSettings() {
     try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
+      localStorage.setItem(
+        SETTINGS_KEY,
+        JSON.stringify(settings)
+      )
     } catch {}
+
+    if (
+      !applyingAccountSettings &&
+      settings.settingsPersistenceMode === 'account'
+    ) {
+      try {
+        ctx.sendToBackend({
+          type: 'bionic_settings_save',
+          settings,
+        })
+        if (settingsSaveStatus) {
+          settingsSaveStatus.textContent =
+            'Settings storage: saving to your Lumiverse account…'
+        }
+      } catch {
+        if (settingsSaveStatus) {
+          settingsSaveStatus.textContent =
+            'Settings storage: account save failed; browser copy kept.'
+        }
+      }
+    }
+  }
+
+  function requestAccountSettings() {
+    try {
+      ctx.sendToBackend({
+        type: 'bionic_settings_load',
+      })
+      if (settingsSaveStatus) {
+        settingsSaveStatus.textContent =
+          'Settings storage: loading account-saved settings…'
+      }
+    } catch {
+      if (settingsSaveStatus) {
+        settingsSaveStatus.textContent =
+          'Settings storage: backend unavailable; browser copy active.'
+      }
+    }
   }
 
   function graphemes(value) {
@@ -2601,6 +2658,28 @@ export function setup(ctx) {
         </div>
       </div>
 
+      <details class="lumibionic-group" data-lumibionic-group="Settings" open>
+        <summary>Settings</summary>
+        <div class="lumibionic-group-body">
+          <div class="lumibionic-section">
+            <div class="lumibionic-section-title">Saving</div>
+            <div class="lumibionic-control">
+              <label for="lb-settings-persistence">Save mode</label>
+              <select id="lb-settings-persistence">
+                <option value="account">Account-saved (recommended)</option>
+                <option value="browser">This browser only</option>
+              </select>
+              <div class="lumibionic-muted">
+                Account-saved restores your setup after reloads and extension updates.
+              </div>
+            </div>
+            <div class="lumibionic-muted" id="lb-settings-save-status">
+              Settings storage: checking…
+            </div>
+          </div>
+        </div>
+      </details>
+
       <details class="lumibionic-group" data-lumibionic-group="Reading & Typography" open>
         <summary>Reading & Typography</summary>
         <div class="lumibionic-group-body">
@@ -2946,9 +3025,16 @@ export function setup(ctx) {
             <option value="before">Text before the marker</option>
             <option value="after">Text after the marker</option>
           </select>
-          <div class="lumibionic-muted">
-            The marker itself stays in normal message content.
-          </div>
+        </div>
+
+        <label class="lumibionic-check">
+          <input id="lb-ff-include-marker" type="checkbox">
+          <span>Include the marker text in reasoning</span>
+        </label>
+
+        <div class="lumibionic-muted">
+          Off: the marker stays visible in the normal message.
+          On: the marker moves into the reasoning box with the selected side.
         </div>
 
         <div class="lumibionic-toolbar-actions">
@@ -3147,6 +3233,7 @@ export function setup(ctx) {
   const ffThinkFix = $('#lb-ff-think-fix')
   const ffThinkBoundaryText = $('#lb-ff-boundary-text')
   const ffThinkReasoningSide = $('#lb-ff-reasoning-side')
+  const ffThinkIncludeMarker = $('#lb-ff-include-marker')
   const ffThinkRunNow = $('#lb-ff-run-now')
   const ffThinkResetPattern = $('#lb-ff-reset-pattern')
   const ffThinkBackendStatus = $('#lb-ff-backend-status')
@@ -3157,6 +3244,8 @@ export function setup(ctx) {
   const autoRegenMax = $('#lb-auto-regen-max')
   const autoRegenMaxValue = $('#lb-auto-regen-max-value')
   const autoRegenStatus = $('#lb-auto-regen-status')
+  const settingsPersistence = $('#lb-settings-persistence')
+  const settingsSaveStatus = $('#lb-settings-save-status')
 
   const preview = $('#lb-preview')
   const reset = $('#lb-reset')
@@ -3459,11 +3548,13 @@ export function setup(ctx) {
     ffThinkFix.checked = settings.ffThinkFixEnabled
     ffThinkBoundaryText.value = settings.ffThinkBoundaryText
     ffThinkReasoningSide.value = settings.ffThinkReasoningSide
+    ffThinkIncludeMarker.checked = settings.ffThinkIncludeMarker
 
     autoRegenEnabled.checked = settings.autoRegenerateEnabled
     autoRegenTrigger.value = settings.autoRegenerateTriggerText
     autoRegenMax.value = String(settings.autoRegenerateMaxAttempts)
     autoRegenMaxValue.textContent = String(settings.autoRegenerateMaxAttempts)
+    settingsPersistence.value = settings.settingsPersistenceMode
     syncAutoRegenerateStatus()
 
     toolbarSpacing.value = String(settings.toolbarSpacing)
@@ -3854,6 +3945,7 @@ export function setup(ctx) {
       config: {
         boundaryText: settings.ffThinkBoundaryText,
         reasoningSide: settings.ffThinkReasoningSide,
+        includeMarker: settings.ffThinkIncludeMarker,
       },
     })
   }
@@ -3915,6 +4007,28 @@ export function setup(ctx) {
           settings.ffThinkReasoningSide === 'after'
             ? 'FF split set to move text after the marker into reasoning.'
             : 'FF split set to move text before the marker into reasoning.'
+      }
+    }
+  )
+
+  ffThinkIncludeMarker.addEventListener(
+    'change',
+    () => {
+      settings = {
+        ...settings,
+        ffThinkIncludeMarker:
+          ffThinkIncludeMarker.checked,
+      }
+
+      saveSettings()
+      syncControls()
+      syncFFThinkBackendConfig()
+
+      if (ffThinkStatus) {
+        ffThinkStatus.textContent =
+          settings.ffThinkIncludeMarker
+            ? 'FF marker will move into reasoning with the selected side.'
+            : 'FF marker will remain visible in normal message content.'
       }
     }
   )
@@ -4009,7 +4123,9 @@ export function setup(ctx) {
           config: {
             boundaryText: settings.ffThinkBoundaryText,
         reasoningSide: settings.ffThinkReasoningSide,
+        includeMarker: settings.ffThinkIncludeMarker,
             reasoningSide: settings.ffThinkReasoningSide,
+            includeMarker: settings.ffThinkIncludeMarker,
           },
         })
       } catch (error) {
@@ -4164,6 +4280,28 @@ export function setup(ctx) {
         }
       }, 900)
   }
+
+  settingsPersistence.addEventListener(
+    'change',
+    () => {
+      settings = {
+        ...settings,
+        settingsPersistenceMode:
+          settingsPersistence.value === 'browser'
+            ? 'browser'
+            : 'account',
+      }
+      saveSettings()
+      syncControls()
+
+      if (settings.settingsPersistenceMode === 'account') {
+        requestAccountSettings()
+      } else if (settingsSaveStatus) {
+        settingsSaveStatus.textContent =
+          'Settings storage: this browser only.'
+      }
+    }
+  )
 
   autoRegenEnabled.addEventListener(
     'change',
@@ -4412,6 +4550,64 @@ export function setup(ctx) {
     ctx.onBackendMessage(payload => {
       if (
         payload?.type ===
+        'bionic_settings_loaded'
+      ) {
+        const saved = payload?.settings
+
+        if (saved && typeof saved === 'object') {
+          applyingAccountSettings = true
+          try {
+            localStorage.setItem(
+              SETTINGS_KEY,
+              JSON.stringify({
+                ...saved,
+                settingsPersistenceMode:
+                  saved.settingsPersistenceMode === 'browser'
+                    ? 'browser'
+                    : 'account',
+              })
+            )
+            settings = loadSettings()
+            applyCssSettings()
+            syncControls()
+            rebuildAll()
+            renderPreview()
+            syncFFThinkBackendConfig()
+
+            if (settingsSaveStatus) {
+              settingsSaveStatus.textContent =
+                'Settings storage: account settings loaded.'
+            }
+          } finally {
+            applyingAccountSettings = false
+          }
+        } else {
+          if (settings.settingsPersistenceMode === 'account') {
+            saveSettings()
+          }
+          if (settingsSaveStatus) {
+            settingsSaveStatus.textContent =
+              'Settings storage: account save initialized.'
+          }
+        }
+        return
+      }
+
+      if (
+        payload?.type ===
+        'bionic_settings_saved'
+      ) {
+        if (settingsSaveStatus) {
+          settingsSaveStatus.textContent =
+            payload?.ok === false
+              ? 'Settings storage: account save failed; browser copy kept.'
+              : 'Settings storage: saved to your Lumiverse account.'
+        }
+        return
+      }
+
+      if (
+        payload?.type ===
         'ken_sleep_message_sent'
       ) {
         handleKenSleepMessage(
@@ -4480,7 +4676,11 @@ export function setup(ctx) {
             payload.reasoningSide === 'after'
               ? 'post-marker'
               : 'pre-marker'
-          } text into native reasoning.`
+          } text${
+            payload.includeMarker
+              ? ' including the marker'
+              : ''
+          } into native reasoning.`
       } else if (payload.status === 'no_match') {
         ffThinkStatus.textContent =
           `${sourceLabel} FF fix: no matching RP boundary marker in the target reply.`
@@ -4525,6 +4725,13 @@ export function setup(ctx) {
   try {
     ctx.ready?.()
   } catch {}
+
+  if (settings.settingsPersistenceMode === 'account') {
+    requestAccountSettings()
+  } else if (settingsSaveStatus) {
+    settingsSaveStatus.textContent =
+      'Settings storage: this browser only.'
+  }
 
   const observer =
     new MutationObserver(

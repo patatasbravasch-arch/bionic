@@ -1,9 +1,11 @@
-const FF_THINK_FIX_VERSION = '0.42.0';
+const FF_THINK_FIX_VERSION = '0.44.0';
 const DEFAULT_FF_THINK_CONFIG = {
     boundaryText: '[ 🕰️ Time',
     reasoningSide: 'before',
+    includeMarker: false,
 };
 const runtimeByUser = new Map();
+const SETTINGS_STORAGE_PATH = 'settings/bionic-reading-settings.json';
 const inFlight = new Set();
 
 function cleanConfig(raw) {
@@ -14,6 +16,7 @@ function cleanConfig(raw) {
         reasoningSide: raw?.reasoningSide === 'after'
             ? 'after'
             : 'before',
+        includeMarker: raw?.includeMarker === true,
     };
 }
 function existingReasoning(message) {
@@ -33,10 +36,12 @@ function splitMessage(message, rawConfig) {
         return { status: 'no_match' };
     const boundaryEnd = boundaryIndex + config.boundaryText.length;
     const before = content.slice(0, boundaryIndex);
+    const marker = content.slice(boundaryIndex, boundaryEnd);
     const after = content.slice(boundaryEnd);
-    const leaked = (config.reasoningSide === 'after'
-        ? after
-        : before).trim();
+    const leakedRaw = config.reasoningSide === 'after'
+        ? (config.includeMarker ? `${marker}${after}` : after)
+        : (config.includeMarker ? `${before}${marker}` : before);
+    const leaked = leakedRaw.trim();
     if (!leaked) {
         return existingReasoning(message)
             ? { status: 'already_fixed' }
@@ -49,13 +54,14 @@ function splitMessage(message, rawConfig) {
             ? prior
             : `${prior}\n\n${leaked}`;
     const visibleContent = config.reasoningSide === 'after'
-        ? content.slice(0, boundaryEnd)
-        : content.slice(boundaryIndex);
+        ? (config.includeMarker ? before : content.slice(0, boundaryEnd))
+        : (config.includeMarker ? after : content.slice(boundaryIndex));
     return {
         status: 'fixed',
         content: visibleContent,
         reasoning,
         reasoningSide: config.reasoningSide,
+        includeMarker: config.includeMarker,
     };
 }
 function sendResult(userId, source, payload) {
@@ -175,6 +181,7 @@ async function repairMessage(
             chatId,
             messageId,
             reasoningSide: split.reasoningSide,
+            includeMarker: split.includeMarker,
         });
         spindle.log.info(
             `FF think fix (${source}) repaired ${messageId}`
@@ -200,6 +207,43 @@ async function repairMessage(
 }
 
 spindle.onFrontendMessage(async (payload, userId) => {
+    if (payload?.type === 'bionic_settings_load') {
+        try {
+            const saved = await spindle.userStorage.getJson(SETTINGS_STORAGE_PATH, { userId });
+            spindle.sendToFrontend({
+                type: 'bionic_settings_loaded',
+                settings: saved && typeof saved === 'object' ? saved : null,
+            }, userId);
+        }
+        catch {
+            spindle.sendToFrontend({
+                type: 'bionic_settings_loaded',
+                settings: null,
+            }, userId);
+        }
+        return;
+    }
+    if (payload?.type === 'bionic_settings_save') {
+        try {
+            const incoming = payload?.settings;
+            if (!incoming || typeof incoming !== 'object') {
+                throw new Error('Invalid settings payload');
+            }
+            await spindle.userStorage.setJson(SETTINGS_STORAGE_PATH, incoming, { userId });
+            spindle.sendToFrontend({
+                type: 'bionic_settings_saved',
+                ok: true,
+            }, userId);
+        }
+        catch (error) {
+            spindle.log.warn(`Bionic settings save failed: ${error?.message || String(error)}`);
+            spindle.sendToFrontend({
+                type: 'bionic_settings_saved',
+                ok: false,
+            }, userId);
+        }
+        return;
+    }
     if (payload?.type === 'ff_think_fix_health') {
         spindle.sendToFrontend({
             type: 'ff_think_fix_health',

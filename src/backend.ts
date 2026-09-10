@@ -1,10 +1,11 @@
 declare const spindle: import('lumiverse-spindle-types').SpindleAPI
 
-const FF_THINK_FIX_VERSION = '0.42.0'
+const FF_THINK_FIX_VERSION = '0.44.0'
 
 type FFThinkFixConfig = {
   boundaryText: string
   reasoningSide: 'before' | 'after'
+  includeMarker: boolean
 }
 
 type FFThinkRuntimeConfig = {
@@ -17,10 +18,14 @@ type FFThinkFixSource = 'manual' | 'auto'
 const DEFAULT_FF_THINK_CONFIG: FFThinkFixConfig = {
   boundaryText: '[ 🕰️ Time',
   reasoningSide: 'before',
+  includeMarker: false,
 }
 
 const runtimeByUser =
   new Map<string, FFThinkRuntimeConfig>()
+
+const SETTINGS_STORAGE_PATH =
+  'settings/bionic-reading-settings.json'
 
 const inFlight =
   new Set<string>()
@@ -35,6 +40,8 @@ function cleanConfig(raw: any): FFThinkFixConfig {
       raw?.reasoningSide === 'after'
         ? 'after'
         : 'before',
+    includeMarker:
+      raw?.includeMarker === true,
   }
 }
 
@@ -52,6 +59,7 @@ function splitMessage(
   content?: string
   reasoning?: string
   reasoningSide?: 'before' | 'after'
+  includeMarker?: boolean
 } {
   const config = cleanConfig(rawConfig)
 
@@ -78,15 +86,27 @@ function splitMessage(
   const before =
     content.slice(0, boundaryIndex)
 
+  const marker =
+    content.slice(boundaryIndex, boundaryEnd)
+
   const after =
     content.slice(boundaryEnd)
 
+  const leakedRaw =
+    config.reasoningSide === 'after'
+      ? (
+          config.includeMarker
+            ? `${marker}${after}`
+            : after
+        )
+      : (
+          config.includeMarker
+            ? `${before}${marker}`
+            : before
+        )
+
   const leaked =
-    (
-      config.reasoningSide === 'after'
-        ? after
-        : before
-    ).trim()
+    leakedRaw.trim()
 
   if (!leaked) {
     return existingReasoning(message)
@@ -106,8 +126,16 @@ function splitMessage(
 
   const visibleContent =
     config.reasoningSide === 'after'
-      ? content.slice(0, boundaryEnd)
-      : content.slice(boundaryIndex)
+      ? (
+          config.includeMarker
+            ? before
+            : content.slice(0, boundaryEnd)
+        )
+      : (
+          config.includeMarker
+            ? after
+            : content.slice(boundaryIndex)
+        )
 
   return {
     status: 'fixed',
@@ -115,6 +143,8 @@ function splitMessage(
     reasoning,
     reasoningSide:
       config.reasoningSide,
+    includeMarker:
+      config.includeMarker,
   }
 }
 
@@ -314,6 +344,8 @@ async function repairMessage(
         messageId,
         reasoningSide:
           split.reasoningSide,
+        includeMarker:
+          split.includeMarker,
       },
     )
 
@@ -352,6 +384,80 @@ async function repairMessage(
 */
 spindle.onFrontendMessage(
   async (payload: any, userId: string) => {
+    if (
+      payload?.type ===
+      'bionic_settings_load'
+    ) {
+      try {
+        const saved =
+          await spindle.userStorage.getJson(
+            SETTINGS_STORAGE_PATH,
+            { userId },
+          )
+
+        spindle.sendToFrontend(
+          {
+            type: 'bionic_settings_loaded',
+            settings:
+              saved && typeof saved === 'object'
+                ? saved
+                : null,
+          },
+          userId,
+        )
+      } catch {
+        spindle.sendToFrontend(
+          {
+            type: 'bionic_settings_loaded',
+            settings: null,
+          },
+          userId,
+        )
+      }
+      return
+    }
+
+    if (
+      payload?.type ===
+      'bionic_settings_save'
+    ) {
+      try {
+        const incoming = payload?.settings
+
+        if (!incoming || typeof incoming !== 'object') {
+          throw new Error('Invalid settings payload')
+        }
+
+        await spindle.userStorage.setJson(
+          SETTINGS_STORAGE_PATH,
+          incoming,
+          { userId },
+        )
+
+        spindle.sendToFrontend(
+          {
+            type: 'bionic_settings_saved',
+            ok: true,
+          },
+          userId,
+        )
+      } catch (error: any) {
+        spindle.log.warn(
+          `Bionic settings save failed: ${
+            error?.message || String(error)
+          }`,
+        )
+        spindle.sendToFrontend(
+          {
+            type: 'bionic_settings_saved',
+            ok: false,
+          },
+          userId,
+        )
+      }
+      return
+    }
+
     if (
       payload?.type ===
       'ff_think_fix_health'
