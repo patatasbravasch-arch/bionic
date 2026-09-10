@@ -39,7 +39,7 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.44'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.43'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -109,7 +109,6 @@ export function setup(ctx) {
     ffThinkFixEnabled: false,
     ffThinkBoundaryText: '[ 🕰️ Time',
     ffThinkReasoningSide: 'before',
-    ffThinkIncludeMarker: false,
 
     autoRegenerateEnabled: false,
     autoRegenerateTriggerText: '',
@@ -362,11 +361,6 @@ export function setup(ctx) {
           ['before', 'after'].includes(saved.ffThinkReasoningSide)
             ? saved.ffThinkReasoningSide
             : DEFAULTS.ffThinkReasoningSide,
-
-        ffThinkIncludeMarker:
-          typeof saved.ffThinkIncludeMarker === 'boolean'
-            ? saved.ffThinkIncludeMarker
-            : DEFAULTS.ffThinkIncludeMarker,
 
         autoRegenerateEnabled:
           typeof saved.autoRegenerateEnabled === 'boolean'
@@ -3025,16 +3019,9 @@ export function setup(ctx) {
             <option value="before">Text before the marker</option>
             <option value="after">Text after the marker</option>
           </select>
-        </div>
-
-        <label class="lumibionic-check">
-          <input id="lb-ff-include-marker" type="checkbox">
-          <span>Include the marker text in reasoning</span>
-        </label>
-
-        <div class="lumibionic-muted">
-          Off: the marker stays visible in the normal message.
-          On: the marker moves into the reasoning box with the selected side.
+          <div class="lumibionic-muted">
+            The marker itself stays in normal message content.
+          </div>
         </div>
 
         <div class="lumibionic-toolbar-actions">
@@ -3233,7 +3220,6 @@ export function setup(ctx) {
   const ffThinkFix = $('#lb-ff-think-fix')
   const ffThinkBoundaryText = $('#lb-ff-boundary-text')
   const ffThinkReasoningSide = $('#lb-ff-reasoning-side')
-  const ffThinkIncludeMarker = $('#lb-ff-include-marker')
   const ffThinkRunNow = $('#lb-ff-run-now')
   const ffThinkResetPattern = $('#lb-ff-reset-pattern')
   const ffThinkBackendStatus = $('#lb-ff-backend-status')
@@ -3548,7 +3534,6 @@ export function setup(ctx) {
     ffThinkFix.checked = settings.ffThinkFixEnabled
     ffThinkBoundaryText.value = settings.ffThinkBoundaryText
     ffThinkReasoningSide.value = settings.ffThinkReasoningSide
-    ffThinkIncludeMarker.checked = settings.ffThinkIncludeMarker
 
     autoRegenEnabled.checked = settings.autoRegenerateEnabled
     autoRegenTrigger.value = settings.autoRegenerateTriggerText
@@ -3945,7 +3930,6 @@ export function setup(ctx) {
       config: {
         boundaryText: settings.ffThinkBoundaryText,
         reasoningSide: settings.ffThinkReasoningSide,
-        includeMarker: settings.ffThinkIncludeMarker,
       },
     })
   }
@@ -4007,28 +3991,6 @@ export function setup(ctx) {
           settings.ffThinkReasoningSide === 'after'
             ? 'FF split set to move text after the marker into reasoning.'
             : 'FF split set to move text before the marker into reasoning.'
-      }
-    }
-  )
-
-  ffThinkIncludeMarker.addEventListener(
-    'change',
-    () => {
-      settings = {
-        ...settings,
-        ffThinkIncludeMarker:
-          ffThinkIncludeMarker.checked,
-      }
-
-      saveSettings()
-      syncControls()
-      syncFFThinkBackendConfig()
-
-      if (ffThinkStatus) {
-        ffThinkStatus.textContent =
-          settings.ffThinkIncludeMarker
-            ? 'FF marker will move into reasoning with the selected side.'
-            : 'FF marker will remain visible in normal message content.'
       }
     }
   )
@@ -4123,9 +4085,7 @@ export function setup(ctx) {
           config: {
             boundaryText: settings.ffThinkBoundaryText,
         reasoningSide: settings.ffThinkReasoningSide,
-        includeMarker: settings.ffThinkIncludeMarker,
             reasoningSide: settings.ffThinkReasoningSide,
-            includeMarker: settings.ffThinkIncludeMarker,
           },
         })
       } catch (error) {
@@ -4676,11 +4636,7 @@ export function setup(ctx) {
             payload.reasoningSide === 'after'
               ? 'post-marker'
               : 'pre-marker'
-          } text${
-            payload.includeMarker
-              ? ' including the marker'
-              : ''
-          } into native reasoning.`
+          } text into native reasoning.`
       } else if (payload.status === 'no_match') {
         ffThinkStatus.textContent =
           `${sourceLabel} FF fix: no matching RP boundary marker in the target reply.`

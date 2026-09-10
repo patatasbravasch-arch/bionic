@@ -1,11 +1,11 @@
 {
-  "version": "0.44.0",
+  "version": "0.43.0",
   "name": "Bionic Reading & Fonts",
   "identifier": "bionic_style_reading",
   "author": "patatasbravasch-arch",
   "github": "https://github.com/patatasbravasch-arch/bionic",
   "homepage": "https://github.com/patatasbravasch-arch/bionic",
-  "description": "Bionic reading, typography, toolbar controls, FF think fix, LumiRealm compatibility, configurable auto-regeneration, and persistent settings. FF think fix can move text before or after the chosen marker into native reasoning, with an independent option to include or exclude the marker itself.",
+  "description": "Bionic reading, typography, toolbar controls, FF think fix, LumiRealm compatibility, configurable auto-regeneration, and persistent settings. A stable browser key plus optional Lumiverse account storage keeps preferences across reloads and extension updates.",
   "permissions": [
     "generation",
     "chat_mutation",

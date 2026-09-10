@@ -1,11 +1,10 @@
 declare const spindle: import('lumiverse-spindle-types').SpindleAPI
 
-const FF_THINK_FIX_VERSION = '0.44.0'
+const FF_THINK_FIX_VERSION = '0.43.0'
 
 type FFThinkFixConfig = {
   boundaryText: string
   reasoningSide: 'before' | 'after'
-  includeMarker: boolean
 }
 
 type FFThinkRuntimeConfig = {
@@ -18,7 +17,6 @@ type FFThinkFixSource = 'manual' | 'auto'
 const DEFAULT_FF_THINK_CONFIG: FFThinkFixConfig = {
   boundaryText: '[ 🕰️ Time',
   reasoningSide: 'before',
-  includeMarker: false,
 }
 
 const runtimeByUser =
@@ -40,8 +38,6 @@ function cleanConfig(raw: any): FFThinkFixConfig {
       raw?.reasoningSide === 'after'
         ? 'after'
         : 'before',
-    includeMarker:
-      raw?.includeMarker === true,
   }
 }
 
@@ -59,7 +55,6 @@ function splitMessage(
   content?: string
   reasoning?: string
   reasoningSide?: 'before' | 'after'
-  includeMarker?: boolean
 } {
   const config = cleanConfig(rawConfig)
 
@@ -86,27 +81,15 @@ function splitMessage(
   const before =
     content.slice(0, boundaryIndex)
 
-  const marker =
-    content.slice(boundaryIndex, boundaryEnd)
-
   const after =
     content.slice(boundaryEnd)
 
-  const leakedRaw =
-    config.reasoningSide === 'after'
-      ? (
-          config.includeMarker
-            ? `${marker}${after}`
-            : after
-        )
-      : (
-          config.includeMarker
-            ? `${before}${marker}`
-            : before
-        )
-
   const leaked =
-    leakedRaw.trim()
+    (
+      config.reasoningSide === 'after'
+        ? after
+        : before
+    ).trim()
 
   if (!leaked) {
     return existingReasoning(message)
@@ -126,16 +109,8 @@ function splitMessage(
 
   const visibleContent =
     config.reasoningSide === 'after'
-      ? (
-          config.includeMarker
-            ? before
-            : content.slice(0, boundaryEnd)
-        )
-      : (
-          config.includeMarker
-            ? after
-            : content.slice(boundaryIndex)
-        )
+      ? content.slice(0, boundaryEnd)
+      : content.slice(boundaryIndex)
 
   return {
     status: 'fixed',
@@ -143,8 +118,6 @@ function splitMessage(
     reasoning,
     reasoningSide:
       config.reasoningSide,
-    includeMarker:
-      config.includeMarker,
   }
 }
 
@@ -344,8 +317,6 @@ async function repairMessage(
         messageId,
         reasoningSide:
           split.reasoningSide,
-        includeMarker:
-          split.includeMarker,
       },
     )
 
