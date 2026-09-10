@@ -379,4 +379,3 @@ if (false) spindle.on('MESSAGE_SENT', async (payload, userId) => {
 spindle.log.info(
     `Bionic Reading & Fonts FF backend v${FF_THINK_FIX_VERSION} loaded`
 );
-

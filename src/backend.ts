@@ -650,4 +650,3 @@ if (false) spindle.on(
 spindle.log.info(
   `Bionic Reading & Fonts FF backend v${FF_THINK_FIX_VERSION} loaded`,
 )
-
