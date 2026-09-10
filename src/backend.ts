@@ -1,9 +1,10 @@
 declare const spindle: import('lumiverse-spindle-types').SpindleAPI
 
-const FF_THINK_FIX_VERSION = '0.41.0'
+const FF_THINK_FIX_VERSION = '0.42.0'
 
 type FFThinkFixConfig = {
   boundaryText: string
+  reasoningSide: 'before' | 'after'
 }
 
 type FFThinkRuntimeConfig = {
@@ -15,6 +16,7 @@ type FFThinkFixSource = 'manual' | 'auto'
 
 const DEFAULT_FF_THINK_CONFIG: FFThinkFixConfig = {
   boundaryText: '[ 🕰️ Time',
+  reasoningSide: 'before',
 }
 
 const runtimeByUser =
@@ -29,6 +31,10 @@ function cleanConfig(raw: any): FFThinkFixConfig {
       typeof raw?.boundaryText === 'string'
         ? raw.boundaryText.slice(0, 1000)
         : DEFAULT_FF_THINK_CONFIG.boundaryText,
+    reasoningSide:
+      raw?.reasoningSide === 'after'
+        ? 'after'
+        : 'before',
   }
 }
 
@@ -45,6 +51,7 @@ function splitMessage(
   status: 'fixed' | 'no_match' | 'already_fixed'
   content?: string
   reasoning?: string
+  reasoningSide?: 'before' | 'after'
 } {
   const config = cleanConfig(rawConfig)
 
@@ -64,10 +71,24 @@ function splitMessage(
     return { status: 'no_match' }
   }
 
-  const prefix =
+  const boundaryEnd =
+    boundaryIndex +
+    config.boundaryText.length
+
+  const before =
     content.slice(0, boundaryIndex)
 
-  if (!prefix.trim()) {
+  const after =
+    content.slice(boundaryEnd)
+
+  const leaked =
+    (
+      config.reasoningSide === 'after'
+        ? after
+        : before
+    ).trim()
+
+  if (!leaked) {
     return existingReasoning(message)
       ? { status: 'already_fixed' }
       : { status: 'no_match' }
@@ -76,9 +97,6 @@ function splitMessage(
   const prior =
     existingReasoning(message)
 
-  const leaked =
-    prefix.trim()
-
   const reasoning =
     !prior
       ? leaked
@@ -86,10 +104,17 @@ function splitMessage(
         ? prior
         : `${prior}\n\n${leaked}`
 
+  const visibleContent =
+    config.reasoningSide === 'after'
+      ? content.slice(0, boundaryEnd)
+      : content.slice(boundaryIndex)
+
   return {
     status: 'fixed',
-    content: content.slice(boundaryIndex),
+    content: visibleContent,
     reasoning,
+    reasoningSide:
+      config.reasoningSide,
   }
 }
 
@@ -227,6 +252,8 @@ async function repairMessage(
         requestId: requestId || null,
         chatId,
         messageId,
+        reasoningSide:
+          split.reasoningSide,
       },
     )
     return
@@ -456,10 +483,6 @@ try {
         return
       }
 
-      const runtime =
-        runtimeByUser.get(userId)
-
-      if (!runtime?.enabled) return
       if (payload?.error) return
 
       const chatId =
@@ -477,6 +500,29 @@ try {
               ? payload.messageId
               : undefined,
           )
+
+        spindle.sendToFrontend(
+          {
+            type:
+              'auto_regen_generation_ended',
+            chatId,
+            messageId:
+              assistant?.id ||
+              payload?.messageId ||
+              null,
+            content:
+              typeof assistant?.content ===
+                'string'
+                ? assistant.content
+                : '',
+          },
+          userId,
+        )
+
+        const runtime =
+          runtimeByUser.get(userId)
+
+        if (!runtime?.enabled) return
 
         if (!assistant) {
           sendResult(

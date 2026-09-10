@@ -1,11 +1,11 @@
 {
-  "version": "0.41.0",
+  "version": "0.42.0",
   "name": "Bionic Reading & Fonts",
   "identifier": "bionic_style_reading",
   "author": "patatasbravasch-arch",
   "github": "https://github.com/patatasbravasch-arch/bionic",
   "homepage": "https://github.com/patatasbravasch-arch/bionic",
-  "description": "Bionic reading, typography, toolbar controls, FF think fix, LumiRealm compatibility, and persistent saved preferences. Settings now use one stable storage key across extension updates, with an explicit verified Save settings control.",
+  "description": "Bionic reading, typography, toolbar controls, FF think fix, LumiRealm compatibility, persistent saved preferences, and configurable auto-regeneration. Auto Regenerate watches completed assistant replies for user-defined trigger text and invokes Lumiverse's native Regenerate action with a retry limit. FF think fix can move either text before or text after the chosen boundary marker into native reasoning.",
   "permissions": [
     "generation",
     "chat_mutation",

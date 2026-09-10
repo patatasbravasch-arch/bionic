@@ -1,6 +1,7 @@
-const FF_THINK_FIX_VERSION = '0.41.0';
+const FF_THINK_FIX_VERSION = '0.42.0';
 const DEFAULT_FF_THINK_CONFIG = {
     boundaryText: '[ 🕰️ Time',
+    reasoningSide: 'before',
 };
 const runtimeByUser = new Map();
 const inFlight = new Set();
@@ -10,6 +11,9 @@ function cleanConfig(raw) {
         boundaryText: typeof raw?.boundaryText === 'string'
             ? raw.boundaryText.slice(0, 1000)
             : DEFAULT_FF_THINK_CONFIG.boundaryText,
+        reasoningSide: raw?.reasoningSide === 'after'
+            ? 'after'
+            : 'before',
     };
 }
 function existingReasoning(message) {
@@ -27,23 +31,31 @@ function splitMessage(message, rawConfig) {
     const boundaryIndex = content.indexOf(config.boundaryText);
     if (boundaryIndex < 0)
         return { status: 'no_match' };
-    const prefix = content.slice(0, boundaryIndex);
-    if (!prefix.trim()) {
+    const boundaryEnd = boundaryIndex + config.boundaryText.length;
+    const before = content.slice(0, boundaryIndex);
+    const after = content.slice(boundaryEnd);
+    const leaked = (config.reasoningSide === 'after'
+        ? after
+        : before).trim();
+    if (!leaked) {
         return existingReasoning(message)
             ? { status: 'already_fixed' }
             : { status: 'no_match' };
     }
     const prior = existingReasoning(message);
-    const leaked = prefix.trim();
     const reasoning = !prior
         ? leaked
         : prior.includes(leaked)
             ? prior
             : `${prior}\n\n${leaked}`;
+    const visibleContent = config.reasoningSide === 'after'
+        ? content.slice(0, boundaryEnd)
+        : content.slice(boundaryIndex);
     return {
         status: 'fixed',
-        content: content.slice(boundaryIndex),
+        content: visibleContent,
         reasoning,
+        reasoningSide: config.reasoningSide,
     };
 }
 function sendResult(userId, source, payload) {
@@ -131,6 +143,7 @@ async function repairMessage(
             requestId: requestId || null,
             chatId,
             messageId,
+            reasoningSide: split.reasoningSide,
         });
         return;
     }
@@ -260,9 +273,6 @@ try {
     spindle.on('GENERATION_ENDED', async (payload, userId) => {
         if (typeof userId !== 'string' || !userId)
             return;
-        const runtime = runtimeByUser.get(userId);
-        if (!runtime?.enabled)
-            return;
         if (payload?.error)
             return;
         const chatId = typeof payload?.chatId === 'string'
@@ -277,6 +287,17 @@ try {
                     ? payload.messageId
                     : undefined
             );
+            spindle.sendToFrontend({
+                type: 'auto_regen_generation_ended',
+                chatId,
+                messageId: assistant?.id || payload?.messageId || null,
+                content: typeof assistant?.content === 'string'
+                    ? assistant.content
+                    : '',
+            }, userId);
+            const runtime = runtimeByUser.get(userId);
+            if (!runtime?.enabled)
+                return;
             if (!assistant) {
                 sendResult(userId, 'auto', {
                     status: 'no_assistant',

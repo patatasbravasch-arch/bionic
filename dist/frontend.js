@@ -37,12 +37,13 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.41'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.42'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
     { key: 'backHome', label: 'Back to home', title: 'Back to home', className: 'lb-hide-toolbar-back-home' },
     { key: 'latestMessageTop', label: 'Top of latest message', title: 'Top of latest message', className: 'lb-hide-toolbar-latest-message-top' },
+    { key: 'autoRegenerate', label: 'Auto regenerate', title: 'Auto regenerate', className: 'lb-hide-toolbar-auto-regenerate' },
     { key: 'regenerate', label: 'Regenerate', title: 'Regenerate', className: 'lb-hide-toolbar-regenerate' },
     { key: 'continue', label: 'Continue', title: 'Continue', className: 'lb-hide-toolbar-continue' },
     { key: 'oneLiner', label: 'One-liner nudge', title: 'One-liner: Chat history + impersonation nudge only', className: 'lb-hide-toolbar-one-liner' },
@@ -105,6 +106,11 @@ export function setup(ctx) {
 
     ffThinkFixEnabled: false,
     ffThinkBoundaryText: '[ 🕰️ Time',
+    ffThinkReasoningSide: 'before',
+
+    autoRegenerateEnabled: false,
+    autoRegenerateTriggerText: '',
+    autoRegenerateMaxAttempts: 3,
 
     toolbarSpacing: 4,
     toolbarHidden: { ...DEFAULT_TOOLBAR_HIDDEN },
@@ -359,6 +365,28 @@ export function setup(ctx) {
           typeof saved.ffThinkBoundaryText === 'string'
             ? saved.ffThinkBoundaryText
             : DEFAULTS.ffThinkBoundaryText,
+
+        ffThinkReasoningSide:
+          saved.ffThinkReasoningSide === 'after'
+            ? 'after'
+            : 'before',
+
+        autoRegenerateEnabled:
+          typeof saved.autoRegenerateEnabled === 'boolean'
+            ? saved.autoRegenerateEnabled
+            : DEFAULTS.autoRegenerateEnabled,
+
+        autoRegenerateTriggerText:
+          typeof saved.autoRegenerateTriggerText === 'string'
+            ? saved.autoRegenerateTriggerText
+            : DEFAULTS.autoRegenerateTriggerText,
+
+        autoRegenerateMaxAttempts: clamp(
+          saved.autoRegenerateMaxAttempts,
+          1,
+          10,
+          DEFAULTS.autoRegenerateMaxAttempts
+        ),
 
         toolbarSpacing: clamp(
           saved.toolbarSpacing,
@@ -2213,6 +2241,148 @@ export function setup(ctx) {
   }
 
 
+  const AUTO_REGENERATE_BUTTON_ATTR =
+    'data-lumibionic-auto-regenerate'
+
+  const AUTO_REGENERATE_WRAPPER_ATTR =
+    'data-lumibionic-auto-regenerate-wrapper'
+
+  function syncAutoRegenerateToolbarButton(button) {
+    if (!button) return
+
+    const enabled =
+      Boolean(settings.autoRegenerateEnabled)
+
+    button.setAttribute(
+      'aria-pressed',
+      String(enabled)
+    )
+
+    button.setAttribute(
+      'title',
+      enabled
+        ? 'Auto regenerate: ON'
+        : 'Auto regenerate: OFF'
+    )
+
+    button.setAttribute(
+      'aria-label',
+      enabled
+        ? 'Auto regenerate on'
+        : 'Auto regenerate off'
+    )
+  }
+
+  function ensureAutoRegenerateToolbarButton() {
+    const target =
+      getNativeComposerActionBar()
+
+    if (!target) return null
+
+    const {
+      actionBar,
+      chatActionsMount,
+    } = target
+
+    let wrapper =
+      actionBar.querySelector(
+        `[${AUTO_REGENERATE_WRAPPER_ATTR}]`
+      )
+
+    let button =
+      wrapper?.querySelector?.(
+        `[${AUTO_REGENERATE_BUTTON_ATTR}]`
+      ) || null
+
+    if (!wrapper) {
+      wrapper =
+        document.createElement('span')
+
+      wrapper.setAttribute(
+        AUTO_REGENERATE_WRAPPER_ATTR,
+        'true'
+      )
+      wrapper.style.display = 'contents'
+
+      actionBar.insertBefore(
+        wrapper,
+        chatActionsMount
+      )
+    }
+
+    if (!button) {
+      button =
+        document.createElement('button')
+
+      button.type = 'button'
+      button.setAttribute(
+        AUTO_REGENERATE_BUTTON_ATTR,
+        'true'
+      )
+
+      button.innerHTML = `
+        <span
+          aria-hidden="true"
+          style="font-size:14px;font-weight:700;line-height:1"
+        >↻A</span>
+      `
+
+      button.addEventListener(
+        'click',
+        () => {
+          settings = {
+            ...settings,
+            autoRegenerateEnabled:
+              !settings.autoRegenerateEnabled,
+          }
+
+          saveSettings()
+          syncControls()
+          applyToolbarVisibility()
+
+          if (autoRegenStatus) {
+            autoRegenStatus.textContent =
+              settings.autoRegenerateEnabled
+                ? (
+                    settings.autoRegenerateTriggerText.trim()
+                      ? 'Auto regenerate armed.'
+                      : 'Auto regenerate is on, but no trigger text is set.'
+                  )
+                : 'Auto regenerate is off.'
+          }
+        }
+      )
+
+      wrapper.appendChild(button)
+    }
+
+    const nativeButton =
+      Array.from(
+        actionBar.querySelectorAll('button')
+      ).find(
+        candidate =>
+          candidate !== button &&
+          !candidate.hasAttribute(
+            SCROLL_LATEST_BUTTON_ATTR
+          ) &&
+          !candidate.hasAttribute(
+            AUTO_REGENERATE_BUTTON_ATTR
+          )
+      )
+
+    if (
+      nativeButton &&
+      nativeButton.className
+    ) {
+      button.className =
+        nativeButton.className
+    }
+
+    syncAutoRegenerateToolbarButton(button)
+    return button
+  }
+
+
   function toolbarButtonLabel(button) {
     return [
       button.getAttribute('title') || '',
@@ -2284,8 +2454,44 @@ export function setup(ctx) {
     return Array.from(buttons)
   }
 
+
+  function findNativeRegenerateButton() {
+    const candidates =
+      findToolbarButtons()
+        .filter(button =>
+          !button.hasAttribute(
+            AUTO_REGENERATE_BUTTON_ATTR
+          ) &&
+          toolbarItemForButton(button)?.key ===
+            'regenerate'
+        )
+
+    return (
+      candidates.find(
+        button =>
+          !button.disabled &&
+          button.getClientRects().length > 0
+      ) ||
+      candidates.find(
+        button => !button.disabled
+      ) ||
+      null
+    )
+  }
+
+  function clickNativeRegenerate() {
+    const button =
+      findNativeRegenerateButton()
+
+    if (!button) return false
+
+    button.click()
+    return true
+  }
+
   function applyToolbarVisibility() {
     ensureScrollLatestToolbarButton()
+    ensureAutoRegenerateToolbarButton()
 
     let matched = 0
     let hidden = 0
@@ -3006,14 +3212,14 @@ export function setup(ctx) {
 
         <label class="lumibionic-check">
           <input id="lb-ff-think-fix" type="checkbox">
-          <span>Move everything before the RP boundary into native reasoning</span>
+          <span>Move one side of the RP boundary into native reasoning</span>
         </label>
 
         <div class="lumibionic-muted">
           After the AI finishes, the extension edits the saved assistant
-          message using Lumiverse's native reasoning field. Everything before
-          the first boundary marker becomes the collapsible reasoning block;
-          the boundary and the RP after it remain normal message content.
+          message using Lumiverse's native reasoning field. Choose whether the
+          text before or after the first boundary marker becomes the collapsible
+          reasoning block.
         </div>
 
         <div class="lumibionic-control">
@@ -3023,6 +3229,17 @@ export function setup(ctx) {
             type="text"
             spellcheck="false"
           >
+        </div>
+
+        <div class="lumibionic-control">
+          <label for="lb-ff-reasoning-side">Move into native reasoning</label>
+          <select id="lb-ff-reasoning-side">
+            <option value="before">Text before the marker</option>
+            <option value="after">Text after the marker</option>
+          </select>
+          <div class="lumibionic-muted">
+            The marker itself remains visible in the message.
+          </div>
         </div>
 
         <div class="lumibionic-toolbar-actions">
@@ -3048,6 +3265,49 @@ export function setup(ctx) {
 
         <div class="lumibionic-muted" id="lb-ff-think-status">
           Waiting for the next completed AI reply.
+        </div>
+
+      </div>
+
+      <div class="lumibionic-section">
+
+        <div class="lumibionic-section-title">
+          Auto regenerate
+        </div>
+
+        <label class="lumibionic-check">
+          <input id="lb-auto-regen-enabled" type="checkbox">
+          <span>Automatically regenerate matching AI replies</span>
+        </label>
+
+        <div class="lumibionic-control">
+          <label for="lb-auto-regen-trigger">Trigger text</label>
+          <textarea
+            id="lb-auto-regen-trigger"
+            rows="3"
+            spellcheck="false"
+            placeholder="Text that should cause an automatic regeneration"
+          ></textarea>
+          <div class="lumibionic-muted">
+            Case-insensitive substring match against the completed saved assistant reply.
+          </div>
+        </div>
+
+        <div class="lumibionic-control">
+          <div class="lumibionic-row">
+            <label for="lb-auto-regen-max">Maximum automatic retries</label>
+            <span class="lumibionic-value" id="lb-auto-regen-max-value"></span>
+          </div>
+          <input id="lb-auto-regen-max" type="range" min="1" max="10" step="1">
+        </div>
+
+        <div class="lumibionic-muted">
+          The ↻A composer button toggles this automation. It invokes Lumiverse's
+          native Regenerate action and stops at the retry limit.
+        </div>
+
+        <div class="lumibionic-muted" id="lb-auto-regen-status">
+          Auto regenerate is off.
         </div>
 
       </div>
@@ -3202,10 +3462,17 @@ export function setup(ctx) {
 
   const ffThinkFix = $('#lb-ff-think-fix')
   const ffThinkBoundaryText = $('#lb-ff-boundary-text')
+  const ffThinkReasoningSide = $('#lb-ff-reasoning-side')
   const ffThinkRunNow = $('#lb-ff-run-now')
   const ffThinkResetPattern = $('#lb-ff-reset-pattern')
   const ffThinkBackendStatus = $('#lb-ff-backend-status')
   const ffThinkStatus = $('#lb-ff-think-status')
+
+  const autoRegenEnabled = $('#lb-auto-regen-enabled')
+  const autoRegenTrigger = $('#lb-auto-regen-trigger')
+  const autoRegenMax = $('#lb-auto-regen-max')
+  const autoRegenMaxValue = $('#lb-auto-regen-max-value')
+  const autoRegenStatus = $('#lb-auto-regen-status')
 
   const preview = $('#lb-preview')
   const reset = $('#lb-reset')
@@ -3518,6 +3785,12 @@ export function setup(ctx) {
 
     ffThinkFix.checked = settings.ffThinkFixEnabled
     ffThinkBoundaryText.value = settings.ffThinkBoundaryText
+    ffThinkReasoningSide.value = settings.ffThinkReasoningSide
+
+    autoRegenEnabled.checked = settings.autoRegenerateEnabled
+    autoRegenTrigger.value = settings.autoRegenerateTriggerText
+    autoRegenMax.value = String(settings.autoRegenerateMaxAttempts)
+    autoRegenMaxValue.textContent = String(settings.autoRegenerateMaxAttempts)
 
     toolbarSpacing.value = String(settings.toolbarSpacing)
     toolbarSpacingValue.textContent = `${settings.toolbarSpacing}px`
@@ -3612,6 +3885,7 @@ export function setup(ctx) {
   createMobileStepper(wordSpacing, 'wordSpacing', { resetValue: DEFAULTS.wordSpacing })
   createMobileStepper(size, 'textSize', { resetValue: DEFAULTS.textSize })
   createMobileStepper(line, 'lineHeight', { resetValue: DEFAULTS.lineHeight })
+  createMobileStepper(autoRegenMax, 'autoRegenerateMaxAttempts', { resetValue: DEFAULTS.autoRegenerateMaxAttempts })
   createMobileStepper(toolbarSpacing, 'toolbarSpacing', { resetValue: DEFAULTS.toolbarSpacing })
 
   function renderPreview() {
@@ -3967,6 +4241,7 @@ export function setup(ctx) {
       enabled: Boolean(settings.ffThinkFixEnabled),
       config: {
         boundaryText: settings.ffThinkBoundaryText,
+        reasoningSide: settings.ffThinkReasoningSide,
       },
     })
   }
@@ -4004,6 +4279,30 @@ export function setup(ctx) {
           ffThinkFix.checked
             ? 'Enabled — backend auto-fix is armed for the next completed AI reply.'
             : 'Automatic fix disabled. Manual ▶ still works.'
+      }
+    }
+  )
+
+  ffThinkReasoningSide.addEventListener(
+    'change',
+    () => {
+      settings = {
+        ...settings,
+        ffThinkReasoningSide:
+          ffThinkReasoningSide.value === 'after'
+            ? 'after'
+            : 'before',
+      }
+
+      saveSettings()
+      syncControls()
+      syncFFThinkBackendConfig()
+
+      if (ffThinkStatus) {
+        ffThinkStatus.textContent =
+          settings.ffThinkReasoningSide === 'after'
+            ? 'FF split: text after the marker goes into reasoning.'
+            : 'FF split: text before the marker goes into reasoning.'
       }
     }
   )
@@ -4097,6 +4396,7 @@ export function setup(ctx) {
           latestMessageId,
           config: {
             boundaryText: settings.ffThinkBoundaryText,
+            reasoningSide: settings.ffThinkReasoningSide,
           },
         })
       } catch (error) {
@@ -4126,6 +4426,165 @@ export function setup(ctx) {
               'Manual FF fix timed out: the backend did not answer within 9 seconds. If the FF backend bundle line still says checking, the backend worker did not load.'
           }
         }, 9000)
+    }
+  )
+
+  const autoRegenAttemptsByChat =
+    new Map()
+
+  let pendingAutoRegenTimer = null
+
+  function triggerMatchesAutoRegenerate(content) {
+    const trigger =
+      settings.autoRegenerateTriggerText.trim()
+
+    if (!trigger) return false
+
+    return String(content || '')
+      .toLocaleLowerCase()
+      .includes(
+        trigger.toLocaleLowerCase()
+      )
+  }
+
+  function handleAutoRegenerateCandidate(payload) {
+    if (
+      !settings.autoRegenerateEnabled ||
+      payload?.error
+    ) {
+      return
+    }
+
+    const chatId =
+      typeof payload?.chatId === 'string'
+        ? payload.chatId
+        : 'current'
+
+    if (
+      !triggerMatchesAutoRegenerate(
+        payload?.content
+      )
+    ) {
+      autoRegenAttemptsByChat.delete(chatId)
+
+      if (autoRegenStatus) {
+        autoRegenStatus.textContent =
+          'Latest completed reply did not match the trigger.'
+      }
+      return
+    }
+
+    const current =
+      Number(
+        autoRegenAttemptsByChat.get(chatId) || 0
+      )
+
+    const maxAttempts =
+      clamp(
+        settings.autoRegenerateMaxAttempts,
+        1,
+        10,
+        DEFAULTS.autoRegenerateMaxAttempts
+      )
+
+    if (current >= maxAttempts) {
+      if (autoRegenStatus) {
+        autoRegenStatus.textContent =
+          `Auto regenerate stopped after ${maxAttempts} retries.`
+      }
+      return
+    }
+
+    autoRegenAttemptsByChat.set(
+      chatId,
+      current + 1
+    )
+
+    if (pendingAutoRegenTimer) {
+      clearTimeout(
+        pendingAutoRegenTimer
+      )
+    }
+
+    if (autoRegenStatus) {
+      autoRegenStatus.textContent =
+        `Trigger matched — regeneration ${current + 1}/${maxAttempts} queued.`
+    }
+
+    pendingAutoRegenTimer =
+      setTimeout(() => {
+        pendingAutoRegenTimer = null
+
+        if (
+          !settings.autoRegenerateEnabled
+        ) {
+          return
+        }
+
+        const clicked =
+          clickNativeRegenerate()
+
+        if (autoRegenStatus) {
+          autoRegenStatus.textContent =
+            clicked
+              ? `Regeneration ${current + 1}/${maxAttempts} started.`
+              : 'Trigger matched, but the native Regenerate button was not found.'
+        }
+      }, 900)
+  }
+
+  autoRegenEnabled.addEventListener(
+    'change',
+    () => {
+      updateSetting(
+        'autoRegenerateEnabled',
+        autoRegenEnabled.checked,
+        false,
+        false
+      )
+
+      if (!autoRegenEnabled.checked) {
+        autoRegenAttemptsByChat.clear()
+      }
+
+      if (autoRegenStatus) {
+        autoRegenStatus.textContent =
+          autoRegenEnabled.checked
+            ? (
+                settings.autoRegenerateTriggerText.trim()
+                  ? 'Auto regenerate armed.'
+                  : 'Auto regenerate is on, but no trigger text is set.'
+              )
+            : 'Auto regenerate is off.'
+      }
+    }
+  )
+
+  autoRegenTrigger.addEventListener(
+    'input',
+    () => {
+      settings = {
+        ...settings,
+        autoRegenerateTriggerText:
+          autoRegenTrigger.value,
+      }
+
+      saveSettings()
+      autoRegenAttemptsByChat.clear()
+    }
+  )
+
+  autoRegenMax.addEventListener(
+    'input',
+    () => {
+      updateSetting(
+        'autoRegenerateMaxAttempts',
+        Number(autoRegenMax.value),
+        false,
+        false
+      )
+
+      autoRegenAttemptsByChat.clear()
     }
   )
 
@@ -4309,6 +4768,14 @@ export function setup(ctx) {
     ctx.onBackendMessage(payload => {
       if (
         payload?.type ===
+        'auto_regen_generation_ended'
+      ) {
+        handleAutoRegenerateCandidate(payload)
+        return
+      }
+
+      if (
+        payload?.type ===
         'ken_sleep_message_sent'
       ) {
         handleKenSleepMessage(
@@ -4373,7 +4840,11 @@ export function setup(ctx) {
 
       if (payload.status === 'fixed') {
         ffThinkStatus.textContent =
-          `${sourceLabel} FF fix succeeded — moved pre-boundary text into native reasoning.`
+          `${sourceLabel} FF fix succeeded — moved ${
+            payload.reasoningSide === 'after'
+              ? 'post-marker'
+              : 'pre-marker'
+          } text into native reasoning.`
       } else if (payload.status === 'no_match') {
         ffThinkStatus.textContent =
           `${sourceLabel} FF fix: no matching RP boundary marker in the target reply.`
@@ -4452,6 +4923,11 @@ export function setup(ctx) {
     observer.disconnect()
     unsubBackendMessage?.()
 
+    if (pendingAutoRegenTimer) {
+      clearTimeout(pendingAutoRegenTimer)
+      pendingAutoRegenTimer = null
+    }
+
     if (fontCompatSettleTimer) {
       clearTimeout(
         fontCompatSettleTimer
@@ -4488,6 +4964,13 @@ export function setup(ctx) {
         `[${SCROLL_LATEST_BUTTON_ATTR}]`
       )
       .forEach(button => button.remove())
+
+    document
+      .querySelectorAll(
+        `[${AUTO_REGENERATE_WRAPPER_ATTR}], ` +
+        `[${AUTO_REGENERATE_BUTTON_ATTR}]`
+      )
+      .forEach(element => element.remove())
 
     document
       .querySelectorAll('.lumibionic-bubble-scope')
