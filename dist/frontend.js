@@ -1129,7 +1129,7 @@ function setup(ctx) {
     if (inShadowRoot) {
       const hostStyle = getComputedStyle(root.host);
       const hostComputed = numericPx(hostStyle.fontSize);
-      const hostBase = hostComputed === null ? null : hostComputed / sizeScale;
+      const hostBase = hostComputed === null ? null : hostComputed;
       for (const element of targets) {
         if (!(element instanceof Element) || isProtectedFontElement(element)) {
           continue;

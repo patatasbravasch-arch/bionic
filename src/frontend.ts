@@ -1435,10 +1435,11 @@ export function setup(ctx) {
           hostStyle.fontSize
         )
 
+      /* hostComputed is already measured at the temporary 100% baseline. */
       const hostBase =
         hostComputed === null
           ? null
-          : hostComputed / sizeScale
+          : hostComputed
 
       for (const element of targets) {
         if (
