@@ -1281,6 +1281,9 @@ export function setup(ctx) {
   const LUMIREALM_LAYOUT_LOCK_ATTR =
     'data-lumibionic-layout-lock'
 
+  const LUMIREALM_BASE_FONT_SIZE_ATTR =
+    'data-lumibionic-base-font-size'
+
   const LUMIREALM_PROSE_SELECTOR = [
     'p',
     'li',
@@ -1340,11 +1343,30 @@ export function setup(ctx) {
     })
   }
 
+  function numericPx(value) {
+    const parsed =
+      Number.parseFloat(
+        String(value || '')
+      )
+
+    return Number.isFinite(parsed)
+      ? parsed
+      : null
+  }
+
+  function formatPx(value) {
+    return `${Number(value.toFixed(3))}px`
+  }
+
   function applyFontLockToRoot(
     root,
     font
   ) {
     if (!root) return
+
+    const inShadowRoot =
+      typeof ShadowRoot !== 'undefined' &&
+      root instanceof ShadowRoot
 
     const targets =
       new Set()
@@ -1364,10 +1386,11 @@ export function setup(ctx) {
           targets.add(element)
       )
 
-    if (
-      typeof ShadowRoot !== 'undefined' &&
-      root instanceof ShadowRoot
-    ) {
+    if (inShadowRoot) {
+      /*
+        LumiRealm sometimes uses non-semantic containers for visible prose.
+        Include text-bearing nodes inside the shadow root as well.
+      */
       root
         .querySelectorAll?.('*')
         .forEach(element => {
@@ -1382,6 +1405,125 @@ export function setup(ctx) {
     const useFont =
       shouldApplyMessageFontLock()
 
+    const sizeScale =
+      clamp(
+        settings.textSize,
+        80,
+        140,
+        DEFAULTS.textSize
+      ) / 100
+
+    /*
+      Capture every native shadow-DOM font size BEFORE writing scaled sizes.
+      This preserves LumiRealm's own hierarchy instead of giving all text the
+      same MessageContent px value.
+
+      Existing elements keep their baseline in a data attribute so repeated
+      MutationObserver passes cannot compound 109% -> 118.8% -> etc.
+    */
+    const nativeSizes =
+      new Map()
+
+    if (inShadowRoot) {
+      const hostStyle =
+        getComputedStyle(
+          root.host
+        )
+
+      const hostComputed =
+        numericPx(
+          hostStyle.fontSize
+        )
+
+      const hostBase =
+        hostComputed === null
+          ? null
+          : hostComputed / sizeScale
+
+      for (const element of targets) {
+        if (
+          !(element instanceof Element) ||
+          isProtectedFontElement(element)
+        ) {
+          continue
+        }
+
+        let base =
+          numericPx(
+            element.getAttribute(
+              LUMIREALM_BASE_FONT_SIZE_ATTR
+            )
+          )
+
+        if (base === null) {
+          const computed =
+            numericPx(
+              getComputedStyle(
+                element
+              ).fontSize
+            )
+
+          if (computed !== null) {
+            const parent =
+              element.parentElement
+
+            const parentBase =
+              parent
+                ? numericPx(
+                    parent.getAttribute(
+                      LUMIREALM_BASE_FONT_SIZE_ATTR
+                    )
+                  )
+                : null
+
+            const parentComputed =
+              parent
+                ? numericPx(
+                    getComputedStyle(
+                      parent
+                    ).fontSize
+                  )
+                : hostComputed
+
+            /*
+              If this element simply inherits its parent's current size,
+              use the parent's unscaled baseline. This is particularly useful
+              for nodes inserted while LumiRealm is streaming/rendering.
+            */
+            if (
+              parentComputed !== null &&
+              Math.abs(
+                computed -
+                parentComputed
+              ) < 0.02
+            ) {
+              base =
+                parentBase ??
+                hostBase ??
+                computed
+            } else {
+              base = computed
+            }
+          }
+        }
+
+        if (
+          base !== null &&
+          base > 0
+        ) {
+          nativeSizes.set(
+            element,
+            base
+          )
+
+          element.setAttribute(
+            LUMIREALM_BASE_FONT_SIZE_ATTR,
+            String(base)
+          )
+        }
+      }
+    }
+
     for (const element of targets) {
       if (
         !(element instanceof Element) ||
@@ -1391,10 +1533,13 @@ export function setup(ctx) {
       }
 
       /*
-        Keep deep font-family support, but do not force a single font-size
-        onto LumiRealm descendants. That used to flatten its own type scale.
+        Normal light-DOM messages already receive Font reach through the
+        stylesheet. Shadow DOM needs an explicit deep font-family override.
       */
-      if (useFont) {
+      if (
+        inShadowRoot &&
+        useFont
+      ) {
         element.style.setProperty(
           'font-family',
           font,
@@ -1417,49 +1562,76 @@ export function setup(ctx) {
         )
       }
 
-      /*
-        Explicitly carry line spacing through the open shadow root.
-      */
-      element.style.setProperty(
-        'line-height',
-        String(settings.lineHeight),
-        'important'
-      )
-      element.setAttribute(
-        LUMIREALM_LAYOUT_LOCK_ATTR,
-        'true'
-      )
+      if (inShadowRoot) {
+        const nativeSize =
+          nativeSizes.get(
+            element
+          )
 
-      /*
-        Explicitly carry paragraph spacing through the shadow root.
-        0 means "theme default", so remove our inline margins in that case.
-      */
-      if (
-        element.matches?.('p')
-      ) {
         if (
-          settings.paragraphSpacing > 0.001
+          nativeSize !== undefined
         ) {
           element.style.setProperty(
-            'margin-block-start',
-            '0',
+            'font-size',
+            formatPx(
+              nativeSize *
+              sizeScale
+            ),
             'important'
           )
+        }
 
-          element.style.setProperty(
-            'margin-block-end',
-            element.matches(':last-child')
-              ? '0'
-              : `${settings.paragraphSpacing}em`,
-            'important'
-          )
-        } else {
-          element.style.removeProperty(
-            'margin-block-start'
-          )
-          element.style.removeProperty(
-            'margin-block-end'
-          )
+        /*
+          A unitless line-height tracks each element's newly scaled font size.
+        */
+        element.style.setProperty(
+          'line-height',
+          String(
+            settings.lineHeight
+          ),
+          'important'
+        )
+
+        element.setAttribute(
+          LUMIREALM_LAYOUT_LOCK_ATTR,
+          'true'
+        )
+
+        /*
+          Paragraph spacing cannot cross a shadow boundary via the outer
+          MessageContent selector, so mirror it on LumiRealm paragraphs.
+          Zero means "theme default".
+        */
+        if (
+          element.matches?.('p')
+        ) {
+          if (
+            settings.paragraphSpacing >
+            0.001
+          ) {
+            element.style.setProperty(
+              'margin-block-start',
+              '0',
+              'important'
+            )
+
+            element.style.setProperty(
+              'margin-block-end',
+              element.matches(
+                ':last-child'
+              )
+                ? '0'
+                : `${settings.paragraphSpacing}em`,
+              'important'
+            )
+          } else {
+            element.style.removeProperty(
+              'margin-block-start'
+            )
+            element.style.removeProperty(
+              'margin-block-end'
+            )
+          }
         }
       }
     }
@@ -1480,10 +1652,65 @@ export function setup(ctx) {
   function applyLumiRealmFontLock(root) {
     if (!root) return
 
-    applyFontLockToRoot(
-      root,
-      currentFont()
-    )
+    /*
+      Measure LumiRealm at Bionic's 100% baseline before calculating the
+      proportional deep font sizes. This prevents inherited/em text from
+      being scaled twice merely because MessageContent itself is already 109%.
+      The temporary inline value is changed synchronously and restored before
+      the browser can paint.
+    */
+    const messageRoot =
+      root instanceof Element &&
+      root.matches?.(
+        MESSAGE_SELECTOR
+      )
+        ? root
+        : (
+            root instanceof Element
+              ? root.closest?.(
+                  MESSAGE_SELECTOR
+                )
+              : null
+          )
+
+    const oldFontSize =
+      messageRoot?.style.getPropertyValue(
+        'font-size'
+      ) || ''
+
+    const oldFontSizePriority =
+      messageRoot?.style.getPropertyPriority(
+        'font-size'
+      ) || ''
+
+    if (messageRoot) {
+      messageRoot.style.setProperty(
+        'font-size',
+        '100%',
+        'important'
+      )
+    }
+
+    try {
+      applyFontLockToRoot(
+        root,
+        currentFont()
+      )
+    } finally {
+      if (messageRoot) {
+        if (oldFontSize) {
+          messageRoot.style.setProperty(
+            'font-size',
+            oldFontSize,
+            oldFontSizePriority
+          )
+        } else {
+          messageRoot.style.removeProperty(
+            'font-size'
+          )
+        }
+      }
+    }
   }
 
   function clearFontLocksInRoot(root) {
@@ -1492,23 +1719,13 @@ export function setup(ctx) {
     root
       .querySelectorAll?.(
         `[${LUMIREALM_FONT_LOCK_ATTR}], ` +
-        `[${LUMIREALM_LAYOUT_LOCK_ATTR}]`
+        `[${LUMIREALM_LAYOUT_LOCK_ATTR}], ` +
+        `[${LUMIREALM_BASE_FONT_SIZE_ATTR}]`
       )
       .forEach(element => {
-        if (
-          element.hasAttribute(
-            LUMIREALM_FONT_LOCK_ATTR
-          )
-        ) {
-          element.style.removeProperty(
-            'font-family'
-          )
-        }
-
-        /*
-          Older releases used the font-lock attr while forcing deep font-size.
-          Remove it during cleanup so a live upgrade cannot leave stale sizing.
-        */
+        element.style.removeProperty(
+          'font-family'
+        )
         element.style.removeProperty(
           'font-size'
         )
@@ -1527,6 +1744,9 @@ export function setup(ctx) {
         )
         element.removeAttribute(
           LUMIREALM_LAYOUT_LOCK_ATTR
+        )
+        element.removeAttribute(
+          LUMIREALM_BASE_FONT_SIZE_ATTR
         )
       })
 

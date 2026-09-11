@@ -1064,6 +1064,7 @@ function setup(ctx) {
   }
   const LUMIREALM_FONT_LOCK_ATTR = "data-lumibionic-font-lock";
   const LUMIREALM_LAYOUT_LOCK_ATTR = "data-lumibionic-layout-lock";
+  const LUMIREALM_BASE_FONT_SIZE_ATTR = "data-lumibionic-base-font-size";
   const LUMIREALM_PROSE_SELECTOR = [
     "p",
     "li",
@@ -1099,15 +1100,23 @@ function setup(ctx) {
       return node.nodeType === Node.TEXT_NODE && Boolean(node.textContent?.trim());
     });
   }
+  function numericPx(value) {
+    const parsed = Number.parseFloat(String(value || ""));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  function formatPx(value) {
+    return `${Number(value.toFixed(3))}px`;
+  }
   function applyFontLockToRoot(root, font2) {
     if (!root)
       return;
+    const inShadowRoot = typeof ShadowRoot !== "undefined" && root instanceof ShadowRoot;
     const targets = new Set;
     if (root instanceof Element) {
       targets.add(root);
     }
     root.querySelectorAll?.(LUMIREALM_PROSE_SELECTOR).forEach((element) => targets.add(element));
-    if (typeof ShadowRoot !== "undefined" && root instanceof ShadowRoot) {
+    if (inShadowRoot) {
       root.querySelectorAll?.("*").forEach((element) => {
         if (hasOwnVisibleText(element)) {
           targets.add(element);
@@ -1115,26 +1124,62 @@ function setup(ctx) {
       });
     }
     const useFont = shouldApplyMessageFontLock();
+    const sizeScale = clamp(settings.textSize, 80, 140, DEFAULTS.textSize) / 100;
+    const nativeSizes = new Map;
+    if (inShadowRoot) {
+      const hostStyle = getComputedStyle(root.host);
+      const hostComputed = numericPx(hostStyle.fontSize);
+      const hostBase = hostComputed === null ? null : hostComputed / sizeScale;
+      for (const element of targets) {
+        if (!(element instanceof Element) || isProtectedFontElement(element)) {
+          continue;
+        }
+        let base = numericPx(element.getAttribute(LUMIREALM_BASE_FONT_SIZE_ATTR));
+        if (base === null) {
+          const computed = numericPx(getComputedStyle(element).fontSize);
+          if (computed !== null) {
+            const parent = element.parentElement;
+            const parentBase = parent ? numericPx(parent.getAttribute(LUMIREALM_BASE_FONT_SIZE_ATTR)) : null;
+            const parentComputed = parent ? numericPx(getComputedStyle(parent).fontSize) : hostComputed;
+            if (parentComputed !== null && Math.abs(computed - parentComputed) < 0.02) {
+              base = parentBase ?? hostBase ?? computed;
+            } else {
+              base = computed;
+            }
+          }
+        }
+        if (base !== null && base > 0) {
+          nativeSizes.set(element, base);
+          element.setAttribute(LUMIREALM_BASE_FONT_SIZE_ATTR, String(base));
+        }
+      }
+    }
     for (const element of targets) {
       if (!(element instanceof Element) || isProtectedFontElement(element)) {
         continue;
       }
-      if (useFont) {
+      if (inShadowRoot && useFont) {
         element.style.setProperty("font-family", font2, "important");
         element.setAttribute(LUMIREALM_FONT_LOCK_ATTR, "true");
       } else if (element.hasAttribute(LUMIREALM_FONT_LOCK_ATTR)) {
         element.style.removeProperty("font-family");
         element.removeAttribute(LUMIREALM_FONT_LOCK_ATTR);
       }
-      element.style.setProperty("line-height", String(settings.lineHeight), "important");
-      element.setAttribute(LUMIREALM_LAYOUT_LOCK_ATTR, "true");
-      if (element.matches?.("p")) {
-        if (settings.paragraphSpacing > 0.001) {
-          element.style.setProperty("margin-block-start", "0", "important");
-          element.style.setProperty("margin-block-end", element.matches(":last-child") ? "0" : `${settings.paragraphSpacing}em`, "important");
-        } else {
-          element.style.removeProperty("margin-block-start");
-          element.style.removeProperty("margin-block-end");
+      if (inShadowRoot) {
+        const nativeSize = nativeSizes.get(element);
+        if (nativeSize !== undefined) {
+          element.style.setProperty("font-size", formatPx(nativeSize * sizeScale), "important");
+        }
+        element.style.setProperty("line-height", String(settings.lineHeight), "important");
+        element.setAttribute(LUMIREALM_LAYOUT_LOCK_ATTR, "true");
+        if (element.matches?.("p")) {
+          if (settings.paragraphSpacing > 0.001) {
+            element.style.setProperty("margin-block-start", "0", "important");
+            element.style.setProperty("margin-block-end", element.matches(":last-child") ? "0" : `${settings.paragraphSpacing}em`, "important");
+          } else {
+            element.style.removeProperty("margin-block-start");
+            element.style.removeProperty("margin-block-end");
+          }
         }
       }
     }
@@ -1147,21 +1192,36 @@ function setup(ctx) {
   function applyLumiRealmFontLock(root) {
     if (!root)
       return;
-    applyFontLockToRoot(root, currentFont());
+    const messageRoot = root instanceof Element && root.matches?.(MESSAGE_SELECTOR) ? root : root instanceof Element ? root.closest?.(MESSAGE_SELECTOR) : null;
+    const oldFontSize = messageRoot?.style.getPropertyValue("font-size") || "";
+    const oldFontSizePriority = messageRoot?.style.getPropertyPriority("font-size") || "";
+    if (messageRoot) {
+      messageRoot.style.setProperty("font-size", "100%", "important");
+    }
+    try {
+      applyFontLockToRoot(root, currentFont());
+    } finally {
+      if (messageRoot) {
+        if (oldFontSize) {
+          messageRoot.style.setProperty("font-size", oldFontSize, oldFontSizePriority);
+        } else {
+          messageRoot.style.removeProperty("font-size");
+        }
+      }
+    }
   }
   function clearFontLocksInRoot(root) {
     if (!root)
       return;
-    root.querySelectorAll?.(`[${LUMIREALM_FONT_LOCK_ATTR}], ` + `[${LUMIREALM_LAYOUT_LOCK_ATTR}]`).forEach((element) => {
-      if (element.hasAttribute(LUMIREALM_FONT_LOCK_ATTR)) {
-        element.style.removeProperty("font-family");
-      }
+    root.querySelectorAll?.(`[${LUMIREALM_FONT_LOCK_ATTR}], ` + `[${LUMIREALM_LAYOUT_LOCK_ATTR}], ` + `[${LUMIREALM_BASE_FONT_SIZE_ATTR}]`).forEach((element) => {
+      element.style.removeProperty("font-family");
       element.style.removeProperty("font-size");
       element.style.removeProperty("line-height");
       element.style.removeProperty("margin-block-start");
       element.style.removeProperty("margin-block-end");
       element.removeAttribute(LUMIREALM_FONT_LOCK_ATTR);
       element.removeAttribute(LUMIREALM_LAYOUT_LOCK_ATTR);
+      element.removeAttribute(LUMIREALM_BASE_FONT_SIZE_ATTR);
     });
     root.querySelectorAll?.("*").forEach((element) => {
       if (element.shadowRoot) {
