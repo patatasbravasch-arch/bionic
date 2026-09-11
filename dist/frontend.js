@@ -1,518 +1,335 @@
-export function setup(ctx) {
-  const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
-  const SETTINGS_KEY = 'lumiverse:bionic-style-reading:settings'
+// src/frontend.ts
+function setup(ctx) {
+  const MESSAGE_SELECTOR = '[data-component="MessageContent"]';
+  const SETTINGS_KEY = "lumiverse:bionic-style-reading:settings";
   const LEGACY_SETTINGS_KEYS = [
-    'lumiverse:bionic-style-reading:v0.42',
-    'lumiverse:bionic-style-reading:v0.41',
-    'lumiverse:bionic-style-reading:v0.40',
-    'lumiverse:bionic-style-reading:v0.39',
-    'lumiverse:bionic-style-reading:v0.38',
-    'lumiverse:bionic-style-reading:v0.37',
-    'lumiverse:bionic-style-reading:v0.36',
-    'lumiverse:bionic-style-reading:v0.35',
-    'lumiverse:bionic-style-reading:v0.34',
-    'lumiverse:bionic-style-reading:v0.33',
-    'lumiverse:bionic-style-reading:v0.32',
-    'lumiverse:bionic-style-reading:v0.31',
-    'lumiverse:bionic-style-reading:v0.30',
-    'lumiverse:bionic-style-reading:v0.29',
-    'lumiverse:bionic-style-reading:v0.28',
-    'lumiverse:bionic-style-reading:v0.27',
-    'lumiverse:bionic-style-reading:v0.26',
-    'lumiverse:bionic-style-reading:v0.25',
-    'lumiverse:bionic-style-reading:v0.24',
-    'lumiverse:bionic-style-reading:v0.23',
-    'lumiverse:bionic-style-reading:v0.22',
-    'lumiverse:bionic-style-reading:v0.21',
-    'lumiverse:bionic-style-reading:v0.20',
-    'lumiverse:bionic-style-reading:v0.19',
-    'lumiverse:bionic-style-reading:v0.18',
-    'lumiverse:bionic-style-reading:v0.17',
-    'lumiverse:bionic-style-reading:v0.16',
-    'lumiverse:bionic-style-reading:v0.15',
-    'lumiverse:bionic-style-reading:v0.14',
-    'lumiverse:bionic-style-reading:v0.13',
-    'lumiverse:bionic-style-reading:v0.12',
-    'lumiverse:bionic-style-reading:v0.11',
-    'lumiverse:bionic-style-reading:v0.10',
-    'lumiverse:bionic-style-reading:v0.9',
-    'lumiverse:bionic-style-reading:v0.8',
-    'lumiverse:bionic-style-reading:v0.7',
-  ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.44'
-  const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
-
+    "lumiverse:bionic-style-reading:v0.42",
+    "lumiverse:bionic-style-reading:v0.41",
+    "lumiverse:bionic-style-reading:v0.40",
+    "lumiverse:bionic-style-reading:v0.39",
+    "lumiverse:bionic-style-reading:v0.38",
+    "lumiverse:bionic-style-reading:v0.37",
+    "lumiverse:bionic-style-reading:v0.36",
+    "lumiverse:bionic-style-reading:v0.35",
+    "lumiverse:bionic-style-reading:v0.34",
+    "lumiverse:bionic-style-reading:v0.33",
+    "lumiverse:bionic-style-reading:v0.32",
+    "lumiverse:bionic-style-reading:v0.31",
+    "lumiverse:bionic-style-reading:v0.30",
+    "lumiverse:bionic-style-reading:v0.29",
+    "lumiverse:bionic-style-reading:v0.28",
+    "lumiverse:bionic-style-reading:v0.27",
+    "lumiverse:bionic-style-reading:v0.26",
+    "lumiverse:bionic-style-reading:v0.25",
+    "lumiverse:bionic-style-reading:v0.24",
+    "lumiverse:bionic-style-reading:v0.23",
+    "lumiverse:bionic-style-reading:v0.22",
+    "lumiverse:bionic-style-reading:v0.21",
+    "lumiverse:bionic-style-reading:v0.20",
+    "lumiverse:bionic-style-reading:v0.19",
+    "lumiverse:bionic-style-reading:v0.18",
+    "lumiverse:bionic-style-reading:v0.17",
+    "lumiverse:bionic-style-reading:v0.16",
+    "lumiverse:bionic-style-reading:v0.15",
+    "lumiverse:bionic-style-reading:v0.14",
+    "lumiverse:bionic-style-reading:v0.13",
+    "lumiverse:bionic-style-reading:v0.12",
+    "lumiverse:bionic-style-reading:v0.11",
+    "lumiverse:bionic-style-reading:v0.10",
+    "lumiverse:bionic-style-reading:v0.9",
+    "lumiverse:bionic-style-reading:v0.8",
+    "lumiverse:bionic-style-reading:v0.7"
+  ];
+  const UI_STATE_KEY = "lumiverse:bionic-style-ui:v0.44";
+  const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu;
   const TOOLBAR_BUTTONS = [
-    { key: 'backHome', label: 'Back to home', title: 'Back to home', className: 'lb-hide-toolbar-back-home' },
-    { key: 'latestMessageTop', label: 'Top of latest message', title: 'Top of latest message', className: 'lb-hide-toolbar-latest-message-top' },
-    { key: 'autoRegenerate', label: 'Auto regenerate', title: 'Auto regenerate', className: 'lb-hide-toolbar-auto-regenerate' },
-    { key: 'regenerate', label: 'Regenerate', title: 'Regenerate', className: 'lb-hide-toolbar-regenerate' },
-    { key: 'continue', label: 'Continue', title: 'Continue', className: 'lb-hide-toolbar-continue' },
-    { key: 'oneLiner', label: 'One-liner nudge', title: 'One-liner: Chat history + impersonation nudge only', className: 'lb-hide-toolbar-one-liner' },
-    { key: 'persona', label: 'Switch persona', title: 'Switch persona for this chat', className: 'lb-hide-toolbar-persona' },
-    { key: 'connection', label: 'Connection', title: 'Connection:', className: 'lb-hide-toolbar-connection' },
-    { key: 'alternateFields', label: 'Alternate fields', title: 'Alternate fields', className: 'lb-hide-toolbar-alternate-fields' },
-    { key: 'guidedGenerations', label: 'Guided generations', title: 'Guided generations', className: 'lb-hide-toolbar-guided' },
-    { key: 'quickReplies', label: 'Quick replies', title: 'Quick replies', className: 'lb-hide-toolbar-quick-replies' },
-    { key: 'tools', label: 'Tools', title: 'Tools', className: 'lb-hide-toolbar-tools' },
-    { key: 'extras', label: 'Extras', title: 'Extras', className: 'lb-hide-toolbar-extras' },
+    { key: "backHome", label: "Back to home", title: "Back to home", className: "lb-hide-toolbar-back-home" },
+    { key: "latestMessageTop", label: "Top of latest message", title: "Top of latest message", className: "lb-hide-toolbar-latest-message-top" },
+    { key: "autoRegenerate", label: "Auto regenerate", title: "Auto regenerate", className: "lb-hide-toolbar-auto-regenerate" },
+    { key: "regenerate", label: "Regenerate", title: "Regenerate", className: "lb-hide-toolbar-regenerate" },
+    { key: "continue", label: "Continue", title: "Continue", className: "lb-hide-toolbar-continue" },
+    { key: "oneLiner", label: "One-liner nudge", title: "One-liner: Chat history + impersonation nudge only", className: "lb-hide-toolbar-one-liner" },
+    { key: "persona", label: "Switch persona", title: "Switch persona for this chat", className: "lb-hide-toolbar-persona" },
+    { key: "connection", label: "Connection", title: "Connection:", className: "lb-hide-toolbar-connection" },
+    { key: "alternateFields", label: "Alternate fields", title: "Alternate fields", className: "lb-hide-toolbar-alternate-fields" },
+    { key: "guidedGenerations", label: "Guided generations", title: "Guided generations", className: "lb-hide-toolbar-guided" },
+    { key: "quickReplies", label: "Quick replies", title: "Quick replies", className: "lb-hide-toolbar-quick-replies" },
+    { key: "tools", label: "Tools", title: "Tools", className: "lb-hide-toolbar-tools" },
+    { key: "extras", label: "Extras", title: "Extras", className: "lb-hide-toolbar-extras" },
     {
-      key: 'attachments',
-      label: 'Attachments / paperclip',
-      title: 'Attach',
+      key: "attachments",
+      label: "Attachments / paperclip",
+      title: "Attach",
       titles: [
-        'attach',
-        'attachment',
-        'attachments',
-        'attach file',
-        'attach files',
-        'add attachment',
-        'add attachments',
-        'upload file',
-        'upload files'
+        "attach",
+        "attachment",
+        "attachments",
+        "attach file",
+        "attach files",
+        "add attachment",
+        "add attachments",
+        "upload file",
+        "upload files"
       ],
-      className: 'lb-hide-toolbar-attachments'
-    },
-  ]
-
-  const DEFAULT_TOOLBAR_HIDDEN = Object.fromEntries(
-    TOOLBAR_BUTTONS.map(item => [item.key, false])
-  )
-
+      className: "lb-hide-toolbar-attachments"
+    }
+  ];
+  const DEFAULT_TOOLBAR_HIDDEN = Object.fromEntries(TOOLBAR_BUTTONS.map((item) => [item.key, false]));
   const DEFAULTS = {
-    preset: 'custom',
+    preset: "custom",
     bionicEnabled: true,
-    density: 'balanced',
+    density: "balanced",
     fixation: 35,
     weight: 600,
-
     fontEnabled: false,
-    font: 'inherit',
-    customFont: '',
-
+    font: "inherit",
+    customFont: "",
     scopeMessages: true,
     scopeBubble: false,
     scopeComposer: false,
     scopeMenus: false,
     scopeNavigation: false,
     scopeAll: false,
-
     justifyMessages: false,
     hyphenateMessages: false,
-    readingWidth: 'full',
+    readingWidth: "full",
     paragraphSpacing: 0,
     letterSpacing: 0,
     wordSpacing: 0,
     textSize: 100,
     lineHeight: 1.55,
-
     ffThinkFixEnabled: false,
-    ffThinkBoundaryText: '[ 🕰️ Time',
-    ffThinkReasoningSide: 'before',
+    ffThinkBoundaryText: "[ \uD83D\uDD70️ Time",
+    ffThinkReasoningSide: "before",
     ffThinkIncludeMarker: false,
-
     autoRegenerateEnabled: false,
-    autoRegenerateTriggerText: '',
+    autoRegenerateTriggerText: "",
     autoRegenerateMaxAttempts: 3,
-
-    settingsPersistenceMode: 'account',
-
+    settingsPersistenceMode: "account",
     toolbarSpacing: 4,
-    toolbarHidden: { ...DEFAULT_TOOLBAR_HIDDEN },
-  }
-
+    toolbarHidden: { ...DEFAULT_TOOLBAR_HIDDEN }
+  };
   const FONT_OPTIONS = [
-    ['inherit', 'Lumiverse default'],
-    ['system-ui, sans-serif', 'System Sans'],
-    ['Arial, sans-serif', 'Arial'],
-    ['Verdana, sans-serif', 'Verdana'],
-    ['Tahoma, sans-serif', 'Tahoma'],
-    ['"Trebuchet MS", sans-serif', 'Trebuchet MS'],
-    ['Georgia, serif', 'Georgia'],
-    ['"Times New Roman", serif', 'Times New Roman'],
-    ['"Atkinson Hyperlegible", sans-serif', 'Atkinson Hyperlegible'],
-    ['"OpenDyslexic", sans-serif', 'OpenDyslexic'],
-    ['custom', 'Custom font / CSS stack'],
-  ]
-
+    ["inherit", "Lumiverse default"],
+    ["system-ui, sans-serif", "System Sans"],
+    ["Arial, sans-serif", "Arial"],
+    ["Verdana, sans-serif", "Verdana"],
+    ["Tahoma, sans-serif", "Tahoma"],
+    ['"Trebuchet MS", sans-serif', "Trebuchet MS"],
+    ["Georgia, serif", "Georgia"],
+    ['"Times New Roman", serif', "Times New Roman"],
+    ['"Atkinson Hyperlegible", sans-serif', "Atkinson Hyperlegible"],
+    ['"OpenDyslexic", sans-serif', "OpenDyslexic"],
+    ["custom", "Custom font / CSS stack"]
+  ];
   const WIDTH_OPTIONS = [
-    ['full', 'Full width'],
-    ['55ch', '55 characters — narrow'],
-    ['65ch', '65 characters — comfortable'],
-    ['75ch', '75 characters — relaxed'],
-    ['85ch', '85 characters — wide'],
-  ]
-
+    ["full", "Full width"],
+    ["55ch", "55 characters — narrow"],
+    ["65ch", "65 characters — comfortable"],
+    ["75ch", "75 characters — relaxed"],
+    ["85ch", "85 characters — wide"]
+  ];
   const PRESETS = {
     clean: {
       bionicEnabled: false,
       justifyMessages: false,
       hyphenateMessages: false,
-      readingWidth: 'full',
+      readingWidth: "full",
       paragraphSpacing: 0,
       letterSpacing: 0,
       wordSpacing: 0,
       textSize: 100,
-      lineHeight: 1.55,
+      lineHeight: 1.55
     },
     comfortable: {
       bionicEnabled: false,
       justifyMessages: true,
       hyphenateMessages: true,
-      readingWidth: '65ch',
+      readingWidth: "65ch",
       paragraphSpacing: 0.6,
       letterSpacing: 0.01,
       wordSpacing: 0.02,
       textSize: 105,
-      lineHeight: 1.6,
+      lineHeight: 1.6
     },
     mobile: {
       bionicEnabled: false,
       justifyMessages: true,
       hyphenateMessages: true,
-      readingWidth: 'full',
+      readingWidth: "full",
       paragraphSpacing: 0.5,
       letterSpacing: 0.005,
       wordSpacing: 0.01,
       textSize: 105,
-      lineHeight: 1.6,
+      lineHeight: 1.6
     },
     bionicLight: {
       bionicEnabled: true,
-      density: 'light',
+      density: "light",
       fixation: 30,
       weight: 600,
       justifyMessages: true,
       hyphenateMessages: true,
-      readingWidth: '65ch',
+      readingWidth: "65ch",
       paragraphSpacing: 0.5,
       letterSpacing: 0.005,
       wordSpacing: 0.01,
       textSize: 100,
-      lineHeight: 1.6,
-    },
-  }
-
+      lineHeight: 1.6
+    }
+  };
   const BIONIC_SKIP_SELECTOR = [
-    'code',
-    'pre',
-    'kbd',
-    'samp',
-    'button',
-    'textarea',
-    'input',
-    'select',
-    'option',
-    'script',
-    'style',
-    'svg',
-    'math',
-    'strong',
-    'b',
+    "code",
+    "pre",
+    "kbd",
+    "samp",
+    "button",
+    "textarea",
+    "input",
+    "select",
+    "option",
+    "script",
+    "style",
+    "svg",
+    "math",
+    "strong",
+    "b",
     '[contenteditable="true"]',
-    '[data-lumiverse-html-island]',
-    '[data-lumibionic-word]',
-  ].join(',')
-
-  let loadedFontFace = null
-  let loadedFontUrl = null
-  let settings = loadSettings()
-  let scheduled = false
-  let rebuilding = false
-
-  const segmenter =
-    typeof Intl.Segmenter === 'function'
-      ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
-      : null
-
+    "[data-lumiverse-html-island]",
+    "[data-lumibionic-word]"
+  ].join(",");
+  let loadedFontFace = null;
+  let loadedFontUrl = null;
+  let settings = loadSettings();
+  let scheduled = false;
+  let rebuilding = false;
+  const segmenter = typeof Intl.Segmenter === "function" ? new Intl.Segmenter(undefined, { granularity: "grapheme" }) : null;
   function clamp(value, min, max, fallback) {
-    const n = Number(value)
-    return Number.isFinite(n)
-      ? Math.min(max, Math.max(min, n))
-      : fallback
+    const n = Number(value);
+    return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
   }
-
   function loadSettings() {
     try {
-      const raw =
-        localStorage.getItem(SETTINGS_KEY) ||
-        LEGACY_SETTINGS_KEYS
-          .map(key => localStorage.getItem(key))
-          .find(Boolean) ||
-        '{}'
-
-      const saved = JSON.parse(raw)
-
+      const raw = localStorage.getItem(SETTINGS_KEY) || LEGACY_SETTINGS_KEYS.map((key) => localStorage.getItem(key)).find(Boolean) || "{}";
+      const saved = JSON.parse(raw);
       return {
         ...DEFAULTS,
-
-        preset:
-          ['custom', 'clean', 'comfortable', 'mobile', 'bionicLight'].includes(saved.preset)
-            ? saved.preset
-            : 'custom',
-
-        bionicEnabled:
-          typeof saved.bionicEnabled === 'boolean'
-            ? saved.bionicEnabled
-            : DEFAULTS.bionicEnabled,
-
-        density:
-          ['light', 'balanced', 'full'].includes(saved.density)
-            ? saved.density
-            : DEFAULTS.density,
-
+        preset: ["custom", "clean", "comfortable", "mobile", "bionicLight"].includes(saved.preset) ? saved.preset : "custom",
+        bionicEnabled: typeof saved.bionicEnabled === "boolean" ? saved.bionicEnabled : DEFAULTS.bionicEnabled,
+        density: ["light", "balanced", "full"].includes(saved.density) ? saved.density : DEFAULTS.density,
         fixation: clamp(saved.fixation, 20, 70, DEFAULTS.fixation),
         weight: clamp(saved.weight, 500, 900, DEFAULTS.weight),
-
-        fontEnabled:
-          typeof saved.fontEnabled === 'boolean'
-            ? saved.fontEnabled
-            : DEFAULTS.fontEnabled,
-
-        font:
-          typeof saved.font === 'string'
-            ? saved.font
-            : DEFAULTS.font,
-
-        customFont:
-          typeof saved.customFont === 'string'
-            ? saved.customFont
-            : DEFAULTS.customFont,
-
-        scopeMessages:
-          typeof saved.scopeMessages === 'boolean'
-            ? saved.scopeMessages
-            : DEFAULTS.scopeMessages,
-
-        scopeBubble:
-          typeof saved.scopeBubble === 'boolean'
-            ? saved.scopeBubble
-            : DEFAULTS.scopeBubble,
-
-        scopeComposer:
-          typeof saved.scopeComposer === 'boolean'
-            ? saved.scopeComposer
-            : DEFAULTS.scopeComposer,
-
-        scopeMenus:
-          typeof saved.scopeMenus === 'boolean'
-            ? saved.scopeMenus
-            : DEFAULTS.scopeMenus,
-
-        scopeNavigation:
-          typeof saved.scopeNavigation === 'boolean'
-            ? saved.scopeNavigation
-            : DEFAULTS.scopeNavigation,
-
-        scopeAll:
-          typeof saved.scopeAll === 'boolean'
-            ? saved.scopeAll
-            : DEFAULTS.scopeAll,
-
-        justifyMessages:
-          typeof saved.justifyMessages === 'boolean'
-            ? saved.justifyMessages
-            : DEFAULTS.justifyMessages,
-
-        hyphenateMessages:
-          typeof saved.hyphenateMessages === 'boolean'
-            ? saved.hyphenateMessages
-            : DEFAULTS.hyphenateMessages,
-
-        readingWidth:
-          WIDTH_OPTIONS.some(([value]) => value === saved.readingWidth)
-            ? saved.readingWidth
-            : DEFAULTS.readingWidth,
-
-        paragraphSpacing: clamp(
-          saved.paragraphSpacing,
-          0,
-          1.5,
-          DEFAULTS.paragraphSpacing
-        ),
-
-        letterSpacing: clamp(
-          saved.letterSpacing,
-          -0.03,
-          0.12,
-          DEFAULTS.letterSpacing
-        ),
-
-        wordSpacing: clamp(
-          saved.wordSpacing,
-          -0.05,
-          0.3,
-          DEFAULTS.wordSpacing
-        ),
-
+        fontEnabled: typeof saved.fontEnabled === "boolean" ? saved.fontEnabled : DEFAULTS.fontEnabled,
+        font: typeof saved.font === "string" ? saved.font : DEFAULTS.font,
+        customFont: typeof saved.customFont === "string" ? saved.customFont : DEFAULTS.customFont,
+        scopeMessages: typeof saved.scopeMessages === "boolean" ? saved.scopeMessages : DEFAULTS.scopeMessages,
+        scopeBubble: typeof saved.scopeBubble === "boolean" ? saved.scopeBubble : DEFAULTS.scopeBubble,
+        scopeComposer: typeof saved.scopeComposer === "boolean" ? saved.scopeComposer : DEFAULTS.scopeComposer,
+        scopeMenus: typeof saved.scopeMenus === "boolean" ? saved.scopeMenus : DEFAULTS.scopeMenus,
+        scopeNavigation: typeof saved.scopeNavigation === "boolean" ? saved.scopeNavigation : DEFAULTS.scopeNavigation,
+        scopeAll: typeof saved.scopeAll === "boolean" ? saved.scopeAll : DEFAULTS.scopeAll,
+        justifyMessages: typeof saved.justifyMessages === "boolean" ? saved.justifyMessages : DEFAULTS.justifyMessages,
+        hyphenateMessages: typeof saved.hyphenateMessages === "boolean" ? saved.hyphenateMessages : DEFAULTS.hyphenateMessages,
+        readingWidth: WIDTH_OPTIONS.some(([value]) => value === saved.readingWidth) ? saved.readingWidth : DEFAULTS.readingWidth,
+        paragraphSpacing: clamp(saved.paragraphSpacing, 0, 1.5, DEFAULTS.paragraphSpacing),
+        letterSpacing: clamp(saved.letterSpacing, -0.03, 0.12, DEFAULTS.letterSpacing),
+        wordSpacing: clamp(saved.wordSpacing, -0.05, 0.3, DEFAULTS.wordSpacing),
         textSize: clamp(saved.textSize, 80, 140, DEFAULTS.textSize),
         lineHeight: clamp(saved.lineHeight, 1.1, 2.2, DEFAULTS.lineHeight),
-
-        ffThinkFixEnabled:
-          typeof saved.ffThinkFixEnabled === 'boolean'
-            ? saved.ffThinkFixEnabled
-            : DEFAULTS.ffThinkFixEnabled,
-
-        ffThinkBoundaryText:
-          typeof saved.ffThinkBoundaryText === 'string'
-            ? saved.ffThinkBoundaryText
-            : DEFAULTS.ffThinkBoundaryText,
-
-        ffThinkReasoningSide:
-          ['before', 'after'].includes(saved.ffThinkReasoningSide)
-            ? saved.ffThinkReasoningSide
-            : DEFAULTS.ffThinkReasoningSide,
-
-        ffThinkIncludeMarker:
-          typeof saved.ffThinkIncludeMarker === 'boolean'
-            ? saved.ffThinkIncludeMarker
-            : DEFAULTS.ffThinkIncludeMarker,
-
-        autoRegenerateEnabled:
-          typeof saved.autoRegenerateEnabled === 'boolean'
-            ? saved.autoRegenerateEnabled
-            : DEFAULTS.autoRegenerateEnabled,
-
-        autoRegenerateTriggerText:
-          typeof saved.autoRegenerateTriggerText === 'string'
-            ? saved.autoRegenerateTriggerText
-            : DEFAULTS.autoRegenerateTriggerText,
-
-        autoRegenerateMaxAttempts: clamp(
-          saved.autoRegenerateMaxAttempts,
-          1,
-          10,
-          DEFAULTS.autoRegenerateMaxAttempts
-        ),
-
-        settingsPersistenceMode:
-          saved.settingsPersistenceMode === 'browser'
-            ? 'browser'
-            : 'account',
-
-        toolbarSpacing: clamp(
-          saved.toolbarSpacing,
-          0,
-          16,
-          DEFAULTS.toolbarSpacing
-        ),
-
-        toolbarHidden: Object.fromEntries(
-          TOOLBAR_BUTTONS.map(item => [
-            item.key,
-            typeof saved.toolbarHidden?.[item.key] === 'boolean'
-              ? saved.toolbarHidden[item.key]
-              : DEFAULT_TOOLBAR_HIDDEN[item.key],
-          ])
-        ),
-      }
+        ffThinkFixEnabled: typeof saved.ffThinkFixEnabled === "boolean" ? saved.ffThinkFixEnabled : DEFAULTS.ffThinkFixEnabled,
+        ffThinkBoundaryText: typeof saved.ffThinkBoundaryText === "string" ? saved.ffThinkBoundaryText : DEFAULTS.ffThinkBoundaryText,
+        ffThinkReasoningSide: ["before", "after"].includes(saved.ffThinkReasoningSide) ? saved.ffThinkReasoningSide : DEFAULTS.ffThinkReasoningSide,
+        ffThinkIncludeMarker: typeof saved.ffThinkIncludeMarker === "boolean" ? saved.ffThinkIncludeMarker : DEFAULTS.ffThinkIncludeMarker,
+        autoRegenerateEnabled: typeof saved.autoRegenerateEnabled === "boolean" ? saved.autoRegenerateEnabled : DEFAULTS.autoRegenerateEnabled,
+        autoRegenerateTriggerText: typeof saved.autoRegenerateTriggerText === "string" ? saved.autoRegenerateTriggerText : DEFAULTS.autoRegenerateTriggerText,
+        autoRegenerateMaxAttempts: clamp(saved.autoRegenerateMaxAttempts, 1, 10, DEFAULTS.autoRegenerateMaxAttempts),
+        settingsPersistenceMode: saved.settingsPersistenceMode === "browser" ? "browser" : "account",
+        toolbarSpacing: clamp(saved.toolbarSpacing, 0, 16, DEFAULTS.toolbarSpacing),
+        toolbarHidden: Object.fromEntries(TOOLBAR_BUTTONS.map((item) => [
+          item.key,
+          typeof saved.toolbarHidden?.[item.key] === "boolean" ? saved.toolbarHidden[item.key] : DEFAULT_TOOLBAR_HIDDEN[item.key]
+        ]))
+      };
     } catch {
-      return { ...DEFAULTS }
+      return { ...DEFAULTS };
     }
   }
-
-  let applyingAccountSettings = false
-
+  let applyingAccountSettings = false;
   function saveSettings() {
     try {
-      localStorage.setItem(
-        SETTINGS_KEY,
-        JSON.stringify(settings)
-      )
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     } catch {}
-
-    if (
-      !applyingAccountSettings &&
-      settings.settingsPersistenceMode === 'account'
-    ) {
+    if (!applyingAccountSettings && settings.settingsPersistenceMode === "account") {
       try {
         ctx.sendToBackend({
-          type: 'bionic_settings_save',
-          settings,
-        })
+          type: "bionic_settings_save",
+          settings
+        });
         if (settingsSaveStatus) {
-          settingsSaveStatus.textContent =
-            'Settings storage: saving to your Lumiverse account…'
+          settingsSaveStatus.textContent = "Settings storage: saving to your Lumiverse account…";
         }
       } catch {
         if (settingsSaveStatus) {
-          settingsSaveStatus.textContent =
-            'Settings storage: account save failed; browser copy kept.'
+          settingsSaveStatus.textContent = "Settings storage: account save failed; browser copy kept.";
         }
       }
     }
   }
-
   function requestAccountSettings() {
     try {
       ctx.sendToBackend({
-        type: 'bionic_settings_load',
-      })
+        type: "bionic_settings_load"
+      });
       if (settingsSaveStatus) {
-        settingsSaveStatus.textContent =
-          'Settings storage: loading account-saved settings…'
+        settingsSaveStatus.textContent = "Settings storage: loading account-saved settings…";
       }
     } catch {
       if (settingsSaveStatus) {
-        settingsSaveStatus.textContent =
-          'Settings storage: backend unavailable; browser copy active.'
+        settingsSaveStatus.textContent = "Settings storage: backend unavailable; browser copy active.";
       }
     }
   }
-
   function graphemes(value) {
-    if (!segmenter) return Array.from(value)
-
-    return Array.from(
-      segmenter.segment(value),
-      part => part.segment
-    )
+    if (!segmenter)
+      return Array.from(value);
+    return Array.from(segmenter.segment(value), (part) => part.segment);
   }
-
   function currentFont() {
     if (loadedFontFace) {
-      return '"LumibionicCustomFile", sans-serif'
+      return '"LumibionicCustomFile", sans-serif';
     }
-
-    if (settings.font === 'custom') {
-      return settings.customFont.trim() || 'inherit'
+    if (settings.font === "custom") {
+      return settings.customFont.trim() || "inherit";
     }
-
-    return settings.font || 'inherit'
+    return settings.font || "inherit";
   }
-
   function shouldEmphasize(length) {
-    if (settings.density === 'light') return length >= 6
-    if (settings.density === 'balanced') return length >= 4
-    return length >= 2
+    if (settings.density === "light")
+      return length >= 6;
+    if (settings.density === "balanced")
+      return length >= 4;
+    return length >= 2;
   }
-
   function fixationCut(word) {
-    const chars = graphemes(word)
-    const length = chars.length
-
+    const chars = graphemes(word);
+    const length = chars.length;
     if (!shouldEmphasize(length)) {
-      return { chars, cut: 0 }
+      return { chars, cut: 0 };
     }
-
-    let base
-
-    if (length <= 5) base = 1
-    else if (length <= 8) base = 2
-    else if (length <= 11) base = 3
-    else base = 4
-
-    const multiplier = settings.fixation / 35
-    let cut = Math.round(base * multiplier)
-
-    cut = Math.max(
-      1,
-      Math.min(cut, 4, length - 1)
-    )
-
-    return { chars, cut }
+    let base;
+    if (length <= 5)
+      base = 1;
+    else if (length <= 8)
+      base = 2;
+    else if (length <= 11)
+      base = 3;
+    else
+      base = 4;
+    const multiplier = settings.fixation / 35;
+    let cut = Math.round(base * multiplier);
+    cut = Math.max(1, Math.min(cut, 4, length - 1));
+    return { chars, cut };
   }
-
   const removeStyle = ctx.dom.addStyle(`
     /*
      * Font reach is controlled by classes placed on <html>.
@@ -695,8 +512,22 @@ export function setup(ctx) {
       word-spacing: normal !important;
     }
 
+    [data-lumibionic-word] {
+      display: inline !important;
+      line-height: inherit !important;
+      font-size: inherit !important;
+      letter-spacing: inherit !important;
+      word-spacing: inherit !important;
+      vertical-align: baseline !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+
     [data-lumibionic-fix] {
       font-weight: var(--lumibionic-weight, 600) !important;
+      line-height: inherit !important;
+      font-size: inherit !important;
+      vertical-align: baseline !important;
     }
 
     /* Chat toolbar visibility — exact title matches requested by the user. */
@@ -1145,753 +976,353 @@ export function setup(ctx) {
       font-size: 12px;
       opacity: 0.75;
     }
-  `)
-
+  `);
   const tab = ctx.ui.registerDrawerTab({
-    id: 'bionic-reading',
-    title: 'Reading & Fonts',
-    shortName: 'Reading',
-    headerTitle: 'Reading & Fonts',
-    description: 'Bionic reading, font reach, and long-form typography',
+    id: "bionic-reading",
+    title: "Reading & Fonts",
+    shortName: "Reading",
+    headerTitle: "Reading & Fonts",
+    description: "Bionic reading, font reach, and long-form typography",
     keywords: [
-      'bionic',
-      'reading',
-      'font',
-      'typography',
-      'justify',
-      'hyphenation',
-      'spacing',
-      'accessibility',
-    ],
-  })
-
+      "bionic",
+      "reading",
+      "font",
+      "typography",
+      "justify",
+      "hyphenation",
+      "spacing",
+      "accessibility"
+    ]
+  });
   function processTextNode(node) {
-    if (!settings.bionicEnabled) return
-
-    const parent = node.parentElement
-    if (!parent) return
-    if (parent.closest(BIONIC_SKIP_SELECTOR)) return
-
-    const text = node.nodeValue || ''
-    if (!/\p{L}/u.test(text)) return
-
-    const doc = node.ownerDocument
-    const fragment = doc.createDocumentFragment()
-
-    let lastIndex = 0
-    let changed = false
-
+    if (!settings.bionicEnabled)
+      return;
+    const parent = node.parentElement;
+    if (!parent)
+      return;
+    if (parent.closest(BIONIC_SKIP_SELECTOR))
+      return;
+    const text = node.nodeValue || "";
+    if (!/\p{L}/u.test(text))
+      return;
+    const doc = node.ownerDocument;
+    const fragment = doc.createDocumentFragment();
+    let lastIndex = 0;
+    let changed = false;
     for (const match of text.matchAll(WORD_RE)) {
-      const word = match[0]
-      const index = match.index ?? 0
-      const { chars, cut } = fixationCut(word)
-
-      if (!cut) continue
-
+      const word = match[0];
+      const index = match.index ?? 0;
+      const { chars, cut } = fixationCut(word);
+      if (!cut)
+        continue;
       if (index > lastIndex) {
-        fragment.appendChild(
-          doc.createTextNode(text.slice(lastIndex, index))
-        )
+        fragment.appendChild(doc.createTextNode(text.slice(lastIndex, index)));
       }
-
-      const wrapper = doc.createElement('span')
-      wrapper.setAttribute('data-lumibionic-word', '')
-
-      const fix = doc.createElement('span')
-      fix.setAttribute('data-lumibionic-fix', '')
-      fix.textContent = chars.slice(0, cut).join('')
-
-      wrapper.appendChild(fix)
-      wrapper.appendChild(
-        doc.createTextNode(chars.slice(cut).join(''))
-      )
-
-      fragment.appendChild(wrapper)
-
-      lastIndex = index + word.length
-      changed = true
+      const wrapper = doc.createElement("span");
+      wrapper.setAttribute("data-lumibionic-word", "");
+      const fix = doc.createElement("span");
+      fix.setAttribute("data-lumibionic-fix", "");
+      fix.textContent = chars.slice(0, cut).join("");
+      wrapper.appendChild(fix);
+      wrapper.appendChild(doc.createTextNode(chars.slice(cut).join("")));
+      fragment.appendChild(wrapper);
+      lastIndex = index + word.length;
+      changed = true;
     }
-
-    if (!changed) return
-
+    if (!changed)
+      return;
     if (lastIndex < text.length) {
-      fragment.appendChild(
-        doc.createTextNode(text.slice(lastIndex))
-      )
+      fragment.appendChild(doc.createTextNode(text.slice(lastIndex)));
     }
-
-    node.parentNode?.replaceChild(fragment, node)
+    node.parentNode?.replaceChild(fragment, node);
   }
-
   function findMessageShell(content) {
-    let node = content.parentElement
-    let best = node
-
-    for (let depth = 0; node && depth < 5; depth++) {
-      const count = node.querySelectorAll(MESSAGE_SELECTOR).length
-
-      if (count !== 1) break
-
-      best = node
-      node = node.parentElement
+    let node = content.parentElement;
+    let best = node;
+    for (let depth = 0;node && depth < 5; depth++) {
+      const count = node.querySelectorAll(MESSAGE_SELECTOR).length;
+      if (count !== 1)
+        break;
+      best = node;
+      node = node.parentElement;
     }
-
-    return best
+    return best;
   }
-
   function refreshBubbleScopes() {
-    document
-      .querySelectorAll('.lumibionic-bubble-scope')
-      .forEach(el => {
-        el.classList.remove('lumibionic-bubble-scope')
-      })
-
+    document.querySelectorAll(".lumibionic-bubble-scope").forEach((el) => {
+      el.classList.remove("lumibionic-bubble-scope");
+    });
     if (!settings.fontEnabled || !settings.scopeBubble || settings.scopeAll) {
-      return
+      return;
     }
-
-    document
-      .querySelectorAll(MESSAGE_SELECTOR)
-      .forEach(content => {
-        const shell = findMessageShell(content)
-
-        if (shell) {
-          shell.classList.add('lumibionic-bubble-scope')
-        }
-      })
+    document.querySelectorAll(MESSAGE_SELECTOR).forEach((content) => {
+      const shell = findMessageShell(content);
+      if (shell) {
+        shell.classList.add("lumibionic-bubble-scope");
+      }
+    });
   }
-
-  const LUMIREALM_FONT_LOCK_ATTR =
-    'data-lumibionic-font-lock'
-
+  const LUMIREALM_FONT_LOCK_ATTR = "data-lumibionic-font-lock";
+  const LUMIREALM_LAYOUT_LOCK_ATTR = "data-lumibionic-layout-lock";
   const LUMIREALM_PROSE_SELECTOR = [
-    'p',
-    'li',
-    'blockquote',
-    'span',
-    'a',
-    'em',
-    'strong',
-    'b',
-    'i',
-    'u',
-    's',
-    'mark',
-    'small',
-    'h1',
-    'h2',
-    'h3',
-    'h4',
-    'h5',
-    'h6',
-    'dt',
-    'dd',
-    'figcaption',
-  ].join(',')
-
+    "p",
+    "li",
+    "blockquote",
+    "span",
+    "a",
+    "em",
+    "strong",
+    "b",
+    "i",
+    "u",
+    "s",
+    "mark",
+    "small",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "dt",
+    "dd",
+    "figcaption"
+  ].join(",");
   function shouldApplyMessageFontLock() {
-    return (
-      settings.fontEnabled &&
-      (
-        settings.scopeAll ||
-        settings.scopeMessages
-      )
-    )
+    return settings.fontEnabled && (settings.scopeAll || settings.scopeMessages);
   }
-
   function isProtectedFontElement(element) {
-    return Boolean(
-      element.closest(
-        'pre, code, kbd, samp, svg, math, ' +
-        'button, input, textarea, select, option, ' +
-        '[contenteditable="true"]'
-      )
-    )
+    return Boolean(element.closest("pre, code, kbd, samp, svg, math, " + "button, input, textarea, select, option, " + '[contenteditable="true"]'));
   }
-
   function hasOwnVisibleText(element) {
-    return Array.from(
-      element.childNodes
-    ).some(node => {
-      return (
-        node.nodeType ===
-          Node.TEXT_NODE &&
-        Boolean(
-          node.textContent?.trim()
-        )
-      )
-    })
+    return Array.from(element.childNodes).some((node) => {
+      return node.nodeType === Node.TEXT_NODE && Boolean(node.textContent?.trim());
+    });
   }
-
-  function hasOwnVisibleText(element) {
-    return Array.from(
-      element.childNodes
-    ).some(node => {
-      return (
-        node.nodeType ===
-          Node.TEXT_NODE &&
-        Boolean(
-          node.textContent?.trim()
-        )
-      )
-    })
-  }
-
-  function applyFontLockToRoot(
-    root,
-    font,
-    messageSize
-  ) {
-    if (!root) return
-
-    const targets =
-      new Set()
-
-    if (
-      root instanceof Element
-    ) {
-      targets.add(root)
+  function applyFontLockToRoot(root, font2) {
+    if (!root)
+      return;
+    const targets = new Set;
+    if (root instanceof Element) {
+      targets.add(root);
     }
-
-    root
-      .querySelectorAll?.(
-        LUMIREALM_PROSE_SELECTOR
-      )
-      .forEach(
-        element =>
-          targets.add(element)
-      )
-
-    if (
-      typeof ShadowRoot !== 'undefined' &&
-      root instanceof ShadowRoot
-    ) {
-      root
-        .querySelectorAll?.('*')
-        .forEach(element => {
-          if (
-            hasOwnVisibleText(element)
-          ) {
-            targets.add(element)
-          }
-        })
+    root.querySelectorAll?.(LUMIREALM_PROSE_SELECTOR).forEach((element) => targets.add(element));
+    if (typeof ShadowRoot !== "undefined" && root instanceof ShadowRoot) {
+      root.querySelectorAll?.("*").forEach((element) => {
+        if (hasOwnVisibleText(element)) {
+          targets.add(element);
+        }
+      });
     }
-
+    const useFont = shouldApplyMessageFontLock();
     for (const element of targets) {
-      if (
-        element instanceof Element &&
-        isProtectedFontElement(element)
-      ) {
-        continue
+      if (!(element instanceof Element) || isProtectedFontElement(element)) {
+        continue;
       }
-
-      element.style.setProperty(
-        'font-family',
-        font,
-        'important'
-      )
-
-      /*
-        LumiRealm's shadow stylesheet also sets its own text sizes
-        (14px and smaller in the diagnostic). Match the normal Bionic
-        MessageContent size so the same reply does not shrink merely
-        because it crossed into the HTML-island shadow root.
-      */
-      if (messageSize) {
-        element.style.setProperty(
-          'font-size',
-          messageSize,
-          'important'
-        )
+      if (useFont) {
+        element.style.setProperty("font-family", font2, "important");
+        element.setAttribute(LUMIREALM_FONT_LOCK_ATTR, "true");
+      } else if (element.hasAttribute(LUMIREALM_FONT_LOCK_ATTR)) {
+        element.style.removeProperty("font-family");
+        element.removeAttribute(LUMIREALM_FONT_LOCK_ATTR);
       }
-
-      element.setAttribute(
-        LUMIREALM_FONT_LOCK_ATTR,
-        'true'
-      )
-    }
-
-    root
-      .querySelectorAll?.('*')
-      .forEach(element => {
-        if (element.shadowRoot) {
-          applyFontLockToRoot(
-            element.shadowRoot,
-            font,
-            messageSize
-          )
+      element.style.setProperty("line-height", String(settings.lineHeight), "important");
+      element.setAttribute(LUMIREALM_LAYOUT_LOCK_ATTR, "true");
+      if (element.matches?.("p")) {
+        if (settings.paragraphSpacing > 0.001) {
+          element.style.setProperty("margin-block-start", "0", "important");
+          element.style.setProperty("margin-block-end", element.matches(":last-child") ? "0" : `${settings.paragraphSpacing}em`, "important");
+        } else {
+          element.style.removeProperty("margin-block-start");
+          element.style.removeProperty("margin-block-end");
         }
-      })
+      }
+    }
+    root.querySelectorAll?.("*").forEach((element) => {
+      if (element.shadowRoot) {
+        applyFontLockToRoot(element.shadowRoot, font2);
+      }
+    });
   }
-
-
   function applyLumiRealmFontLock(root) {
-    if (
-      !root ||
-      !shouldApplyMessageFontLock()
-    ) {
-      return
-    }
-
-    const messageRoot =
-      root instanceof Element &&
-      root.matches?.(
-        MESSAGE_SELECTOR
-      )
-        ? root
-        : (
-            root instanceof Element
-              ? root.closest?.(
-                  MESSAGE_SELECTOR
-                )
-              : null
-          )
-
-    const messageSize =
-      messageRoot
-        ? getComputedStyle(
-            messageRoot
-          ).fontSize
-        : null
-
-    applyFontLockToRoot(
-      root,
-      currentFont(),
-      messageSize
-    )
+    if (!root)
+      return;
+    applyFontLockToRoot(root, currentFont());
   }
-
   function clearFontLocksInRoot(root) {
-    if (!root) return
-
-    root
-      .querySelectorAll?.(
-        `[${LUMIREALM_FONT_LOCK_ATTR}]`
-      )
-      .forEach(element => {
-        element.style.removeProperty(
-          'font-family'
-        )
-        element.style.removeProperty(
-          'font-size'
-        )
-
-        element.removeAttribute(
-          LUMIREALM_FONT_LOCK_ATTR
-        )
-      })
-
-    root
-      .querySelectorAll?.('*')
-      .forEach(element => {
-        if (element.shadowRoot) {
-          clearFontLocksInRoot(
-            element.shadowRoot
-          )
-        }
-      })
+    if (!root)
+      return;
+    root.querySelectorAll?.(`[${LUMIREALM_FONT_LOCK_ATTR}], ` + `[${LUMIREALM_LAYOUT_LOCK_ATTR}]`).forEach((element) => {
+      if (element.hasAttribute(LUMIREALM_FONT_LOCK_ATTR)) {
+        element.style.removeProperty("font-family");
+      }
+      element.style.removeProperty("font-size");
+      element.style.removeProperty("line-height");
+      element.style.removeProperty("margin-block-start");
+      element.style.removeProperty("margin-block-end");
+      element.removeAttribute(LUMIREALM_FONT_LOCK_ATTR);
+      element.removeAttribute(LUMIREALM_LAYOUT_LOCK_ATTR);
+    });
+    root.querySelectorAll?.("*").forEach((element) => {
+      if (element.shadowRoot) {
+        clearFontLocksInRoot(element.shadowRoot);
+      }
+    });
   }
-
-  function clearLumiRealmFontLock(
-    root = document
-  ) {
-    clearFontLocksInRoot(root)
+  function clearLumiRealmFontLock(root = document) {
+    clearFontLocksInRoot(root);
   }
-
   function elementDescriptor(element) {
     if (!(element instanceof Element)) {
-      return '(not an element)'
+      return "(not an element)";
     }
-
     const parts = [
-      element.tagName.toLowerCase(),
-    ]
-
+      element.tagName.toLowerCase()
+    ];
     if (element.id) {
-      parts.push(`#${element.id}`)
+      parts.push(`#${element.id}`);
     }
-
-    const component =
-      element.getAttribute(
-        'data-component'
-      )
-
+    const component = element.getAttribute("data-component");
     if (component) {
-      parts.push(
-        `[data-component="${component}"]`
-      )
+      parts.push(`[data-component="${component}"]`);
     }
-
-    const messageId =
-      element.getAttribute(
-        'data-message-id'
-      )
-
+    const messageId = element.getAttribute("data-message-id");
     if (messageId) {
-      parts.push(
-        `[data-message-id="${messageId}"]`
-      )
+      parts.push(`[data-message-id="${messageId}"]`);
     }
-
-    const spindleMount =
-      element.getAttribute(
-        'data-spindle-mount'
-      )
-
+    const spindleMount = element.getAttribute("data-spindle-mount");
     if (spindleMount) {
-      parts.push(
-        `[data-spindle-mount="${spindleMount}"]`
-      )
+      parts.push(`[data-spindle-mount="${spindleMount}"]`);
     }
-
     if (element.classList?.length) {
-      parts.push(
-        '.' +
-        Array.from(element.classList)
-          .slice(0, 4)
-          .join('.')
-      )
+      parts.push("." + Array.from(element.classList).slice(0, 4).join("."));
     }
-
-    return parts.join('')
+    return parts.join("");
   }
-
   function firstVisibleTextElement(root) {
     if (!(root instanceof Element)) {
-      return null
+      return null;
     }
-
-    const walker =
-      document.createTreeWalker(
-        root,
-        NodeFilter.SHOW_TEXT
-      )
-
-    let node
-
-    while (
-      (node = walker.nextNode())
-    ) {
-      const text =
-        node.textContent?.trim()
-
-      if (!text) continue
-
-      const parent =
-        node.parentElement
-
-      if (!parent) continue
-
-      if (
-        parent.closest(
-          'script, style, noscript, svg'
-        )
-      ) {
-        continue
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let node;
+    while (node = walker.nextNode()) {
+      const text = node.textContent?.trim();
+      if (!text)
+        continue;
+      const parent = node.parentElement;
+      if (!parent)
+        continue;
+      if (parent.closest("script, style, noscript, svg")) {
+        continue;
       }
-
-      const style =
-        getComputedStyle(parent)
-
-      if (
-        style.display === 'none' ||
-        style.visibility === 'hidden'
-      ) {
-        continue
+      const style = getComputedStyle(parent);
+      if (style.display === "none" || style.visibility === "hidden") {
+        continue;
       }
-
-      return parent
+      return parent;
     }
-
-    return root
+    return root;
   }
-
   function detectSpecialRendering(element) {
-    const notes = []
-
-    const rootNode =
-      element?.getRootNode?.()
-
-    if (
-      typeof ShadowRoot !== 'undefined' &&
-      rootNode instanceof ShadowRoot
-    ) {
-      notes.push(
-        `inside ${rootNode.mode} shadow root`
-      )
+    const notes = [];
+    const rootNode = element?.getRootNode?.();
+    if (typeof ShadowRoot !== "undefined" && rootNode instanceof ShadowRoot) {
+      notes.push(`inside ${rootNode.mode} shadow root`);
     }
-
-    const frame =
-      element?.closest?.('iframe')
-
+    const frame = element?.closest?.("iframe");
     if (frame) {
-      notes.push('inside iframe element')
+      notes.push("inside iframe element");
     }
-
-    return notes
+    return notes;
   }
-
-
-
   function processMessage(root) {
-    root.classList.toggle(
-      'lumibionic-justify',
-      settings.justifyMessages
-    )
-
-    root.classList.toggle(
-      'lumibionic-hyphens',
-      settings.hyphenateMessages
-    )
-
-    root.classList.toggle(
-      'lumibionic-reading-width',
-      settings.readingWidth !== 'full'
-    )
-
-    root.classList.toggle(
-      'lumibionic-paragraph-spacing',
-      settings.paragraphSpacing > 0.001
-    )
-
-    root.classList.toggle(
-      'lumibionic-letter-spacing',
-      Math.abs(settings.letterSpacing) > 0.0001
-    )
-
-    root.classList.toggle(
-      'lumibionic-word-spacing',
-      Math.abs(settings.wordSpacing) > 0.0001
-    )
-
-    applyLumiRealmFontLock(root)
-
-    if (!settings.bionicEnabled) return
-
-    const walker =
-      document.createTreeWalker(
-        root,
-        NodeFilter.SHOW_TEXT
-      )
-
-    const nodes = []
-
+    root.classList.toggle("lumibionic-justify", settings.justifyMessages);
+    root.classList.toggle("lumibionic-hyphens", settings.hyphenateMessages);
+    root.classList.toggle("lumibionic-reading-width", settings.readingWidth !== "full");
+    root.classList.toggle("lumibionic-paragraph-spacing", settings.paragraphSpacing > 0.001);
+    root.classList.toggle("lumibionic-letter-spacing", Math.abs(settings.letterSpacing) > 0.0001);
+    root.classList.toggle("lumibionic-word-spacing", Math.abs(settings.wordSpacing) > 0.0001);
+    applyLumiRealmFontLock(root);
+    if (!settings.bionicEnabled)
+      return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
     while (walker.nextNode()) {
-      nodes.push(walker.currentNode)
+      nodes.push(walker.currentNode);
     }
-
     for (const node of nodes) {
-      processTextNode(node)
+      processTextNode(node);
     }
   }
-
   function unwrap(root = document) {
-    clearLumiRealmFontLock(root)
-
-    root
-      .querySelectorAll('[data-lumibionic-word]')
-      .forEach(el => {
-        el.replaceWith(
-          document.createTextNode(el.textContent || '')
-        )
-      })
-
-    root
-      .querySelectorAll(MESSAGE_SELECTOR)
-      .forEach(el => {
-        el.classList.remove(
-          'lumibionic-justify',
-          'lumibionic-hyphens',
-          'lumibionic-reading-width',
-          'lumibionic-paragraph-spacing',
-          'lumibionic-letter-spacing',
-          'lumibionic-word-spacing'
-        )
-        el.normalize()
-      })
+    clearLumiRealmFontLock(root);
+    root.querySelectorAll("[data-lumibionic-word]").forEach((el) => {
+      el.replaceWith(document.createTextNode(el.textContent || ""));
+    });
+    root.querySelectorAll(MESSAGE_SELECTOR).forEach((el) => {
+      el.classList.remove("lumibionic-justify", "lumibionic-hyphens", "lumibionic-reading-width", "lumibionic-paragraph-spacing", "lumibionic-letter-spacing", "lumibionic-word-spacing");
+      el.normalize();
+    });
   }
-
-
-  const SCROLL_LATEST_BUTTON_ATTR =
-    'data-lumibionic-scroll-latest'
-
-  const SCROLL_LATEST_WRAPPER_ATTR =
-    'data-lumibionic-scroll-latest-wrapper'
-
+  const SCROLL_LATEST_BUTTON_ATTR = "data-lumibionic-scroll-latest";
+  const SCROLL_LATEST_WRAPPER_ATTR = "data-lumibionic-scroll-latest-wrapper";
   function latestRenderedMessageTarget() {
-    const messages =
-      Array.from(
-        document.querySelectorAll(
-          MESSAGE_SELECTOR
-        )
-      )
-
-    const content =
-      messages[messages.length - 1]
-
-    if (!content) return null
-
-    /*
-      Prefer the stable virtual-row wrapper. LumiRealm renders visible
-      content inside a shadow root whose height can settle after the outer
-      MessageContent first mounts, but data-message-id stays attached to
-      the logical message row.
-    */
-    return (
-      content.closest(
-        '[data-message-id]'
-      ) ||
-      content.closest(
-        '[data-component="BubbleMessage"], ' +
-        '[data-component="MinimalMessage"]'
-      ) ||
-      content
-    )
+    const messages = Array.from(document.querySelectorAll(MESSAGE_SELECTOR));
+    const content = messages[messages.length - 1];
+    if (!content)
+      return null;
+    return content.closest("[data-message-id]") || content.closest('[data-component="BubbleMessage"], ' + '[data-component="MinimalMessage"]') || content;
   }
-
-  function alignLatestMessageTop(
-    behavior = 'auto'
-  ) {
-    const target =
-      latestRenderedMessageTarget()
-
-    if (!target) return false
-
+  function alignLatestMessageTop(behavior = "auto") {
+    const target = latestRenderedMessageTarget();
+    if (!target)
+      return false;
     target.scrollIntoView({
       behavior,
-      block: 'start',
-      inline: 'nearest',
-    })
-
-    return true
+      block: "start",
+      inline: "nearest"
+    });
+    return true;
   }
-
   function scrollToLatestMessageTop() {
-    const moved =
-      alignLatestMessageTop(
-        'smooth'
-      )
-
-    if (!moved) return false
-
-    /*
-      LumiRealm's HTML island lives in an open shadow root. Its content can
-      finish styling/measuring after the outer message row has already been
-      scrolled. Re-align the SAME logical message row after the short and
-      late settle windows used by the font compatibility pass.
-    */
-    setTimeout(
-      () =>
-        alignLatestMessageTop(
-          'auto'
-        ),
-      140
-    )
-
-    setTimeout(
-      () =>
-        alignLatestMessageTop(
-          'auto'
-        ),
-      720
-    )
-
-    return true
+    const moved = alignLatestMessageTop("smooth");
+    if (!moved)
+      return false;
+    setTimeout(() => alignLatestMessageTop("auto"), 140);
+    setTimeout(() => alignLatestMessageTop("auto"), 720);
+    return true;
   }
-
-
   function getNativeComposerActionBar() {
-    /*
-      Current Lumiverse staging renders data-spindle-mount="chat_actions"
-      as a direct child of ComposerActionBarLive. Its parent is therefore
-      the SAME no-wrap mobile toolbar row as Regenerate, Persona, Tools,
-      Extras, etc.
-    */
-    const chatActionsMount =
-      document.querySelector(
-        '[data-component="InputArea"] ' +
-        '[data-spindle-mount="chat_actions"]'
-      )
-
-    const actionBar =
-      chatActionsMount?.parentElement
-
-    return (
-      actionBar &&
-      actionBar.closest(
-        '[data-component="InputArea"]'
-      )
-    )
-      ? {
-          actionBar,
-          chatActionsMount,
-        }
-      : null
+    const chatActionsMount = document.querySelector('[data-component="InputArea"] ' + '[data-spindle-mount="chat_actions"]');
+    const actionBar = chatActionsMount?.parentElement;
+    return actionBar && actionBar.closest('[data-component="InputArea"]') ? {
+      actionBar,
+      chatActionsMount
+    } : null;
   }
-
   function ensureScrollLatestToolbarButton() {
-    const target =
-      getNativeComposerActionBar()
-
+    const target = getNativeComposerActionBar();
     if (!target) {
-      return null
+      return null;
     }
-
     const {
       actionBar,
-      chatActionsMount,
-    } = target
-
-    let wrapper =
-      actionBar.querySelector(
-        `[${SCROLL_LATEST_WRAPPER_ATTR}]`
-      )
-
-    let button =
-      wrapper?.querySelector?.(
-        `[${SCROLL_LATEST_BUTTON_ATTR}]`
-      ) || null
-
+      chatActionsMount
+    } = target;
+    let wrapper = actionBar.querySelector(`[${SCROLL_LATEST_WRAPPER_ATTR}]`);
+    let button = wrapper?.querySelector?.(`[${SCROLL_LATEST_BUTTON_ATTR}]`) || null;
     if (!wrapper) {
-      wrapper =
-        document.createElement('span')
-
-      wrapper.setAttribute(
-        SCROLL_LATEST_WRAPPER_ATTR,
-        'true'
-      )
-
-      /*
-        display:contents makes the button participate directly in the
-        native actionBar flex row without creating another layout box.
-      */
-      wrapper.style.display =
-        'contents'
-
-      actionBar.insertBefore(
-        wrapper,
-        chatActionsMount
-      )
+      wrapper = document.createElement("span");
+      wrapper.setAttribute(SCROLL_LATEST_WRAPPER_ATTR, "true");
+      wrapper.style.display = "contents";
+      actionBar.insertBefore(wrapper, chatActionsMount);
     }
-
     if (!button) {
-      button =
-        document.createElement('button')
-
-      button.type = 'button'
-      button.setAttribute(
-        SCROLL_LATEST_BUTTON_ATTR,
-        'true'
-      )
-      button.setAttribute(
-        'title',
-        'Top of latest message'
-      )
-      button.setAttribute(
-        'aria-label',
-        'Top of latest message'
-      )
-
+      button = document.createElement("button");
+      button.type = "button";
+      button.setAttribute(SCROLL_LATEST_BUTTON_ATTR, "true");
+      button.setAttribute("title", "Top of latest message");
+      button.setAttribute("aria-label", "Top of latest message");
       button.innerHTML = `
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -1910,743 +1341,339 @@ export function setup(ctx) {
           <path d="m18 13-6-6-6 6"></path>
           <path d="M12 7v14"></path>
         </svg>
-      `
-
-      button.addEventListener(
-        'click',
-        () => {
-          const moved =
-            scrollToLatestMessageTop()
-
-          if (!moved) {
-            button.setAttribute(
-              'title',
-              'No message found'
-            )
-
-            setTimeout(() => {
-              button.setAttribute(
-                'title',
-                'Top of latest message'
-              )
-            }, 1200)
-          }
+      `;
+      button.addEventListener("click", () => {
+        const moved = scrollToLatestMessageTop();
+        if (!moved) {
+          button.setAttribute("title", "No message found");
+          setTimeout(() => {
+            button.setAttribute("title", "Top of latest message");
+          }, 1200);
         }
-      )
-
-      wrapper.appendChild(button)
+      });
+      wrapper.appendChild(button);
     }
-
-    /*
-      Copy Lumiverse's real action-button class rather than styling a
-      fake second toolbar. Prefer a native composer-action button.
-    */
-    const nativeButton =
-      Array.from(
-        actionBar.querySelectorAll('button')
-      ).find(
-        candidate =>
-          candidate !== button &&
-          !candidate.hasAttribute(
-            SCROLL_LATEST_BUTTON_ATTR
-          )
-      )
-
-    if (
-      nativeButton &&
-      nativeButton.className
-    ) {
-      button.className =
-        nativeButton.className
+    const nativeButton = Array.from(actionBar.querySelectorAll("button")).find((candidate) => candidate !== button && !candidate.hasAttribute(SCROLL_LATEST_BUTTON_ATTR));
+    if (nativeButton && nativeButton.className) {
+      button.className = nativeButton.className;
     }
-
-    return button
+    return button;
   }
-
-
-  const AUTO_REGENERATE_BUTTON_ATTR =
-    'data-lumibionic-auto-regenerate'
-
-  const AUTO_REGENERATE_WRAPPER_ATTR =
-    'data-lumibionic-auto-regenerate-wrapper'
-
+  const AUTO_REGENERATE_BUTTON_ATTR = "data-lumibionic-auto-regenerate";
+  const AUTO_REGENERATE_WRAPPER_ATTR = "data-lumibionic-auto-regenerate-wrapper";
   function autoRegenerateUiState() {
-    const trigger =
-      settings.autoRegenerateTriggerText
-        .trim()
-
+    const trigger = settings.autoRegenerateTriggerText.trim();
     if (!trigger) {
       return {
-        key: 'not-configured',
-        label: 'NOT CONFIGURED',
-        enabled: false,
-      }
+        key: "not-configured",
+        label: "NOT CONFIGURED",
+        enabled: false
+      };
     }
-
     if (!settings.autoRegenerateEnabled) {
       return {
-        key: 'off',
-        label: 'OFF',
-        enabled: false,
-      }
+        key: "off",
+        label: "OFF",
+        enabled: false
+      };
     }
-
     return {
-      key: 'armed',
-      label: 'ARMED',
-      enabled: true,
-    }
+      key: "armed",
+      label: "ARMED",
+      enabled: true
+    };
   }
-
   function syncAutoRegenerateStatus() {
-    const state =
-      autoRegenerateUiState()
-
+    const state = autoRegenerateUiState();
     if (autoRegenStatus) {
-      autoRegenStatus.textContent =
-        state.label
-      autoRegenStatus.dataset.state =
-        state.key
-      autoRegenStatus.title =
-        state.key === 'armed'
-          ? `Watching for: ${settings.autoRegenerateTriggerText.trim()}`
-          : (
-              state.key === 'not-configured'
-                ? 'Set trigger text before enabling Auto Regenerate.'
-                : 'Auto Regenerate is disabled.'
-            )
+      autoRegenStatus.textContent = state.label;
+      autoRegenStatus.dataset.state = state.key;
+      autoRegenStatus.title = state.key === "armed" ? `Watching for: ${settings.autoRegenerateTriggerText.trim()}` : state.key === "not-configured" ? "Set trigger text before enabling Auto Regenerate." : "Auto Regenerate is disabled.";
     }
   }
-
-  function syncAutoRegenerateToolbarButton(
-    button
-  ) {
-    if (!button) return
-
-    const state =
-      autoRegenerateUiState()
-
-    button.setAttribute(
-      'aria-pressed',
-      String(state.enabled)
-    )
-    button.setAttribute(
-      'title',
-      `Auto regenerate: ${state.label}`
-    )
-    button.setAttribute(
-      'aria-label',
-      `Auto regenerate: ${state.label}`
-    )
-    button.dataset.state =
-      state.key
-
-    const label =
-      button.querySelector(
-        '[data-lumibionic-auto-regenerate-label]'
-      )
-
+  function syncAutoRegenerateToolbarButton(button) {
+    if (!button)
+      return;
+    const state = autoRegenerateUiState();
+    button.setAttribute("aria-pressed", String(state.enabled));
+    button.setAttribute("title", `Auto regenerate: ${state.label}`);
+    button.setAttribute("aria-label", `Auto regenerate: ${state.label}`);
+    button.dataset.state = state.key;
+    const label = button.querySelector("[data-lumibionic-auto-regenerate-label]");
     if (label) {
-      label.textContent =
-        state.key === 'armed'
-          ? '↻A ON'
-          : (
-              state.key === 'not-configured'
-                ? '↻A ?'
-                : '↻A OFF'
-            )
+      label.textContent = state.key === "armed" ? "↻A ON" : state.key === "not-configured" ? "↻A ?" : "↻A OFF";
     }
-
-    syncAutoRegenerateStatus()
+    syncAutoRegenerateStatus();
   }
-
   function ensureAutoRegenerateToolbarButton() {
-    const target =
-      getNativeComposerActionBar()
-
-    if (!target) return null
-
+    const target = getNativeComposerActionBar();
+    if (!target)
+      return null;
     const {
       actionBar,
-      chatActionsMount,
-    } = target
-
-    let wrapper =
-      actionBar.querySelector(
-        `[${AUTO_REGENERATE_WRAPPER_ATTR}]`
-      )
-
-    let button =
-      wrapper?.querySelector?.(
-        `[${AUTO_REGENERATE_BUTTON_ATTR}]`
-      ) || null
-
+      chatActionsMount
+    } = target;
+    let wrapper = actionBar.querySelector(`[${AUTO_REGENERATE_WRAPPER_ATTR}]`);
+    let button = wrapper?.querySelector?.(`[${AUTO_REGENERATE_BUTTON_ATTR}]`) || null;
     if (!wrapper) {
-      wrapper =
-        document.createElement('span')
-
-      wrapper.setAttribute(
-        AUTO_REGENERATE_WRAPPER_ATTR,
-        'true'
-      )
-      wrapper.style.display = 'contents'
-
-      actionBar.insertBefore(
-        wrapper,
-        chatActionsMount
-      )
+      wrapper = document.createElement("span");
+      wrapper.setAttribute(AUTO_REGENERATE_WRAPPER_ATTR, "true");
+      wrapper.style.display = "contents";
+      actionBar.insertBefore(wrapper, chatActionsMount);
     }
-
     if (!button) {
-      button =
-        document.createElement('button')
-
-      button.type = 'button'
-      button.setAttribute(
-        AUTO_REGENERATE_BUTTON_ATTR,
-        'true'
-      )
-
+      button = document.createElement("button");
+      button.type = "button";
+      button.setAttribute(AUTO_REGENERATE_BUTTON_ATTR, "true");
       button.innerHTML = `
         <span
           aria-hidden="true"
           data-lumibionic-auto-regenerate-label
           style="font-size:12px;font-weight:700;line-height:1"
         >↻A OFF</span>
-      `
-
-      button.addEventListener(
-        'click',
-        () => {
-          const trigger =
-            settings.autoRegenerateTriggerText
-              .trim()
-
-          settings = {
-            ...settings,
-            autoRegenerateEnabled:
-              trigger
-                ? !settings.autoRegenerateEnabled
-                : false,
-          }
-
-          saveSettings()
-          syncControls()
-          applyToolbarVisibility()
-          syncAutoRegenerateStatus()
-        }
-      )
-
-      wrapper.appendChild(button)
+      `;
+      button.addEventListener("click", () => {
+        const trigger = settings.autoRegenerateTriggerText.trim();
+        settings = {
+          ...settings,
+          autoRegenerateEnabled: trigger ? !settings.autoRegenerateEnabled : false
+        };
+        saveSettings();
+        syncControls();
+        applyToolbarVisibility();
+        syncAutoRegenerateStatus();
+      });
+      wrapper.appendChild(button);
     }
-
-    const nativeButton =
-      Array.from(
-        actionBar.querySelectorAll('button')
-      ).find(
-        candidate =>
-          candidate !== button &&
-          !candidate.hasAttribute(
-            SCROLL_LATEST_BUTTON_ATTR
-          ) &&
-          !candidate.hasAttribute(
-            AUTO_REGENERATE_BUTTON_ATTR
-          )
-      )
-
-    if (
-      nativeButton &&
-      nativeButton.className
-    ) {
-      button.className =
-        nativeButton.className
+    const nativeButton = Array.from(actionBar.querySelectorAll("button")).find((candidate) => candidate !== button && !candidate.hasAttribute(SCROLL_LATEST_BUTTON_ATTR) && !candidate.hasAttribute(AUTO_REGENERATE_BUTTON_ATTR));
+    if (nativeButton && nativeButton.className) {
+      button.className = nativeButton.className;
     }
-
-    syncAutoRegenerateToolbarButton(button)
-    return button
+    syncAutoRegenerateToolbarButton(button);
+    return button;
   }
-
-
   function toolbarButtonLabel(button) {
     return [
-      button.getAttribute('title') || '',
-      button.getAttribute('aria-label') || '',
-      button.getAttribute('data-tooltip') || '',
-      button.getAttribute('data-title') || '',
-    ]
-      .filter(Boolean)
-      .join(' ')
-      .trim()
+      button.getAttribute("title") || "",
+      button.getAttribute("aria-label") || "",
+      button.getAttribute("data-tooltip") || "",
+      button.getAttribute("data-title") || ""
+    ].filter(Boolean).join(" ").trim();
   }
-
   function isAttachmentButton(button) {
-    if (!button?.matches?.('button')) return false
-    if (!button.closest('[data-component="InputArea"]')) return false
-
-    const previous = button.previousElementSibling
-    if (
-      previous?.matches?.(
-        '[data-spindle-mount="chat_input_tools_left"]'
-      )
-    ) {
-      return true
+    if (!button?.matches?.("button"))
+      return false;
+    if (!button.closest('[data-component="InputArea"]'))
+      return false;
+    const previous = button.previousElementSibling;
+    if (previous?.matches?.('[data-spindle-mount="chat_input_tools_left"]')) {
+      return true;
     }
-
-    return Boolean(
-      button.querySelector(
-        'svg.lucide-paperclip, svg[class*="paperclip"]'
-      )
-    )
+    return Boolean(button.querySelector('svg.lucide-paperclip, svg[class*="paperclip"]'));
   }
-
   function toolbarItemForButton(button) {
     if (isAttachmentButton(button)) {
-      return TOOLBAR_BUTTONS.find(
-        item => item.key === 'attachments'
-      ) || null
+      return TOOLBAR_BUTTONS.find((item) => item.key === "attachments") || null;
     }
-
-    const label =
-      toolbarButtonLabel(button).toLocaleLowerCase()
-
-    if (!label) return null
-
-    return TOOLBAR_BUTTONS.find(item => {
-      const aliases =
-        Array.isArray(item.titles) && item.titles.length
-          ? item.titles
-          : [item.title]
-
-      return aliases.some(alias =>
-        label.includes(
-          String(alias).toLocaleLowerCase()
-        )
-      )
-    }) || null
+    const label = toolbarButtonLabel(button).toLocaleLowerCase();
+    if (!label)
+      return null;
+    return TOOLBAR_BUTTONS.find((item) => {
+      const aliases = Array.isArray(item.titles) && item.titles.length ? item.titles : [item.title];
+      return aliases.some((alias) => label.includes(String(alias).toLocaleLowerCase()));
+    }) || null;
   }
-
   function findToolbarButtons() {
-    const buttons = new Set()
-
-    document
-      .querySelectorAll(
-        '[data-component="InputArea"] button, ' +
-        '[data-spindle-mount="chat_toolbar"] button'
-      )
-      .forEach(button => buttons.add(button))
-
-    return Array.from(buttons)
+    const buttons = new Set;
+    document.querySelectorAll('[data-component="InputArea"] button, ' + '[data-spindle-mount="chat_toolbar"] button').forEach((button) => buttons.add(button));
+    return Array.from(buttons);
   }
-
-
   function findNativeRegenerateButton() {
-    const candidates =
-      findToolbarButtons()
-        .filter(
-          button =>
-            !button.hasAttribute(
-              AUTO_REGENERATE_BUTTON_ATTR
-            ) &&
-            toolbarItemForButton(button)?.key ===
-              'regenerate'
-        )
-
-    return (
-      candidates.find(
-        button =>
-          !button.disabled &&
-          button.getClientRects().length > 0
-      ) ||
-      candidates.find(
-        button => !button.disabled
-      ) ||
-      null
-    )
+    const candidates = findToolbarButtons().filter((button) => !button.hasAttribute(AUTO_REGENERATE_BUTTON_ATTR) && toolbarItemForButton(button)?.key === "regenerate");
+    return candidates.find((button) => !button.disabled && button.getClientRects().length > 0) || candidates.find((button) => !button.disabled) || null;
   }
-
   function clickNativeRegenerate() {
-    const button =
-      findNativeRegenerateButton()
-
-    if (!button) return false
-
-    button.click()
-    return true
+    const button = findNativeRegenerateButton();
+    if (!button)
+      return false;
+    button.click();
+    return true;
   }
-
   function applyToolbarVisibility() {
-    ensureScrollLatestToolbarButton()
-    ensureAutoRegenerateToolbarButton()
-
-    let matched = 0
-    let hidden = 0
-
-    const spacing = clamp(
-      settings.toolbarSpacing,
-      0,
-      16,
-      DEFAULTS.toolbarSpacing
-    )
-    const halfSpacing = spacing / 2
-
+    ensureScrollLatestToolbarButton();
+    ensureAutoRegenerateToolbarButton();
+    let matched = 0;
+    let hidden = 0;
+    const spacing = clamp(settings.toolbarSpacing, 0, 16, DEFAULTS.toolbarSpacing);
+    const halfSpacing = spacing / 2;
     for (const button of findToolbarButtons()) {
-      /*
-        Apply the chosen total gap as half-margin on each button.
-        Two neighboring buttons therefore produce the requested gap.
-        Inline !important intentionally wins over theme CSS.
-      */
-      button.style.setProperty(
-        'margin-inline',
-        `${halfSpacing}px`,
-        'important'
-      )
-      button.setAttribute(
-        'data-lumibionic-toolbar-spacing',
-        String(spacing)
-      )
-
-      const item = toolbarItemForButton(button)
-      if (!item) continue
-
-      matched += 1
-
-      const shouldHide =
-        Boolean(settings.toolbarHidden?.[item.key])
-
+      button.style.setProperty("margin-inline", `${halfSpacing}px`, "important");
+      button.setAttribute("data-lumibionic-toolbar-spacing", String(spacing));
+      const item = toolbarItemForButton(button);
+      if (!item)
+        continue;
+      matched += 1;
+      const shouldHide = Boolean(settings.toolbarHidden?.[item.key]);
       if (shouldHide) {
-        button.setAttribute(
-          'data-lumibionic-toolbar-hidden',
-          item.key
-        )
-        button.style.setProperty(
-          'display',
-          'none',
-          'important'
-        )
-        hidden += 1
-      } else if (
-        button.hasAttribute(
-          'data-lumibionic-toolbar-hidden'
-        )
-      ) {
-        button.style.removeProperty('display')
-        button.removeAttribute(
-          'data-lumibionic-toolbar-hidden'
-        )
+        button.setAttribute("data-lumibionic-toolbar-hidden", item.key);
+        button.style.setProperty("display", "none", "important");
+        hidden += 1;
+      } else if (button.hasAttribute("data-lumibionic-toolbar-hidden")) {
+        button.style.removeProperty("display");
+        button.removeAttribute("data-lumibionic-toolbar-hidden");
       }
     }
-
-    const status =
-      typeof tab !== 'undefined'
-        ? tab.root?.querySelector(
-            '#lb-toolbar-match-status'
-          )
-        : null
-
+    const status = typeof tab !== "undefined" ? tab.root?.querySelector("#lb-toolbar-match-status") : null;
     if (status) {
-      status.textContent =
-        matched > 0
-          ? `${matched} toolbar buttons detected · ${hidden} hidden`
-          : 'No matching toolbar buttons detected on this screen'
+      status.textContent = matched > 0 ? `${matched} toolbar buttons detected · ${hidden} hidden` : "No matching toolbar buttons detected on this screen";
     }
   }
-
   function clearToolbarVisibility() {
-    document
-      .querySelectorAll(
-        '[data-lumibionic-toolbar-hidden], ' +
-        '[data-lumibionic-toolbar-spacing]'
-      )
-      .forEach(button => {
-        button.style.removeProperty('display')
-        button.style.removeProperty('margin-inline')
-        button.removeAttribute(
-          'data-lumibionic-toolbar-hidden'
-        )
-        button.removeAttribute(
-          'data-lumibionic-toolbar-spacing'
-        )
-      })
+    document.querySelectorAll("[data-lumibionic-toolbar-hidden], " + "[data-lumibionic-toolbar-spacing]").forEach((button) => {
+      button.style.removeProperty("display");
+      button.style.removeProperty("margin-inline");
+      button.removeAttribute("data-lumibionic-toolbar-hidden");
+      button.removeAttribute("data-lumibionic-toolbar-spacing");
+    });
   }
-
   function applyRootClasses() {
-    const root = document.documentElement
-
-    const enabled = settings.fontEnabled
-
-    root.classList.toggle(
-      'lb-font-messages',
-      enabled && settings.scopeMessages && !settings.scopeAll
-    )
-
-    root.classList.toggle(
-      'lb-font-bubble',
-      enabled && settings.scopeBubble && !settings.scopeAll
-    )
-
-    root.classList.toggle(
-      'lb-font-composer',
-      enabled && settings.scopeComposer && !settings.scopeAll
-    )
-
-    root.classList.toggle(
-      'lb-font-menus',
-      enabled && settings.scopeMenus && !settings.scopeAll
-    )
-
-    root.classList.toggle(
-      'lb-font-navigation',
-      enabled && settings.scopeNavigation && !settings.scopeAll
-    )
-
-    root.classList.toggle(
-      'lb-font-all',
-      enabled && settings.scopeAll
-    )
-
+    const root = document.documentElement;
+    const enabled = settings.fontEnabled;
+    root.classList.toggle("lb-font-messages", enabled && settings.scopeMessages && !settings.scopeAll);
+    root.classList.toggle("lb-font-bubble", enabled && settings.scopeBubble && !settings.scopeAll);
+    root.classList.toggle("lb-font-composer", enabled && settings.scopeComposer && !settings.scopeAll);
+    root.classList.toggle("lb-font-menus", enabled && settings.scopeMenus && !settings.scopeAll);
+    root.classList.toggle("lb-font-navigation", enabled && settings.scopeNavigation && !settings.scopeAll);
+    root.classList.toggle("lb-font-all", enabled && settings.scopeAll);
     for (const item of TOOLBAR_BUTTONS) {
-      root.classList.toggle(
-        item.className,
-        Boolean(settings.toolbarHidden?.[item.key])
-      )
+      root.classList.toggle(item.className, Boolean(settings.toolbarHidden?.[item.key]));
     }
   }
-
   function applyCssSettings() {
-    const root = document.documentElement
-    const fontFamily = currentFont()
-
-    clearLumiRealmFontLock()
-
-    root.style.setProperty(
-      '--lumibionic-weight',
-      String(settings.weight)
-    )
-
-    root.style.setProperty(
-      '--lumibionic-font-family',
-      fontFamily
-    )
-
-    root.style.setProperty(
-      '--lumibionic-preview-font',
-      settings.fontEnabled
-        ? fontFamily
-        : 'inherit'
-    )
-
-    root.style.setProperty(
-      '--lumibionic-text-size',
-      `${settings.textSize}%`
-    )
-
-    root.style.setProperty(
-      '--lumibionic-line-height',
-      String(settings.lineHeight)
-    )
-
-    root.style.setProperty(
-      '--lumibionic-reading-width',
-      settings.readingWidth === 'full'
-        ? 'none'
-        : settings.readingWidth
-    )
-
-    root.style.setProperty(
-      '--lumibionic-paragraph-spacing',
-      `${settings.paragraphSpacing}em`
-    )
-
-    root.style.setProperty(
-      '--lumibionic-letter-spacing',
-      `${settings.letterSpacing}em`
-    )
-
-    root.style.setProperty(
-      '--lumibionic-word-spacing',
-      `${settings.wordSpacing}em`
-    )
-
-    root.style.setProperty(
-      '--lumibionic-preview-letter-spacing',
-      Math.abs(settings.letterSpacing) > 0.0001
-        ? `${settings.letterSpacing}em`
-        : 'normal'
-    )
-
-    root.style.setProperty(
-      '--lumibionic-preview-word-spacing',
-      Math.abs(settings.wordSpacing) > 0.0001
-        ? `${settings.wordSpacing}em`
-        : 'normal'
-    )
-
-    root.style.setProperty(
-      '--lumibionic-preview-hyphens',
-      settings.hyphenateMessages
-        ? 'auto'
-        : 'manual'
-    )
-
-    applyRootClasses()
-    refreshBubbleScopes()
-    applyToolbarVisibility()
+    const root = document.documentElement;
+    const fontFamily = currentFont();
+    clearLumiRealmFontLock();
+    root.style.setProperty("--lumibionic-weight", String(settings.weight));
+    root.style.setProperty("--lumibionic-font-family", fontFamily);
+    root.style.setProperty("--lumibionic-preview-font", settings.fontEnabled ? fontFamily : "inherit");
+    root.style.setProperty("--lumibionic-text-size", `${settings.textSize}%`);
+    root.style.setProperty("--lumibionic-line-height", String(settings.lineHeight));
+    root.style.setProperty("--lumibionic-reading-width", settings.readingWidth === "full" ? "none" : settings.readingWidth);
+    root.style.setProperty("--lumibionic-paragraph-spacing", `${settings.paragraphSpacing}em`);
+    root.style.setProperty("--lumibionic-letter-spacing", `${settings.letterSpacing}em`);
+    root.style.setProperty("--lumibionic-word-spacing", `${settings.wordSpacing}em`);
+    root.style.setProperty("--lumibionic-preview-letter-spacing", Math.abs(settings.letterSpacing) > 0.0001 ? `${settings.letterSpacing}em` : "normal");
+    root.style.setProperty("--lumibionic-preview-word-spacing", Math.abs(settings.wordSpacing) > 0.0001 ? `${settings.wordSpacing}em` : "normal");
+    root.style.setProperty("--lumibionic-preview-hyphens", settings.hyphenateMessages ? "auto" : "manual");
+    applyRootClasses();
+    refreshBubbleScopes();
+    applyToolbarVisibility();
   }
-
-  let fontCompatSettleTimer = null
-  let fontCompatLateTimer = null
-
+  let fontCompatSettleTimer = null;
+  let fontCompatLateTimer = null;
   function reapplyMessageFonts() {
-    if (!shouldApplyMessageFontLock()) {
-      return
-    }
-
-    document
-      .querySelectorAll(
-        MESSAGE_SELECTOR
-      )
-      .forEach(
-        applyLumiRealmFontLock
-      )
+    document.querySelectorAll(MESSAGE_SELECTOR).forEach(applyLumiRealmFontLock);
   }
-
   function scheduleFontCompatSettle() {
     if (fontCompatSettleTimer) {
-      clearTimeout(
-        fontCompatSettleTimer
-      )
+      clearTimeout(fontCompatSettleTimer);
     }
-
     if (fontCompatLateTimer) {
-      clearTimeout(
-        fontCompatLateTimer
-      )
+      clearTimeout(fontCompatLateTimer);
     }
-
-    /*
-      LumiRealm can replace/render the visible response after Lumiverse's
-      first message paint. A quick pass catches the usual replacement,
-      and a later pass catches the final post-generation renderer settle.
-      Both are debounced, so streaming tokens do not create a polling loop.
-    */
-    fontCompatSettleTimer =
-      setTimeout(() => {
-        fontCompatSettleTimer = null
-        reapplyMessageFonts()
-      }, 100)
-
-    fontCompatLateTimer =
-      setTimeout(() => {
-        fontCompatLateTimer = null
-        reapplyMessageFonts()
-      }, 650)
+    fontCompatSettleTimer = setTimeout(() => {
+      fontCompatSettleTimer = null;
+      reapplyMessageFonts();
+    }, 100);
+    fontCompatLateTimer = setTimeout(() => {
+      fontCompatLateTimer = null;
+      reapplyMessageFonts();
+    }, 650);
   }
-
   function processAll() {
-    if (rebuilding) return
-
-    document
-      .querySelectorAll(MESSAGE_SELECTOR)
-      .forEach(processMessage)
-
-    refreshBubbleScopes()
-    applyToolbarVisibility()
-    scheduleFontCompatSettle()
+    if (rebuilding)
+      return;
+    document.querySelectorAll(MESSAGE_SELECTOR).forEach(processMessage);
+    refreshBubbleScopes();
+    applyToolbarVisibility();
+    scheduleFontCompatSettle();
   }
-
   function rebuildAll() {
-    rebuilding = true
-    unwrap()
-    rebuilding = false
-
-    applyCssSettings()
-    processAll()
+    rebuilding = true;
+    unwrap();
+    rebuilding = false;
+    applyCssSettings();
+    processAll();
   }
-
   function scheduleProcess() {
-    if (scheduled || rebuilding) return
-
-    scheduled = true
-
+    if (scheduled || rebuilding)
+      return;
+    scheduled = true;
     requestAnimationFrame(() => {
-      scheduled = false
-      processAll()
-    })
+      scheduled = false;
+      processAll();
+    });
   }
-
   function updateSetting(key, value, rebuild = false, markCustom = true) {
     settings = {
       ...settings,
       [key]: value,
-      ...(markCustom ? { preset: 'custom' } : {}),
-    }
-
-    saveSettings()
-    applyCssSettings()
-    syncControls()
-
+      ...markCustom ? { preset: "custom" } : {}
+    };
+    saveSettings();
+    applyCssSettings();
+    syncControls();
     if (rebuild) {
-      rebuildAll()
+      rebuildAll();
     } else {
-      processAll()
+      processAll();
     }
-
-    renderPreview()
+    renderPreview();
   }
-
   function updateToolbarSetting(key, hidden) {
-    if (!TOOLBAR_BUTTONS.some(item => item.key === key)) return
-
+    if (!TOOLBAR_BUTTONS.some((item) => item.key === key))
+      return;
     settings = {
       ...settings,
       toolbarHidden: {
         ...settings.toolbarHidden,
-        [key]: Boolean(hidden),
-      },
-    }
-
-    saveSettings()
-    applyCssSettings()
-    syncControls()
+        [key]: Boolean(hidden)
+      }
+    };
+    saveSettings();
+    applyCssSettings();
+    syncControls();
   }
-
   function setAllToolbarHidden(hidden) {
     settings = {
       ...settings,
-      toolbarHidden: Object.fromEntries(
-        TOOLBAR_BUTTONS.map(item => [item.key, Boolean(hidden)])
-      ),
-    }
-
-    saveSettings()
-    applyCssSettings()
-    syncControls()
+      toolbarHidden: Object.fromEntries(TOOLBAR_BUTTONS.map((item) => [item.key, Boolean(hidden)]))
+    };
+    saveSettings();
+    applyCssSettings();
+    syncControls();
   }
-
   function applyPreset(name) {
-    if (name === 'custom') {
-      settings = { ...settings, preset: 'custom' }
-      saveSettings()
-      syncControls()
-      return
+    if (name === "custom") {
+      settings = { ...settings, preset: "custom" };
+      saveSettings();
+      syncControls();
+      return;
     }
-
-    const values = PRESETS[name]
-    if (!values) return
-
+    const values = PRESETS[name];
+    if (!values)
+      return;
     settings = {
       ...settings,
       ...values,
-      preset: name,
-    }
-
-    saveSettings()
-    applyCssSettings()
-    syncControls()
-    rebuildAll()
-    renderPreview()
+      preset: name
+    };
+    saveSettings();
+    applyCssSettings();
+    syncControls();
+    rebuildAll();
+    renderPreview();
   }
-
   tab.root.innerHTML = `
     <div class="lumibionic-settings">
 
@@ -2974,7 +2001,7 @@ export function setup(ctx) {
             <label for="lb-size">Message text size</label>
             <span class="lumibionic-value" id="lb-size-value"></span>
           </div>
-          <input id="lb-size" type="range" min="80" max="140" step="5">
+          <input id="lb-size" type="range" min="80" max="140" step="1">
         </div>
 
         <div class="lumibionic-control">
@@ -3049,7 +2076,7 @@ export function setup(ctx) {
         <div class="lumibionic-muted">
           Manual run ignores the automatic toggle and repairs the latest
           assistant message in the currently open chat. Default boundary:
-          <code>[ 🕰️ Time</code>. The fix uses Lumiverse's native
+          <code>[ \uD83D\uDD70️ Time</code>. The fix uses Lumiverse's native
           reasoning field instead of inserting
           <code>&lt;think&gt;</code> tags.
         </div>
@@ -3186,1727 +2213,969 @@ export function setup(ctx) {
       </button>
 
     </div>
-  `
-
-  const $ = selector =>
-    tab.root.querySelector(selector)
-
-  const preset = $('#lb-preset')
-  const bionicEnabled = $('#lb-bionic-enabled')
-  const bionicOptions = $('#lb-bionic-options')
-  const density = $('#lb-density')
-  const fixation = $('#lb-fixation')
-  const fixationValue = $('#lb-fixation-value')
-  const weight = $('#lb-weight')
-  const weightValue = $('#lb-weight-value')
-
-  const fontEnabled = $('#lb-font-enabled')
-  const fontOptions = $('#lb-font-options')
-  const font = $('#lb-font')
-  const customFontWrap = $('#lb-custom-font-wrap')
-  const customFont = $('#lb-custom-font')
-  const fontFile = $('#lb-font-file')
-  const fontFileStatus = $('#lb-font-file-status')
-  const clearFontFile = $('#lb-clear-font-file')
-
-  const scopeMessages = $('#lb-scope-messages')
-  const scopeBubble = $('#lb-scope-bubble')
-  const scopeComposer = $('#lb-scope-composer')
-  const scopeMenus = $('#lb-scope-menus')
-  const scopeNavigation = $('#lb-scope-navigation')
-  const scopeAll = $('#lb-scope-all')
-
-  const justify = $('#lb-justify')
-  const hyphens = $('#lb-hyphens')
-  const readingWidth = $('#lb-reading-width')
-  const paragraphSpacing = $('#lb-paragraph-spacing')
-  const paragraphSpacingValue = $('#lb-paragraph-spacing-value')
-  const letterSpacing = $('#lb-letter-spacing')
-  const letterSpacingValue = $('#lb-letter-spacing-value')
-  const wordSpacing = $('#lb-word-spacing')
-  const wordSpacingValue = $('#lb-word-spacing-value')
-  const size = $('#lb-size')
-  const sizeValue = $('#lb-size-value')
-  const line = $('#lb-line')
-  const lineValue = $('#lb-line-value')
-
-  const ffThinkFix = $('#lb-ff-think-fix')
-  const ffThinkBoundaryText = $('#lb-ff-boundary-text')
-  const ffThinkReasoningSide = $('#lb-ff-reasoning-side')
-  const ffThinkIncludeMarker = $('#lb-ff-include-marker')
-  const ffThinkRunNow = $('#lb-ff-run-now')
-  const ffThinkResetPattern = $('#lb-ff-reset-pattern')
-  const ffThinkBackendStatus = $('#lb-ff-backend-status')
-  const ffThinkStatus = $('#lb-ff-think-status')
-
-  const autoRegenEnabled = $('#lb-auto-regen-enabled')
-  const autoRegenTrigger = $('#lb-auto-regen-trigger')
-  const autoRegenMax = $('#lb-auto-regen-max')
-  const autoRegenMaxValue = $('#lb-auto-regen-max-value')
-  const autoRegenStatus = $('#lb-auto-regen-status')
-  const settingsPersistence = $('#lb-settings-persistence')
-  const settingsSaveStatus = $('#lb-settings-save-status')
-
-  const preview = $('#lb-preview')
-  const reset = $('#lb-reset')
-
-  const toolbarSpacing = $('#lb-toolbar-spacing')
-  const toolbarSpacingValue = $('#lb-toolbar-spacing-value')
-  const toolbarGrid = $('#lb-toolbar-grid')
-  const toolbarHideAll = $('#lb-toolbar-hide-all')
-  const toolbarShowAll = $('#lb-toolbar-show-all')
-
+  `;
+  const $ = (selector) => tab.root.querySelector(selector);
+  const preset = $("#lb-preset");
+  const bionicEnabled = $("#lb-bionic-enabled");
+  const bionicOptions = $("#lb-bionic-options");
+  const density = $("#lb-density");
+  const fixation = $("#lb-fixation");
+  const fixationValue = $("#lb-fixation-value");
+  const weight = $("#lb-weight");
+  const weightValue = $("#lb-weight-value");
+  const fontEnabled = $("#lb-font-enabled");
+  const fontOptions = $("#lb-font-options");
+  const font = $("#lb-font");
+  const customFontWrap = $("#lb-custom-font-wrap");
+  const customFont = $("#lb-custom-font");
+  const fontFile = $("#lb-font-file");
+  const fontFileStatus = $("#lb-font-file-status");
+  const clearFontFile = $("#lb-clear-font-file");
+  const scopeMessages = $("#lb-scope-messages");
+  const scopeBubble = $("#lb-scope-bubble");
+  const scopeComposer = $("#lb-scope-composer");
+  const scopeMenus = $("#lb-scope-menus");
+  const scopeNavigation = $("#lb-scope-navigation");
+  const scopeAll = $("#lb-scope-all");
+  const justify = $("#lb-justify");
+  const hyphens = $("#lb-hyphens");
+  const readingWidth = $("#lb-reading-width");
+  const paragraphSpacing = $("#lb-paragraph-spacing");
+  const paragraphSpacingValue = $("#lb-paragraph-spacing-value");
+  const letterSpacing = $("#lb-letter-spacing");
+  const letterSpacingValue = $("#lb-letter-spacing-value");
+  const wordSpacing = $("#lb-word-spacing");
+  const wordSpacingValue = $("#lb-word-spacing-value");
+  const size = $("#lb-size");
+  const sizeValue = $("#lb-size-value");
+  const line = $("#lb-line");
+  const lineValue = $("#lb-line-value");
+  const ffThinkFix = $("#lb-ff-think-fix");
+  const ffThinkBoundaryText = $("#lb-ff-boundary-text");
+  const ffThinkReasoningSide = $("#lb-ff-reasoning-side");
+  const ffThinkIncludeMarker = $("#lb-ff-include-marker");
+  const ffThinkRunNow = $("#lb-ff-run-now");
+  const ffThinkResetPattern = $("#lb-ff-reset-pattern");
+  const ffThinkBackendStatus = $("#lb-ff-backend-status");
+  const ffThinkStatus = $("#lb-ff-think-status");
+  const autoRegenEnabled = $("#lb-auto-regen-enabled");
+  const autoRegenTrigger = $("#lb-auto-regen-trigger");
+  const autoRegenMax = $("#lb-auto-regen-max");
+  const autoRegenMaxValue = $("#lb-auto-regen-max-value");
+  const autoRegenStatus = $("#lb-auto-regen-status");
+  const settingsPersistence = $("#lb-settings-persistence");
+  const settingsSaveStatus = $("#lb-settings-save-status");
+  const preview = $("#lb-preview");
+  const reset = $("#lb-reset");
+  const toolbarSpacing = $("#lb-toolbar-spacing");
+  const toolbarSpacingValue = $("#lb-toolbar-spacing-value");
+  const toolbarGrid = $("#lb-toolbar-grid");
+  const toolbarHideAll = $("#lb-toolbar-hide-all");
+  const toolbarShowAll = $("#lb-toolbar-show-all");
   if (toolbarGrid) {
-    toolbarGrid.replaceChildren()
-
+    toolbarGrid.replaceChildren();
     for (const item of TOOLBAR_BUTTONS) {
-      const button = document.createElement('button')
-      button.type = 'button'
-      button.className = 'lumibionic-toolbar-toggle'
-      button.dataset.toolbarKey = item.key
-
-      const label = document.createElement('span')
-      label.textContent = item.label
-
-      const state = document.createElement('small')
-      state.textContent = 'Shown'
-
-      button.append(label, state)
-      toolbarGrid.appendChild(button)
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "lumibionic-toolbar-toggle";
+      button.dataset.toolbarKey = item.key;
+      const label = document.createElement("span");
+      label.textContent = item.label;
+      const state = document.createElement("small");
+      state.textContent = "Shown";
+      button.append(label, state);
+      toolbarGrid.appendChild(button);
     }
   }
-
-  const toolbarToggleButtons = Array.from(
-    tab.root.querySelectorAll('[data-toolbar-key]')
-  )
-
+  const toolbarToggleButtons = Array.from(tab.root.querySelectorAll("[data-toolbar-key]"));
   for (const [value, label] of FONT_OPTIONS) {
-    const option = document.createElement('option')
-    option.value = value
-    option.textContent = label
-    font.appendChild(option)
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    font.appendChild(option);
   }
-
   for (const [value, label] of WIDTH_OPTIONS) {
-    const option = document.createElement('option')
-    option.value = value
-    option.textContent = label
-    readingWidth.appendChild(option)
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    readingWidth.appendChild(option);
   }
-
   function loadUiState() {
     try {
-      const saved = JSON.parse(localStorage.getItem(UI_STATE_KEY) || '{}')
+      const saved = JSON.parse(localStorage.getItem(UI_STATE_KEY) || "{}");
       return {
-        previewVisible:
-          typeof saved.previewVisible === 'boolean'
-            ? saved.previewVisible
-            : false,
-        sections:
-          saved.sections && typeof saved.sections === 'object'
-            ? saved.sections
-            : {},
-      }
+        previewVisible: typeof saved.previewVisible === "boolean" ? saved.previewVisible : false,
+        sections: saved.sections && typeof saved.sections === "object" ? saved.sections : {}
+      };
     } catch {
-      return { previewVisible: false, sections: {} }
+      return { previewVisible: false, sections: {} };
     }
   }
-
-  let uiState = loadUiState()
-
+  let uiState = loadUiState();
   function saveUiState() {
     try {
-      localStorage.setItem(UI_STATE_KEY, JSON.stringify(uiState))
+      localStorage.setItem(UI_STATE_KEY, JSON.stringify(uiState));
     } catch {}
   }
-
   function sectionKey(title) {
-    return title
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
+    return title.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   }
-
   function setupCollapsibleUi() {
-    const settingsRoot = tab.root.querySelector('.lumibionic-settings')
-    if (!settingsRoot) return
-
-    const previewSection = preview.closest('.lumibionic-section')
-    const headingBlock = settingsRoot.firstElementChild
-
+    const settingsRoot = tab.root.querySelector(".lumibionic-settings");
+    if (!settingsRoot)
+      return;
+    const previewSection = preview.closest(".lumibionic-section");
+    const headingBlock = settingsRoot.firstElementChild;
     if (previewSection && headingBlock) {
-      previewSection.classList.add('lumibionic-preview-section')
-      headingBlock.insertAdjacentElement('afterend', previewSection)
-
-      const toolbar = document.createElement('div')
-      toolbar.className = 'lumibionic-preview-toolbar'
+      previewSection.classList.add("lumibionic-preview-section");
+      headingBlock.insertAdjacentElement("afterend", previewSection);
+      const toolbar = document.createElement("div");
+      toolbar.className = "lumibionic-preview-toolbar";
       toolbar.innerHTML = `
         <strong>Live preview</strong>
         <button type="button" id="lb-toggle-preview"></button>
-      `
-      previewSection.insertBefore(toolbar, previewSection.firstChild)
-
-      const previewControl = preview.closest('.lumibionic-control')
-      const previewLabel = previewControl?.querySelector('label')
-      if (previewLabel) previewLabel.remove()
-
-      const previewToggle = toolbar.querySelector('#lb-toggle-preview')
-
+      `;
+      previewSection.insertBefore(toolbar, previewSection.firstChild);
+      const previewControl = preview.closest(".lumibionic-control");
+      const previewLabel = previewControl?.querySelector("label");
+      if (previewLabel)
+        previewLabel.remove();
+      const previewToggle = toolbar.querySelector("#lb-toggle-preview");
       const syncPreviewVisibility = () => {
         if (previewControl) {
-          previewControl.classList.toggle(
-            'lumibionic-hidden',
-            !uiState.previewVisible
-          )
+          previewControl.classList.toggle("lumibionic-hidden", !uiState.previewVisible);
         }
         if (previewToggle) {
-          previewToggle.textContent = uiState.previewVisible
-            ? 'Hide preview'
-            : 'Show preview'
-          previewToggle.setAttribute(
-            'aria-expanded',
-            String(uiState.previewVisible)
-          )
+          previewToggle.textContent = uiState.previewVisible ? "Hide preview" : "Show preview";
+          previewToggle.setAttribute("aria-expanded", String(uiState.previewVisible));
         }
-      }
-
-      previewToggle?.addEventListener('click', () => {
+      };
+      previewToggle?.addEventListener("click", () => {
         uiState = {
           ...uiState,
-          previewVisible: !uiState.previewVisible,
-        }
-        saveUiState()
-        syncPreviewVisibility()
-      })
-
-      syncPreviewVisibility()
+          previewVisible: !uiState.previewVisible
+        };
+        saveUiState();
+        syncPreviewVisibility();
+      });
+      syncPreviewVisibility();
     }
-
-    const uiActions = document.createElement('div')
-    uiActions.className = 'lumibionic-ui-actions'
+    const uiActions = document.createElement("div");
+    uiActions.className = "lumibionic-ui-actions";
     uiActions.innerHTML = `
       <button type="button" id="lb-collapse-all">Collapse settings</button>
       <button type="button" id="lb-expand-all">Expand settings</button>
-    `
-
+    `;
     if (previewSection) {
-      previewSection.insertAdjacentElement('afterend', uiActions)
+      previewSection.insertAdjacentElement("afterend", uiActions);
     } else if (headingBlock) {
-      headingBlock.insertAdjacentElement('afterend', uiActions)
+      headingBlock.insertAdjacentElement("afterend", uiActions);
     }
-
-    const sectionControllers = []
-
-    tab.root
-      .querySelectorAll('.lumibionic-section')
-      .forEach(section => {
-        if (section.classList.contains('lumibionic-preview-section')) return
-
-        const title = section.querySelector(':scope > .lumibionic-section-title')
-        if (!title) return
-
-        const key = sectionKey(title.textContent || 'section')
-        const body = document.createElement('div')
-        body.className = 'lumibionic-section-body'
-
-        const children = Array.from(section.children)
-        for (const child of children) {
-          if (child !== title) body.appendChild(child)
-        }
-
-        const toggle = document.createElement('button')
-        toggle.type = 'button'
-        toggle.className = 'lumibionic-section-toggle'
-        toggle.textContent = title.textContent.trim()
-
-        title.replaceWith(toggle)
-        section.appendChild(body)
-
-        const savedExpanded = uiState.sections[key]
-        const initialExpanded =
-          typeof savedExpanded === 'boolean'
-            ? savedExpanded
-            : false
-
-        const setExpanded = (expanded, persist = true) => {
-          body.classList.toggle(
-            'lumibionic-section-collapsed',
-            !expanded
-          )
-          toggle.setAttribute('aria-expanded', String(expanded))
-
-          if (persist) {
-            uiState = {
-              ...uiState,
-              sections: {
-                ...uiState.sections,
-                [key]: expanded,
-              },
+    const sectionControllers = [];
+    tab.root.querySelectorAll(".lumibionic-section").forEach((section) => {
+      if (section.classList.contains("lumibionic-preview-section"))
+        return;
+      const title = section.querySelector(":scope > .lumibionic-section-title");
+      if (!title)
+        return;
+      const key = sectionKey(title.textContent || "section");
+      const body = document.createElement("div");
+      body.className = "lumibionic-section-body";
+      const children = Array.from(section.children);
+      for (const child of children) {
+        if (child !== title)
+          body.appendChild(child);
+      }
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "lumibionic-section-toggle";
+      toggle.textContent = title.textContent.trim();
+      title.replaceWith(toggle);
+      section.appendChild(body);
+      const savedExpanded = uiState.sections[key];
+      const initialExpanded = typeof savedExpanded === "boolean" ? savedExpanded : false;
+      const setExpanded = (expanded, persist = true) => {
+        body.classList.toggle("lumibionic-section-collapsed", !expanded);
+        toggle.setAttribute("aria-expanded", String(expanded));
+        if (persist) {
+          uiState = {
+            ...uiState,
+            sections: {
+              ...uiState.sections,
+              [key]: expanded
             }
-            saveUiState()
-          }
+          };
+          saveUiState();
         }
-
-        toggle.addEventListener('click', () => {
-          setExpanded(toggle.getAttribute('aria-expanded') !== 'true')
-        })
-
-        setExpanded(initialExpanded, false)
-        sectionControllers.push(setExpanded)
-      })
-
-    uiActions
-      .querySelector('#lb-collapse-all')
-      ?.addEventListener('click', () => {
-        for (const setExpanded of sectionControllers) setExpanded(false)
-      })
-
-    uiActions
-      .querySelector('#lb-expand-all')
-      ?.addEventListener('click', () => {
-        for (const setExpanded of sectionControllers) setExpanded(true)
-      })
+      };
+      toggle.addEventListener("click", () => {
+        setExpanded(toggle.getAttribute("aria-expanded") !== "true");
+      });
+      setExpanded(initialExpanded, false);
+      sectionControllers.push(setExpanded);
+    });
+    uiActions.querySelector("#lb-collapse-all")?.addEventListener("click", () => {
+      for (const setExpanded of sectionControllers)
+        setExpanded(false);
+    });
+    uiActions.querySelector("#lb-expand-all")?.addEventListener("click", () => {
+      for (const setExpanded of sectionControllers)
+        setExpanded(true);
+    });
   }
-
-  setupCollapsibleUi()
-
+  setupCollapsibleUi();
   function formatEm(value, digits = 2) {
-    if (Math.abs(value) < 0.0001) return 'Theme'
-    return `${Number(value).toFixed(digits)}em`
+    if (Math.abs(value) < 0.0001)
+      return "Theme";
+    return `${Number(value).toFixed(digits)}em`;
   }
-
   function syncControls() {
-    preset.value = settings.preset || 'custom'
-    bionicEnabled.checked = settings.bionicEnabled
-
-    bionicOptions.classList.toggle(
-      'lumibionic-hidden',
-      !settings.bionicEnabled
-    )
-
-    density.value = settings.density
-    fixation.value = String(settings.fixation)
-    fixationValue.textContent = `${settings.fixation}%`
-
-    weight.value = String(settings.weight)
-    weightValue.textContent = String(settings.weight)
-
-    fontEnabled.checked = settings.fontEnabled
-
-    fontOptions.classList.toggle(
-      'lumibionic-hidden',
-      !settings.fontEnabled
-    )
-
-    font.value = settings.font
-    customFont.value = settings.customFont
-
-    customFontWrap.classList.toggle(
-      'lumibionic-hidden',
-      settings.font !== 'custom'
-    )
-
-    scopeMessages.checked = settings.scopeMessages
-    scopeBubble.checked = settings.scopeBubble
-    scopeComposer.checked = settings.scopeComposer
-    scopeMenus.checked = settings.scopeMenus
-    scopeNavigation.checked = settings.scopeNavigation
-    scopeAll.checked = settings.scopeAll
-
+    preset.value = settings.preset || "custom";
+    bionicEnabled.checked = settings.bionicEnabled;
+    bionicOptions.classList.toggle("lumibionic-hidden", !settings.bionicEnabled);
+    density.value = settings.density;
+    fixation.value = String(settings.fixation);
+    fixationValue.textContent = `${settings.fixation}%`;
+    weight.value = String(settings.weight);
+    weightValue.textContent = String(settings.weight);
+    fontEnabled.checked = settings.fontEnabled;
+    fontOptions.classList.toggle("lumibionic-hidden", !settings.fontEnabled);
+    font.value = settings.font;
+    customFont.value = settings.customFont;
+    customFontWrap.classList.toggle("lumibionic-hidden", settings.font !== "custom");
+    scopeMessages.checked = settings.scopeMessages;
+    scopeBubble.checked = settings.scopeBubble;
+    scopeComposer.checked = settings.scopeComposer;
+    scopeMenus.checked = settings.scopeMenus;
+    scopeNavigation.checked = settings.scopeNavigation;
+    scopeAll.checked = settings.scopeAll;
     const individualScopes = [
       scopeMessages,
       scopeBubble,
       scopeComposer,
       scopeMenus,
-      scopeNavigation,
-    ]
-
+      scopeNavigation
+    ];
     for (const input of individualScopes) {
-      input.disabled = settings.scopeAll
+      input.disabled = settings.scopeAll;
     }
-
-    justify.checked = settings.justifyMessages
-    hyphens.checked = settings.hyphenateMessages
-    readingWidth.value = settings.readingWidth
-
-    paragraphSpacing.value = String(settings.paragraphSpacing)
-    paragraphSpacingValue.textContent = formatEm(settings.paragraphSpacing, 1)
-
-    letterSpacing.value = String(settings.letterSpacing)
-    letterSpacingValue.textContent = formatEm(settings.letterSpacing, 3)
-
-    wordSpacing.value = String(settings.wordSpacing)
-    wordSpacingValue.textContent = formatEm(settings.wordSpacing, 2)
-
-    size.value = String(settings.textSize)
-    sizeValue.textContent = `${settings.textSize}%`
-
-    line.value = String(settings.lineHeight)
-    lineValue.textContent = settings.lineHeight.toFixed(2)
-
-    ffThinkFix.checked = settings.ffThinkFixEnabled
-    ffThinkBoundaryText.value = settings.ffThinkBoundaryText
-    ffThinkReasoningSide.value = settings.ffThinkReasoningSide
-    ffThinkIncludeMarker.checked = settings.ffThinkIncludeMarker
-
-    autoRegenEnabled.checked = settings.autoRegenerateEnabled
-    autoRegenTrigger.value = settings.autoRegenerateTriggerText
-    autoRegenMax.value = String(settings.autoRegenerateMaxAttempts)
-    autoRegenMaxValue.textContent = String(settings.autoRegenerateMaxAttempts)
-    settingsPersistence.value = settings.settingsPersistenceMode
-    syncAutoRegenerateStatus()
-
-    toolbarSpacing.value = String(settings.toolbarSpacing)
-    toolbarSpacingValue.textContent = `${settings.toolbarSpacing}px`
-
+    justify.checked = settings.justifyMessages;
+    hyphens.checked = settings.hyphenateMessages;
+    readingWidth.value = settings.readingWidth;
+    paragraphSpacing.value = String(settings.paragraphSpacing);
+    paragraphSpacingValue.textContent = formatEm(settings.paragraphSpacing, 1);
+    letterSpacing.value = String(settings.letterSpacing);
+    letterSpacingValue.textContent = formatEm(settings.letterSpacing, 3);
+    wordSpacing.value = String(settings.wordSpacing);
+    wordSpacingValue.textContent = formatEm(settings.wordSpacing, 2);
+    size.value = String(settings.textSize);
+    sizeValue.textContent = `${settings.textSize}%`;
+    line.value = String(settings.lineHeight);
+    lineValue.textContent = settings.lineHeight.toFixed(2);
+    ffThinkFix.checked = settings.ffThinkFixEnabled;
+    ffThinkBoundaryText.value = settings.ffThinkBoundaryText;
+    ffThinkReasoningSide.value = settings.ffThinkReasoningSide;
+    ffThinkIncludeMarker.checked = settings.ffThinkIncludeMarker;
+    autoRegenEnabled.checked = settings.autoRegenerateEnabled;
+    autoRegenTrigger.value = settings.autoRegenerateTriggerText;
+    autoRegenMax.value = String(settings.autoRegenerateMaxAttempts);
+    autoRegenMaxValue.textContent = String(settings.autoRegenerateMaxAttempts);
+    settingsPersistence.value = settings.settingsPersistenceMode;
+    syncAutoRegenerateStatus();
+    toolbarSpacing.value = String(settings.toolbarSpacing);
+    toolbarSpacingValue.textContent = `${settings.toolbarSpacing}px`;
     for (const button of toolbarToggleButtons) {
-      const key = button.dataset.toolbarKey
-      const hidden = Boolean(settings.toolbarHidden?.[key])
-      button.dataset.hidden = String(hidden)
-      button.setAttribute('aria-pressed', String(hidden))
-
-      const state = button.querySelector('small')
-      if (state) state.textContent = hidden ? 'Hidden' : 'Shown'
+      const key = button.dataset.toolbarKey;
+      const hidden = Boolean(settings.toolbarHidden?.[key]);
+      button.dataset.hidden = String(hidden);
+      button.setAttribute("aria-pressed", String(hidden));
+      const state = button.querySelector("small");
+      if (state)
+        state.textContent = hidden ? "Hidden" : "Shown";
     }
-
-    for (const sync of mobileStepperSyncers) sync()
+    for (const sync of mobileStepperSyncers)
+      sync();
   }
-
-  const mobileStepperSyncers = []
-
+  const mobileStepperSyncers = [];
   function createMobileStepper(range, key, { rebuild = false, resetValue = DEFAULTS[key] } = {}) {
-    if (!range) return
-
-    range.classList.add('lumibionic-mobile-safe-range')
-
-    const min = Number(range.min)
-    const max = Number(range.max)
-    const step = Number(range.step) || 1
-    const stepText = String(range.step || '1')
-    const decimals = stepText.includes('.') ? stepText.split('.')[1].length : 0
-
-    const wrap = document.createElement('div')
-    wrap.className = 'lumibionic-stepper'
-
-    const minus = document.createElement('button')
-    minus.type = 'button'
-    minus.textContent = '−'
-    minus.setAttribute('aria-label', `Decrease ${key}`)
-
-    const exact = document.createElement('input')
-    exact.type = 'number'
-    exact.inputMode = 'decimal'
-    exact.min = String(min)
-    exact.max = String(max)
-    exact.step = String(step)
-    exact.setAttribute('aria-label', `Exact ${key} value`)
-
-    const plus = document.createElement('button')
-    plus.type = 'button'
-    plus.textContent = '+'
-    plus.setAttribute('aria-label', `Increase ${key}`)
-
-    const resetOne = document.createElement('button')
-    resetOne.type = 'button'
-    resetOne.textContent = '↶'
-    resetOne.className = 'lumibionic-stepper-reset'
-    resetOne.setAttribute('aria-label', `Reset ${key}`)
-
-    wrap.append(minus, exact, plus, resetOne)
-    range.insertAdjacentElement('afterend', wrap)
-
+    if (!range)
+      return;
+    range.classList.add("lumibionic-mobile-safe-range");
+    const min = Number(range.min);
+    const max = Number(range.max);
+    const step = Number(range.step) || 1;
+    const stepText = String(range.step || "1");
+    const decimals = stepText.includes(".") ? stepText.split(".")[1].length : 0;
+    const wrap = document.createElement("div");
+    wrap.className = "lumibionic-stepper";
+    const minus = document.createElement("button");
+    minus.type = "button";
+    minus.textContent = "−";
+    minus.setAttribute("aria-label", `Decrease ${key}`);
+    const exact = document.createElement("input");
+    exact.type = "number";
+    exact.inputMode = "decimal";
+    exact.min = String(min);
+    exact.max = String(max);
+    exact.step = String(step);
+    exact.setAttribute("aria-label", `Exact ${key} value`);
+    const plus = document.createElement("button");
+    plus.type = "button";
+    plus.textContent = "+";
+    plus.setAttribute("aria-label", `Increase ${key}`);
+    const resetOne = document.createElement("button");
+    resetOne.type = "button";
+    resetOne.textContent = "↶";
+    resetOne.className = "lumibionic-stepper-reset";
+    resetOne.setAttribute("aria-label", `Reset ${key}`);
+    wrap.append(minus, exact, plus, resetOne);
+    range.insertAdjacentElement("afterend", wrap);
     function normalized(raw) {
-      let value = Number(raw)
-      if (!Number.isFinite(value)) value = Number(settings[key])
-      value = Math.min(max, Math.max(min, value))
-      value = min + Math.round((value - min) / step) * step
-      return Number(value.toFixed(decimals))
+      let value = Number(raw);
+      if (!Number.isFinite(value))
+        value = Number(settings[key]);
+      value = Math.min(max, Math.max(min, value));
+      value = min + Math.round((value - min) / step) * step;
+      return Number(value.toFixed(decimals));
     }
-
     function commit(raw) {
-      const value = normalized(raw)
-      exact.value = String(value)
-      updateSetting(key, value, rebuild)
+      const value = normalized(raw);
+      exact.value = String(value);
+      updateSetting(key, value, rebuild);
     }
-
-    minus.addEventListener('click', () => commit(Number(settings[key]) - step))
-    plus.addEventListener('click', () => commit(Number(settings[key]) + step))
-    exact.addEventListener('change', () => commit(exact.value))
-    exact.addEventListener('keydown', event => {
-      if (event.key === 'Enter') exact.blur()
-    })
-    resetOne.addEventListener('click', () => commit(resetValue))
-
+    minus.addEventListener("click", () => commit(Number(settings[key]) - step));
+    plus.addEventListener("click", () => commit(Number(settings[key]) + step));
+    exact.addEventListener("change", () => commit(exact.value));
+    exact.addEventListener("keydown", (event) => {
+      if (event.key === "Enter")
+        exact.blur();
+    });
+    resetOne.addEventListener("click", () => commit(resetValue));
     mobileStepperSyncers.push(() => {
-      exact.value = String(settings[key])
-    })
+      exact.value = String(settings[key]);
+    });
   }
-
-  createMobileStepper(fixation, 'fixation', { rebuild: true, resetValue: DEFAULTS.fixation })
-  createMobileStepper(weight, 'weight', { resetValue: DEFAULTS.weight })
-  createMobileStepper(paragraphSpacing, 'paragraphSpacing', { resetValue: DEFAULTS.paragraphSpacing })
-  createMobileStepper(letterSpacing, 'letterSpacing', { resetValue: DEFAULTS.letterSpacing })
-  createMobileStepper(wordSpacing, 'wordSpacing', { resetValue: DEFAULTS.wordSpacing })
-  createMobileStepper(size, 'textSize', { resetValue: DEFAULTS.textSize })
-  createMobileStepper(line, 'lineHeight', { resetValue: DEFAULTS.lineHeight })
-  createMobileStepper(autoRegenMax, 'autoRegenerateMaxAttempts', { resetValue: DEFAULTS.autoRegenerateMaxAttempts })
-  createMobileStepper(toolbarSpacing, 'toolbarSpacing', { resetValue: DEFAULTS.toolbarSpacing })
-
+  createMobileStepper(fixation, "fixation", { rebuild: true, resetValue: DEFAULTS.fixation });
+  createMobileStepper(weight, "weight", { resetValue: DEFAULTS.weight });
+  createMobileStepper(paragraphSpacing, "paragraphSpacing", { resetValue: DEFAULTS.paragraphSpacing });
+  createMobileStepper(letterSpacing, "letterSpacing", { resetValue: DEFAULTS.letterSpacing });
+  createMobileStepper(wordSpacing, "wordSpacing", { resetValue: DEFAULTS.wordSpacing });
+  createMobileStepper(size, "textSize", { resetValue: DEFAULTS.textSize });
+  createMobileStepper(line, "lineHeight", { resetValue: DEFAULTS.lineHeight });
+  createMobileStepper(autoRegenMax, "autoRegenerateMaxAttempts", { resetValue: DEFAULTS.autoRegenerateMaxAttempts });
+  createMobileStepper(toolbarSpacing, "toolbarSpacing", { resetValue: DEFAULTS.toolbarSpacing });
   function renderPreview() {
-    preview.replaceChildren()
-
-    preview.classList.toggle(
-      'lb-preview-justify',
-      settings.justifyMessages
-    )
-
-    preview.style.maxWidth =
-      settings.readingWidth === 'full'
-        ? ''
-        : settings.readingWidth
-
+    preview.replaceChildren();
+    preview.classList.toggle("lb-preview-justify", settings.justifyMessages);
+    preview.style.maxWidth = settings.readingWidth === "full" ? "" : settings.readingWidth;
     const samples = [
-      'A dry chuckle escaped him as he leaned toward the doorway. This line is long enough to judge justification and word spacing.',
-      'She glanced toward the rain-dark window. Adjust paragraph spacing to see this second paragraph move closer or farther away.'
-    ]
-
+      "A dry chuckle escaped him as he leaned toward the doorway. This line is long enough to judge justification and word spacing.",
+      "She glanced toward the rain-dark window. Adjust paragraph spacing to see this second paragraph move closer or farther away."
+    ];
     for (const sampleText of samples) {
-      const paragraph = document.createElement('p')
-      const sample = document.createTextNode(sampleText)
-
-      paragraph.appendChild(sample)
-      preview.appendChild(paragraph)
-
+      const paragraph = document.createElement("p");
+      const sample = document.createTextNode(sampleText);
+      paragraph.appendChild(sample);
+      preview.appendChild(paragraph);
       if (settings.bionicEnabled) {
-        processTextNode(sample)
+        processTextNode(sample);
       }
     }
   }
-
   async function loadLocalFont(file) {
-    if (!file) return
-
-    unloadLocalFont(false)
-
+    if (!file)
+      return;
+    unloadLocalFont(false);
     try {
-      const url = URL.createObjectURL(file)
-
-      const face =
-        new FontFace(
-          'LumibionicCustomFile',
-          `url("${url}")`
-        )
-
-      await face.load()
-      document.fonts.add(face)
-
-      loadedFontFace = face
-      loadedFontUrl = url
-
-      fontFileStatus.textContent =
-        `Using local font: ${file.name}`
-
-      settings.fontEnabled = true
-
-      saveSettings()
-      applyCssSettings()
-      syncControls()
-      processAll()
-      renderPreview()
-
+      const url = URL.createObjectURL(file);
+      const face = new FontFace("LumibionicCustomFile", `url("${url}")`);
+      await face.load();
+      document.fonts.add(face);
+      loadedFontFace = face;
+      loadedFontUrl = url;
+      fontFileStatus.textContent = `Using local font: ${file.name}`;
+      settings.fontEnabled = true;
+      saveSettings();
+      applyCssSettings();
+      syncControls();
+      processAll();
+      renderPreview();
     } catch (error) {
-      fontFileStatus.textContent =
-        'Could not load that font file.'
-
-      console.error(
-        '[Reading & Fonts] Font load failed:',
-        error
-      )
+      fontFileStatus.textContent = "Could not load that font file.";
+      console.error("[Reading & Fonts] Font load failed:", error);
     }
   }
-
   function unloadLocalFont(refresh = true) {
     if (loadedFontFace && document.fonts) {
       try {
-        document.fonts.delete(loadedFontFace)
+        document.fonts.delete(loadedFontFace);
       } catch {}
     }
-
     if (loadedFontUrl) {
-      URL.revokeObjectURL(loadedFontUrl)
+      URL.revokeObjectURL(loadedFontUrl);
     }
-
-    loadedFontFace = null
-    loadedFontUrl = null
-
+    loadedFontFace = null;
+    loadedFontUrl = null;
     if (fontFile) {
-      fontFile.value = ''
+      fontFile.value = "";
     }
-
     if (fontFileStatus) {
-      fontFileStatus.textContent =
-        'No local font file loaded.'
+      fontFileStatus.textContent = "No local font file loaded.";
     }
-
     if (refresh) {
-      applyCssSettings()
-      processAll()
-      renderPreview()
+      applyCssSettings();
+      processAll();
+      renderPreview();
     }
   }
-
-  toolbarGrid?.addEventListener('click', event => {
-    const button = event.target.closest('[data-toolbar-key]')
-    if (!button || !toolbarGrid.contains(button)) return
-
-    const key = button.dataset.toolbarKey
-    updateToolbarSetting(
-      key,
-      !Boolean(settings.toolbarHidden?.[key])
-    )
-  })
-
-  toolbarHideAll?.addEventListener(
-    'click',
-    () => setAllToolbarHidden(true)
-  )
-
-  toolbarShowAll?.addEventListener(
-    'click',
-    () => setAllToolbarHidden(false)
-  )
-
-
-
-  preset.addEventListener(
-    'change',
-    () => applyPreset(preset.value)
-  )
-
-  bionicEnabled.addEventListener(
-    'change',
-    () => updateSetting(
-      'bionicEnabled',
-      bionicEnabled.checked,
-      true
-    )
-  )
-
-  density.addEventListener(
-    'change',
-    () => updateSetting(
-      'density',
-      density.value,
-      true
-    )
-  )
-
-  fixation.addEventListener(
-    'input',
-    () => updateSetting(
-      'fixation',
-      Number(fixation.value),
-      true
-    )
-  )
-
-  weight.addEventListener(
-    'input',
-    () => updateSetting(
-      'weight',
-      Number(weight.value)
-    )
-  )
-
-  fontEnabled.addEventListener(
-    'change',
-    () => updateSetting(
-      'fontEnabled',
-      fontEnabled.checked
-    )
-  )
-
-  font.addEventListener(
-    'change',
-    () => updateSetting(
-      'font',
-      font.value
-    )
-  )
-
-  customFont.addEventListener(
-    'input',
-    () => updateSetting(
-      'customFont',
-      customFont.value
-    )
-  )
-
-  fontFile.addEventListener(
-    'change',
-    () => loadLocalFont(
-      fontFile.files?.[0]
-    )
-  )
-
-  clearFontFile.addEventListener(
-    'click',
-    () => unloadLocalFont(true)
-  )
-
+  toolbarGrid?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-toolbar-key]");
+    if (!button || !toolbarGrid.contains(button))
+      return;
+    const key = button.dataset.toolbarKey;
+    updateToolbarSetting(key, !Boolean(settings.toolbarHidden?.[key]));
+  });
+  toolbarHideAll?.addEventListener("click", () => setAllToolbarHidden(true));
+  toolbarShowAll?.addEventListener("click", () => setAllToolbarHidden(false));
+  preset.addEventListener("change", () => applyPreset(preset.value));
+  bionicEnabled.addEventListener("change", () => updateSetting("bionicEnabled", bionicEnabled.checked, true));
+  density.addEventListener("change", () => updateSetting("density", density.value, true));
+  fixation.addEventListener("input", () => updateSetting("fixation", Number(fixation.value), true));
+  weight.addEventListener("input", () => updateSetting("weight", Number(weight.value)));
+  fontEnabled.addEventListener("change", () => updateSetting("fontEnabled", fontEnabled.checked));
+  font.addEventListener("change", () => updateSetting("font", font.value));
+  customFont.addEventListener("input", () => updateSetting("customFont", customFont.value));
+  fontFile.addEventListener("change", () => loadLocalFont(fontFile.files?.[0]));
+  clearFontFile.addEventListener("click", () => unloadLocalFont(true));
   const scopeBindings = [
-    [scopeMessages, 'scopeMessages'],
-    [scopeBubble, 'scopeBubble'],
-    [scopeComposer, 'scopeComposer'],
-    [scopeMenus, 'scopeMenus'],
-    [scopeNavigation, 'scopeNavigation'],
-    [scopeAll, 'scopeAll'],
-  ]
-
+    [scopeMessages, "scopeMessages"],
+    [scopeBubble, "scopeBubble"],
+    [scopeComposer, "scopeComposer"],
+    [scopeMenus, "scopeMenus"],
+    [scopeNavigation, "scopeNavigation"],
+    [scopeAll, "scopeAll"]
+  ];
   for (const [input, key] of scopeBindings) {
-    input.addEventListener(
-      'change',
-      () => updateSetting(
-        key,
-        input.checked
-      )
-    )
+    input.addEventListener("change", () => updateSetting(key, input.checked));
   }
-
-  justify.addEventListener(
-    'change',
-    () => updateSetting(
-      'justifyMessages',
-      justify.checked
-    )
-  )
-
-  hyphens.addEventListener(
-    'change',
-    () => updateSetting(
-      'hyphenateMessages',
-      hyphens.checked
-    )
-  )
-
-  readingWidth.addEventListener(
-    'change',
-    () => updateSetting(
-      'readingWidth',
-      readingWidth.value
-    )
-  )
-
-  paragraphSpacing.addEventListener(
-    'input',
-    () => updateSetting(
-      'paragraphSpacing',
-      Number(paragraphSpacing.value)
-    )
-  )
-
-  letterSpacing.addEventListener(
-    'input',
-    () => updateSetting(
-      'letterSpacing',
-      Number(letterSpacing.value)
-    )
-  )
-
-  wordSpacing.addEventListener(
-    'input',
-    () => updateSetting(
-      'wordSpacing',
-      Number(wordSpacing.value)
-    )
-  )
-
-  size.addEventListener(
-    'input',
-    () => updateSetting(
-      'textSize',
-      Number(size.value)
-    )
-  )
-
-  line.addEventListener(
-    'input',
-    () => updateSetting(
-      'lineHeight',
-      Number(line.value)
-    )
-  )
-
+  justify.addEventListener("change", () => updateSetting("justifyMessages", justify.checked));
+  hyphens.addEventListener("change", () => updateSetting("hyphenateMessages", hyphens.checked));
+  readingWidth.addEventListener("change", () => updateSetting("readingWidth", readingWidth.value));
+  paragraphSpacing.addEventListener("input", () => updateSetting("paragraphSpacing", Number(paragraphSpacing.value)));
+  letterSpacing.addEventListener("input", () => updateSetting("letterSpacing", Number(letterSpacing.value)));
+  wordSpacing.addEventListener("input", () => updateSetting("wordSpacing", Number(wordSpacing.value)));
+  size.addEventListener("input", () => updateSetting("textSize", Number(size.value)));
+  line.addEventListener("input", () => updateSetting("lineHeight", Number(line.value)));
   function syncFFThinkBackendConfig() {
     ctx.sendToBackend({
-      type: 'ff_think_fix_config',
+      type: "ff_think_fix_config",
       enabled: Boolean(settings.ffThinkFixEnabled),
       config: {
         boundaryText: settings.ffThinkBoundaryText,
         reasoningSide: settings.ffThinkReasoningSide,
-        includeMarker: settings.ffThinkIncludeMarker,
-      },
-    })
+        includeMarker: settings.ffThinkIncludeMarker
+      }
+    });
   }
-
-  let ffManualRequestId = null
-  let ffManualTimeout = null
-
+  let ffManualRequestId = null;
+  let ffManualTimeout = null;
   function finishFFManualRequest() {
     if (ffManualTimeout) {
-      clearTimeout(ffManualTimeout)
-      ffManualTimeout = null
+      clearTimeout(ffManualTimeout);
+      ffManualTimeout = null;
     }
-
-    ffManualRequestId = null
-
+    ffManualRequestId = null;
     if (ffThinkRunNow) {
-      ffThinkRunNow.disabled = false
+      ffThinkRunNow.disabled = false;
     }
   }
-
-  ffThinkFix.addEventListener(
-    'change',
-    () => {
-      updateSetting(
-        'ffThinkFixEnabled',
-        ffThinkFix.checked,
-        false,
-        false
-      )
-
-      syncFFThinkBackendConfig()
-
-      if (ffThinkStatus) {
-        ffThinkStatus.textContent =
-          ffThinkFix.checked
-            ? 'Enabled — backend auto-fix is armed for the next completed AI reply.'
-            : 'Automatic fix disabled. Manual ▶ still works.'
-      }
+  ffThinkFix.addEventListener("change", () => {
+    updateSetting("ffThinkFixEnabled", ffThinkFix.checked, false, false);
+    syncFFThinkBackendConfig();
+    if (ffThinkStatus) {
+      ffThinkStatus.textContent = ffThinkFix.checked ? "Enabled — backend auto-fix is armed for the next completed AI reply." : "Automatic fix disabled. Manual ▶ still works.";
     }
-  )
-
-  ffThinkReasoningSide.addEventListener(
-    'change',
-    () => {
-      settings = {
-        ...settings,
-        ffThinkReasoningSide:
-          ffThinkReasoningSide.value === 'after'
-            ? 'after'
-            : 'before',
-      }
-
-      saveSettings()
-      syncControls()
-      syncFFThinkBackendConfig()
-
-      if (ffThinkStatus) {
-        ffThinkStatus.textContent =
-          settings.ffThinkReasoningSide === 'after'
-            ? 'FF split set to move text after the marker into reasoning.'
-            : 'FF split set to move text before the marker into reasoning.'
-      }
+  });
+  ffThinkReasoningSide.addEventListener("change", () => {
+    settings = {
+      ...settings,
+      ffThinkReasoningSide: ffThinkReasoningSide.value === "after" ? "after" : "before"
+    };
+    saveSettings();
+    syncControls();
+    syncFFThinkBackendConfig();
+    if (ffThinkStatus) {
+      ffThinkStatus.textContent = settings.ffThinkReasoningSide === "after" ? "FF split set to move text after the marker into reasoning." : "FF split set to move text before the marker into reasoning.";
     }
-  )
-
-  ffThinkIncludeMarker.addEventListener(
-    'change',
-    () => {
-      settings = {
-        ...settings,
-        ffThinkIncludeMarker:
-          ffThinkIncludeMarker.checked,
-      }
-
-      saveSettings()
-      syncControls()
-      syncFFThinkBackendConfig()
-
-      if (ffThinkStatus) {
-        ffThinkStatus.textContent =
-          settings.ffThinkIncludeMarker
-            ? 'FF marker will move into reasoning with the selected side.'
-            : 'FF marker will remain visible in normal message content.'
-      }
+  });
+  ffThinkIncludeMarker.addEventListener("change", () => {
+    settings = {
+      ...settings,
+      ffThinkIncludeMarker: ffThinkIncludeMarker.checked
+    };
+    saveSettings();
+    syncControls();
+    syncFFThinkBackendConfig();
+    if (ffThinkStatus) {
+      ffThinkStatus.textContent = settings.ffThinkIncludeMarker ? "FF marker will move into reasoning with the selected side." : "FF marker will remain visible in normal message content.";
     }
-  )
-
+  });
   const ffTextBindings = [
-    [ffThinkBoundaryText, 'ffThinkBoundaryText'],
-  ]
-
+    [ffThinkBoundaryText, "ffThinkBoundaryText"]
+  ];
   for (const [input, key] of ffTextBindings) {
-    input.addEventListener('input', () => {
+    input.addEventListener("input", () => {
       settings = {
         ...settings,
-        [key]: input.value,
-      }
-      saveSettings()
-      syncFFThinkBackendConfig()
-    })
+        [key]: input.value
+      };
+      saveSettings();
+      syncFFThinkBackendConfig();
+    });
   }
-
-  ffThinkResetPattern.addEventListener(
-    'click',
-    () => {
-      settings = {
-        ...settings,
-        ffThinkBoundaryText: DEFAULTS.ffThinkBoundaryText,
-      }
-
-      saveSettings()
-      syncControls()
-      syncFFThinkBackendConfig()
-
-      if (ffThinkStatus) {
-        ffThinkStatus.textContent =
-          'FF think fix boundary reset to default.'
-      }
+  ffThinkResetPattern.addEventListener("click", () => {
+    settings = {
+      ...settings,
+      ffThinkBoundaryText: DEFAULTS.ffThinkBoundaryText
+    };
+    saveSettings();
+    syncControls();
+    syncFFThinkBackendConfig();
+    if (ffThinkStatus) {
+      ffThinkStatus.textContent = "FF think fix boundary reset to default.";
     }
-  )
-
-  ffThinkRunNow.addEventListener(
-    'click',
-    () => {
-      let chatId = null
-      let latestMessageId = null
-
-      try {
-        const active =
-          ctx.getActiveChat()
-
-        chatId =
-          typeof active?.chatId === 'string'
-            ? active.chatId
-            : null
-
-        latestMessageId =
-          ctx.messages?.getLatestMessageId?.() || null
-      } catch {
-        chatId = null
-        latestMessageId = null
-      }
-
-      if (!chatId) {
-        if (ffThinkStatus) {
-          ffThinkStatus.textContent =
-            'Manual FF fix could not detect the current chat.'
-        }
-        return
-      }
-
-      const requestId =
-        `manual:${Date.now()}:${
-          Math.random()
-            .toString(36)
-            .slice(2, 9)
-        }`
-
-      ffManualRequestId = requestId
-      ffThinkRunNow.disabled = true
-
-      if (ffThinkStatus) {
-        ffThinkStatus.textContent =
-          latestMessageId
-            ? `▶ Current chat found. Latest logical message: ${latestMessageId.slice(0, 8)}… Asking backend for the latest assistant.`
-            : '▶ Current chat found. Asking backend for the latest assistant.'
-      }
-
-      try {
-        ctx.sendToBackend({
-          type: 'ff_think_fix_manual',
-          requestId,
-          chatId,
-          latestMessageId,
-          config: {
-            boundaryText: settings.ffThinkBoundaryText,
-        reasoningSide: settings.ffThinkReasoningSide,
-        includeMarker: settings.ffThinkIncludeMarker,
-            reasoningSide: settings.ffThinkReasoningSide,
-            includeMarker: settings.ffThinkIncludeMarker,
-          },
-        })
-      } catch (error) {
-        finishFFManualRequest()
-
-        if (ffThinkStatus) {
-          ffThinkStatus.textContent =
-            `Manual FF fix could not contact the backend: ${
-              error?.message || 'unknown error'
-            }`
-        }
-        return
-      }
-
-      ffManualTimeout =
-        setTimeout(() => {
-          if (
-            ffManualRequestId !== requestId
-          ) {
-            return
-          }
-
-          finishFFManualRequest()
-
-          if (ffThinkStatus) {
-            ffThinkStatus.textContent =
-              'Manual FF fix timed out: the backend did not answer within 9 seconds. If the FF backend bundle line still says checking, the backend worker did not load.'
-          }
-        }, 9000)
+  });
+  ffThinkRunNow.addEventListener("click", () => {
+    let chatId = null;
+    let latestMessageId = null;
+    try {
+      const active = ctx.getActiveChat();
+      chatId = typeof active?.chatId === "string" ? active.chatId : null;
+      latestMessageId = ctx.messages?.getLatestMessageId?.() || null;
+    } catch {
+      chatId = null;
+      latestMessageId = null;
     }
-  )
-
-  const autoRegenAttempts =
-    new Map()
-
-  let pendingAutoRegenTimer = null
-
+    if (!chatId) {
+      if (ffThinkStatus) {
+        ffThinkStatus.textContent = "Manual FF fix could not detect the current chat.";
+      }
+      return;
+    }
+    const requestId = `manual:${Date.now()}:${Math.random().toString(36).slice(2, 9)}`;
+    ffManualRequestId = requestId;
+    ffThinkRunNow.disabled = true;
+    if (ffThinkStatus) {
+      ffThinkStatus.textContent = latestMessageId ? `▶ Current chat found. Latest logical message: ${latestMessageId.slice(0, 8)}… Asking backend for the latest assistant.` : "▶ Current chat found. Asking backend for the latest assistant.";
+    }
+    try {
+      ctx.sendToBackend({
+        type: "ff_think_fix_manual",
+        requestId,
+        chatId,
+        latestMessageId,
+        config: {
+          boundaryText: settings.ffThinkBoundaryText,
+          reasoningSide: settings.ffThinkReasoningSide,
+          includeMarker: settings.ffThinkIncludeMarker,
+          reasoningSide: settings.ffThinkReasoningSide,
+          includeMarker: settings.ffThinkIncludeMarker
+        }
+      });
+    } catch (error) {
+      finishFFManualRequest();
+      if (ffThinkStatus) {
+        ffThinkStatus.textContent = `Manual FF fix could not contact the backend: ${error?.message || "unknown error"}`;
+      }
+      return;
+    }
+    ffManualTimeout = setTimeout(() => {
+      if (ffManualRequestId !== requestId) {
+        return;
+      }
+      finishFFManualRequest();
+      if (ffThinkStatus) {
+        ffThinkStatus.textContent = "Manual FF fix timed out: the backend did not answer within 9 seconds. If the FF backend bundle line still says checking, the backend worker did not load.";
+      }
+    }, 9000);
+  });
+  const autoRegenAttempts = new Map;
+  let pendingAutoRegenTimer = null;
   function autoRegenKey(payload) {
     return [
-      payload?.chatId || 'chat',
-      payload?.messageId || 'message',
-    ].join(':')
+      payload?.chatId || "chat",
+      payload?.messageId || "message"
+    ].join(":");
   }
-
-  function triggerMatchesAutoRegen(
-    content
-  ) {
-    const trigger =
-      settings.autoRegenerateTriggerText
-        .trim()
-
-    if (!trigger) return false
-
-    return String(content || '')
-      .toLocaleLowerCase()
-      .includes(
-        trigger.toLocaleLowerCase()
-      )
+  function triggerMatchesAutoRegen(content) {
+    const trigger = settings.autoRegenerateTriggerText.trim();
+    if (!trigger)
+      return false;
+    return String(content || "").toLocaleLowerCase().includes(trigger.toLocaleLowerCase());
   }
-
   function pruneAutoRegenAttempts() {
-    while (
-      autoRegenAttempts.size > 50
-    ) {
-      const firstKey =
-        autoRegenAttempts.keys()
-          .next().value
-
-      if (!firstKey) break
-      autoRegenAttempts.delete(firstKey)
+    while (autoRegenAttempts.size > 50) {
+      const firstKey = autoRegenAttempts.keys().next().value;
+      if (!firstKey)
+        break;
+      autoRegenAttempts.delete(firstKey);
     }
   }
-
-  function scheduleAutoRegenerate(
-    payload
-  ) {
-    if (
-      !settings.autoRegenerateEnabled ||
-      payload?.error
-    ) {
-      return
+  function scheduleAutoRegenerate(payload) {
+    if (!settings.autoRegenerateEnabled || payload?.error) {
+      return;
     }
-
-    const key =
-      autoRegenKey(payload)
-
-    if (
-      !triggerMatchesAutoRegen(
-        payload?.content
-      )
-    ) {
-      autoRegenAttempts.delete(key)
-      return
+    const key = autoRegenKey(payload);
+    if (!triggerMatchesAutoRegen(payload?.content)) {
+      autoRegenAttempts.delete(key);
+      return;
     }
-
-    const current =
-      Number(
-        autoRegenAttempts.get(key) || 0
-      )
-
-    const maxAttempts =
-      clamp(
-        settings.autoRegenerateMaxAttempts,
-        1,
-        10,
-        DEFAULTS.autoRegenerateMaxAttempts
-      )
-
+    const current = Number(autoRegenAttempts.get(key) || 0);
+    const maxAttempts = clamp(settings.autoRegenerateMaxAttempts, 1, 10, DEFAULTS.autoRegenerateMaxAttempts);
     if (current >= maxAttempts) {
       if (autoRegenStatus) {
-        autoRegenStatus.textContent =
-          `Auto regenerate stopped after ${maxAttempts} retries for this reply.`
+        autoRegenStatus.textContent = `Auto regenerate stopped after ${maxAttempts} retries for this reply.`;
       }
-      return
+      return;
     }
-
-    autoRegenAttempts.set(
-      key,
-      current + 1
-    )
-    pruneAutoRegenAttempts()
-
+    autoRegenAttempts.set(key, current + 1);
+    pruneAutoRegenAttempts();
     if (pendingAutoRegenTimer) {
-      clearTimeout(
-        pendingAutoRegenTimer
-      )
+      clearTimeout(pendingAutoRegenTimer);
     }
-
     if (autoRegenStatus) {
-      autoRegenStatus.textContent =
-        `Trigger matched — regeneration ${current + 1}/${maxAttempts} queued.`
+      autoRegenStatus.textContent = `Trigger matched — regeneration ${current + 1}/${maxAttempts} queued.`;
     }
-
-    pendingAutoRegenTimer =
-      setTimeout(() => {
-        pendingAutoRegenTimer = null
-
-        if (
-          !settings.autoRegenerateEnabled
-        ) {
-          return
-        }
-
-        const clicked =
-          clickNativeRegenerate()
-
-        if (autoRegenStatus) {
-          autoRegenStatus.textContent =
-            clicked
-              ? `Trigger matched — regeneration ${current + 1}/${maxAttempts} started.`
-              : 'Trigger matched, but the native Regenerate button was not found.'
-        }
-      }, 900)
+    pendingAutoRegenTimer = setTimeout(() => {
+      pendingAutoRegenTimer = null;
+      if (!settings.autoRegenerateEnabled) {
+        return;
+      }
+      const clicked = clickNativeRegenerate();
+      if (autoRegenStatus) {
+        autoRegenStatus.textContent = clicked ? `Trigger matched — regeneration ${current + 1}/${maxAttempts} started.` : "Trigger matched, but the native Regenerate button was not found.";
+      }
+    }, 900);
   }
-
-  settingsPersistence.addEventListener(
-    'change',
-    () => {
-      settings = {
-        ...settings,
-        settingsPersistenceMode:
-          settingsPersistence.value === 'browser'
-            ? 'browser'
-            : 'account',
-      }
-      saveSettings()
-      syncControls()
-
-      if (settings.settingsPersistenceMode === 'account') {
-        requestAccountSettings()
-      } else if (settingsSaveStatus) {
-        settingsSaveStatus.textContent =
-          'Settings storage: this browser only.'
-      }
+  settingsPersistence.addEventListener("change", () => {
+    settings = {
+      ...settings,
+      settingsPersistenceMode: settingsPersistence.value === "browser" ? "browser" : "account"
+    };
+    saveSettings();
+    syncControls();
+    if (settings.settingsPersistenceMode === "account") {
+      requestAccountSettings();
+    } else if (settingsSaveStatus) {
+      settingsSaveStatus.textContent = "Settings storage: this browser only.";
     }
-  )
-
-  autoRegenEnabled.addEventListener(
-    'change',
-    () => {
-      const trigger =
-        autoRegenTrigger.value
-          .trim()
-
-      updateSetting(
-        'autoRegenerateEnabled',
-        Boolean(
-          autoRegenEnabled.checked &&
-          trigger
-        ),
-        false,
-        false
-      )
-
-      syncAutoRegenerateStatus()
-      applyToolbarVisibility()
-    }
-  )
-
-  autoRegenTrigger.addEventListener(
-    'input',
-    () => {
-      const value =
-        autoRegenTrigger.value
-
-      settings = {
-        ...settings,
-        autoRegenerateTriggerText:
-          value,
-        ...(
-          value.trim()
-            ? {}
-            : {
-                autoRegenerateEnabled:
-                  false,
-              }
-        ),
+  });
+  autoRegenEnabled.addEventListener("change", () => {
+    const trigger = autoRegenTrigger.value.trim();
+    updateSetting("autoRegenerateEnabled", Boolean(autoRegenEnabled.checked && trigger), false, false);
+    syncAutoRegenerateStatus();
+    applyToolbarVisibility();
+  });
+  autoRegenTrigger.addEventListener("input", () => {
+    const value = autoRegenTrigger.value;
+    settings = {
+      ...settings,
+      autoRegenerateTriggerText: value,
+      ...value.trim() ? {} : {
+        autoRegenerateEnabled: false
       }
-
-      saveSettings()
-      syncControls()
-      syncAutoRegenerateStatus()
-      applyToolbarVisibility()
-    }
-  )
-
-  autoRegenMax.addEventListener(
-    'input',
-    () => updateSetting(
-      'autoRegenerateMaxAttempts',
-      Number(autoRegenMax.value),
-      false,
-      false
-    )
-  )
-
-  toolbarSpacing.addEventListener(
-    'input',
-    () => updateSetting(
-      'toolbarSpacing',
-      Number(toolbarSpacing.value)
-    )
-  )
-
-  reset.addEventListener(
-    'click',
-    () => {
-      unloadLocalFont(false)
-
-      settings = {
-        ...DEFAULTS,
-        toolbarHidden: { ...DEFAULT_TOOLBAR_HIDDEN },
-      }
-
-      saveSettings()
-      applyCssSettings()
-      syncControls()
-      rebuildAll()
-      renderPreview()
-    }
-  )
-
-  // Automatic FF fixing is handled by the backend GENERATION_ENDED listener.
-  // Sync the saved user choice/config as soon as the frontend loads.
-  syncFFThinkBackendConfig()
-
-  /*
-    Ken sleep reminder
-    ------------------
-    The backend tells us when a real MESSAGE_SENT row was created and
-    supplies the active persona name (the identity behind {{user}}).
-
-    IMPORTANT: the hour check deliberately lives in the frontend.
-    `new Date().getHours()` therefore uses the browser/device's local
-    clock, not the Lumiverse server's timezone.
-  */
-  let kenSleepMessageCount = 0
-  let kenSleepChatId = null
-  let kenSleepModal = null
-
-  function resetKenSleepCounter(
-    chatId = null
-  ) {
-    kenSleepMessageCount = 0
-    kenSleepChatId = chatId
+    };
+    saveSettings();
+    syncControls();
+    syncAutoRegenerateStatus();
+    applyToolbarVisibility();
+  });
+  autoRegenMax.addEventListener("input", () => updateSetting("autoRegenerateMaxAttempts", Number(autoRegenMax.value), false, false));
+  toolbarSpacing.addEventListener("input", () => updateSetting("toolbarSpacing", Number(toolbarSpacing.value)));
+  reset.addEventListener("click", () => {
+    unloadLocalFont(false);
+    settings = {
+      ...DEFAULTS,
+      toolbarHidden: { ...DEFAULT_TOOLBAR_HIDDEN }
+    };
+    saveSettings();
+    applyCssSettings();
+    syncControls();
+    rebuildAll();
+    renderPreview();
+  });
+  syncFFThinkBackendConfig();
+  let kenSleepMessageCount = 0;
+  let kenSleepChatId = null;
+  let kenSleepModal = null;
+  function resetKenSleepCounter(chatId = null) {
+    kenSleepMessageCount = 0;
+    kenSleepChatId = chatId;
   }
-
   function isKenSleepWindow() {
-    const hour =
-      new Date().getHours()
-
-    return hour >= 6 && hour < 12
+    const hour = new Date().getHours();
+    return hour >= 6 && hour < 12;
   }
-
   function showKenSleepPopup() {
-    if (kenSleepModal) return
-
+    if (kenSleepModal)
+      return;
     try {
-      const modal =
-        ctx.ui.showModal({
-          title: 'Ken.',
-          width: 380,
-          maxHeight: 240,
-          persistent: false,
-        })
-
-      const message =
-        document.createElement('div')
-
-      message.textContent =
-        'go the fuck to sleep, Ken.'
-
-      message.style.padding = '18px 8px'
-      message.style.fontSize = '1.15rem'
-      message.style.fontWeight = '700'
-      message.style.lineHeight = '1.45'
-      message.style.textAlign = 'center'
-
-      modal.root.appendChild(message)
-
-      kenSleepModal = modal
-
+      const modal = ctx.ui.showModal({
+        title: "Ken.",
+        width: 380,
+        maxHeight: 240,
+        persistent: false
+      });
+      const message = document.createElement("div");
+      message.textContent = "go the fuck to sleep, Ken.";
+      message.style.padding = "18px 8px";
+      message.style.fontSize = "1.15rem";
+      message.style.fontWeight = "700";
+      message.style.lineHeight = "1.45";
+      message.style.textAlign = "center";
+      modal.root.appendChild(message);
+      kenSleepModal = modal;
       modal.onDismiss(() => {
         if (kenSleepModal === modal) {
-          kenSleepModal = null
+          kenSleepModal = null;
         }
-      })
+      });
     } catch (error) {
-      console.warn(
-        '[Bionic Reading] Ken sleep popup failed:',
-        error
-      )
+      console.warn("[Bionic Reading] Ken sleep popup failed:", error);
     }
   }
-
-  function handleKenSleepMessage(
-    payload
-  ) {
-    // Temporarily disabled in v0.28 while the final Ken settings are designed.
-    return
-
-    const active =
-      ctx.getActiveChat?.()
-
-    const activeChatId =
-      typeof active?.chatId === 'string'
-        ? active.chatId
-        : null
-
-    const eventChatId =
-      typeof payload?.chatId === 'string'
-        ? payload.chatId
-        : null
-
-    /*
-      Only count messages belonging to the chat the user is actually
-      looking at. Switching chats starts a fresh pair.
-    */
-    if (
-      !activeChatId ||
-      !eventChatId ||
-      activeChatId !== eventChatId
-    ) {
-      if (
-        kenSleepChatId !== activeChatId
-      ) {
-        resetKenSleepCounter(
-          activeChatId
-        )
+  function handleKenSleepMessage(payload) {
+    return;
+    const active = ctx.getActiveChat?.();
+    const activeChatId = typeof active?.chatId === "string" ? active.chatId : null;
+    const eventChatId = typeof payload?.chatId === "string" ? payload.chatId : null;
+    if (!activeChatId || !eventChatId || activeChatId !== eventChatId) {
+      if (kenSleepChatId !== activeChatId) {
+        resetKenSleepCounter(activeChatId);
       }
-      return
+      return;
     }
-
-    if (
-      kenSleepChatId !== activeChatId
-    ) {
-      resetKenSleepCounter(
-        activeChatId
-      )
+    if (kenSleepChatId !== activeChatId) {
+      resetKenSleepCounter(activeChatId);
     }
-
-    const personaName =
-      typeof payload?.personaName === 'string'
-        ? payload.personaName.trim()
-        : ''
-
-    const qualifies =
-      isKenSleepWindow() &&
-      personaName === 'Ken'
-
-    /*
-      A message outside either condition breaks the streak. This stops
-      counts accumulated before 06:00, after noon, or under another
-      persona from carrying into Ken's reminder cadence.
-    */
+    const personaName = typeof payload?.personaName === "string" ? payload.personaName.trim() : "";
+    const qualifies = isKenSleepWindow() && personaName === "Ken";
     if (!qualifies) {
-      resetKenSleepCounter(
-        activeChatId
-      )
-      return
+      resetKenSleepCounter(activeChatId);
+      return;
     }
-
-    kenSleepMessageCount += 1
-
-    if (
-      kenSleepMessageCount >= 2
-    ) {
-      kenSleepMessageCount = 0
-      showKenSleepPopup()
+    kenSleepMessageCount += 1;
+    if (kenSleepMessageCount >= 2) {
+      kenSleepMessageCount = 0;
+      showKenSleepPopup();
     }
   }
-
-  const unsubAutoRegenerate =
-    ctx.events?.on?.(
-      'GENERATION_ENDED',
-      payload => {
-        scheduleAutoRegenerate(payload)
-      }
-    )
-
-  const unsubBackendMessage =
-    ctx.onBackendMessage(payload => {
-      if (
-        payload?.type ===
-        'bionic_settings_loaded'
-      ) {
-        const saved = payload?.settings
-
-        if (saved && typeof saved === 'object') {
-          applyingAccountSettings = true
-          try {
-            localStorage.setItem(
-              SETTINGS_KEY,
-              JSON.stringify({
-                ...saved,
-                settingsPersistenceMode:
-                  saved.settingsPersistenceMode === 'browser'
-                    ? 'browser'
-                    : 'account',
-              })
-            )
-            settings = loadSettings()
-            applyCssSettings()
-            syncControls()
-            rebuildAll()
-            renderPreview()
-            syncFFThinkBackendConfig()
-
-            if (settingsSaveStatus) {
-              settingsSaveStatus.textContent =
-                'Settings storage: account settings loaded.'
-            }
-          } finally {
-            applyingAccountSettings = false
-          }
-        } else {
-          if (settings.settingsPersistenceMode === 'account') {
-            saveSettings()
-          }
+  const unsubAutoRegenerate = ctx.events?.on?.("GENERATION_ENDED", (payload) => {
+    scheduleAutoRegenerate(payload);
+  });
+  const unsubBackendMessage = ctx.onBackendMessage((payload) => {
+    if (payload?.type === "bionic_settings_loaded") {
+      const saved = payload?.settings;
+      if (saved && typeof saved === "object") {
+        applyingAccountSettings = true;
+        try {
+          localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+            ...saved,
+            settingsPersistenceMode: saved.settingsPersistenceMode === "browser" ? "browser" : "account"
+          }));
+          settings = loadSettings();
+          applyCssSettings();
+          syncControls();
+          rebuildAll();
+          renderPreview();
+          syncFFThinkBackendConfig();
           if (settingsSaveStatus) {
-            settingsSaveStatus.textContent =
-              'Settings storage: account save initialized.'
+            settingsSaveStatus.textContent = "Settings storage: account settings loaded.";
           }
+        } finally {
+          applyingAccountSettings = false;
         }
-        return
-      }
-
-      if (
-        payload?.type ===
-        'bionic_settings_saved'
-      ) {
+      } else {
+        if (settings.settingsPersistenceMode === "account") {
+          saveSettings();
+        }
         if (settingsSaveStatus) {
-          settingsSaveStatus.textContent =
-            payload?.ok === false
-              ? 'Settings storage: account save failed; browser copy kept.'
-              : 'Settings storage: saved to your Lumiverse account.'
+          settingsSaveStatus.textContent = "Settings storage: account save initialized.";
         }
-        return
       }
-
-      if (
-        payload?.type ===
-        'ken_sleep_message_sent'
-      ) {
-        handleKenSleepMessage(
-          payload
-        )
-        return
+      return;
+    }
+    if (payload?.type === "bionic_settings_saved") {
+      if (settingsSaveStatus) {
+        settingsSaveStatus.textContent = payload?.ok === false ? "Settings storage: account save failed; browser copy kept." : "Settings storage: saved to your Lumiverse account.";
       }
-
-      if (
-        payload?.type ===
-        'ff_think_fix_health'
-      ) {
-        if (ffThinkBackendStatus) {
-          ffThinkBackendStatus.textContent =
-            `FF backend bundle: connected v${
-              payload.version || '?'
-            }`
+      return;
+    }
+    if (payload?.type === "ken_sleep_message_sent") {
+      handleKenSleepMessage(payload);
+      return;
+    }
+    if (payload?.type === "ff_think_fix_health") {
+      if (ffThinkBackendStatus) {
+        ffThinkBackendStatus.textContent = `FF backend bundle: connected v${payload.version || "?"}`;
+      }
+      return;
+    }
+    if (payload?.type === "ff_think_fix_progress") {
+      if (payload.source === "manual" && ffManualRequestId && payload.requestId === ffManualRequestId) {
+        if (ffThinkStatus) {
+          ffThinkStatus.textContent = payload.stage === "reading" ? `▶ Backend v${payload.version || "?"} received the request — reading saved chat messages…` : `▶ Backend v${payload.version || "?"} found the assistant — applying native reasoning update…`;
         }
-        return
       }
-
-      if (
-        payload?.type ===
-        'ff_think_fix_progress'
-      ) {
-        if (
-          payload.source === 'manual' &&
-          ffManualRequestId &&
-          payload.requestId === ffManualRequestId
-        ) {
-          if (ffThinkStatus) {
-            ffThinkStatus.textContent =
-              payload.stage === 'reading'
-                ? `▶ Backend v${payload.version || '?'} received the request — reading saved chat messages…`
-                : `▶ Backend v${payload.version || '?'} found the assistant — applying native reasoning update…`
-          }
-        }
-        return
-      }
-
-      if (
-        payload?.type !==
-        'ff_think_fix_result'
-      ) {
-        return
-      }
-
-      if (
-        payload.source === 'manual' &&
-        ffManualRequestId &&
-        payload.requestId === ffManualRequestId
-      ) {
-        finishFFManualRequest()
-      }
-
-      if (!ffThinkStatus) return
-
-      const sourceLabel =
-        payload.source === 'manual'
-          ? 'Manual'
-          : 'Automatic'
-
-      if (payload.status === 'fixed') {
-        ffThinkStatus.textContent =
-          `${sourceLabel} FF fix succeeded — moved ${
-            payload.reasoningSide === 'after'
-              ? 'post-marker'
-              : 'pre-marker'
-          } text${
-            payload.includeMarker
-              ? ' including the marker'
-              : ''
-          } into native reasoning.`
-      } else if (payload.status === 'no_match') {
-        ffThinkStatus.textContent =
-          `${sourceLabel} FF fix: no matching RP boundary marker in the target reply.`
-      } else if (payload.status === 'already_fixed') {
-        ffThinkStatus.textContent =
-          `${sourceLabel} FF fix: target reply is already split into native reasoning.`
-      } else if (payload.status === 'no_assistant') {
-        ffThinkStatus.textContent =
-          'Manual FF fix: no assistant message was found in this chat.'
-      } else if (payload.status === 'not_assistant') {
-        ffThinkStatus.textContent =
-          'Automatic FF fix skipped: generated target was not an assistant reply.'
-      } else if (payload.status === 'busy') {
-        ffThinkStatus.textContent =
-          `${sourceLabel} FF fix: that message is already being repaired.`
-      } else if (payload.status === 'error') {
-        ffThinkStatus.textContent =
-          `${sourceLabel} FF fix failed: ${payload.error || 'unknown error'}`
-      }
-    })
-
-  /*
-    Ask the backend to identify itself after the receiver is installed.
-    If an old backend is still running, this line stays on "checking…",
-    which makes a stale hot-reload obvious.
-  */
+      return;
+    }
+    if (payload?.type !== "ff_think_fix_result") {
+      return;
+    }
+    if (payload.source === "manual" && ffManualRequestId && payload.requestId === ffManualRequestId) {
+      finishFFManualRequest();
+    }
+    if (!ffThinkStatus)
+      return;
+    const sourceLabel = payload.source === "manual" ? "Manual" : "Automatic";
+    if (payload.status === "fixed") {
+      ffThinkStatus.textContent = `${sourceLabel} FF fix succeeded — moved ${payload.reasoningSide === "after" ? "post-marker" : "pre-marker"} text${payload.includeMarker ? " including the marker" : ""} into native reasoning.`;
+    } else if (payload.status === "no_match") {
+      ffThinkStatus.textContent = `${sourceLabel} FF fix: no matching RP boundary marker in the target reply.`;
+    } else if (payload.status === "already_fixed") {
+      ffThinkStatus.textContent = `${sourceLabel} FF fix: target reply is already split into native reasoning.`;
+    } else if (payload.status === "no_assistant") {
+      ffThinkStatus.textContent = "Manual FF fix: no assistant message was found in this chat.";
+    } else if (payload.status === "not_assistant") {
+      ffThinkStatus.textContent = "Automatic FF fix skipped: generated target was not an assistant reply.";
+    } else if (payload.status === "busy") {
+      ffThinkStatus.textContent = `${sourceLabel} FF fix: that message is already being repaired.`;
+    } else if (payload.status === "error") {
+      ffThinkStatus.textContent = `${sourceLabel} FF fix failed: ${payload.error || "unknown error"}`;
+    }
+  });
   try {
     ctx.sendToBackend({
-      type: 'ff_think_fix_health',
-    })
+      type: "ff_think_fix_health"
+    });
   } catch {
     if (ffThinkBackendStatus) {
-      ffThinkBackendStatus.textContent =
-        'FF backend: frontend could not send a health check.'
+      ffThinkBackendStatus.textContent = "FF backend: frontend could not send a health check.";
     }
   }
-
-  /*
-    Explicitly release any backend->frontend startup messages instead of
-    relying on legacy auto-ready timing.
-  */
   try {
-    ctx.ready?.()
+    ctx.ready?.();
   } catch {}
-
-  if (settings.settingsPersistenceMode === 'account') {
-    requestAccountSettings()
+  if (settings.settingsPersistenceMode === "account") {
+    requestAccountSettings();
   } else if (settingsSaveStatus) {
-    settingsSaveStatus.textContent =
-      'Settings storage: this browser only.'
+    settingsSaveStatus.textContent = "Settings storage: this browser only.";
   }
-
-  const observer =
-    new MutationObserver(
-      () => {
-        scheduleProcess()
-        scheduleFontCompatSettle()
-      }
-    )
-
-  observer.observe(
-    document.body,
-    {
-      childList: true,
-      subtree: true,
-      characterData: true,
-      attributes: true,
-      attributeFilter: [
-        'title',
-        'aria-label',
-        'data-tooltip',
-        'data-title'
-      ],
-    }
-  )
-
-  const GROUP_STATE_KEY = `${UI_STATE_KEY}:groups`
-
-  let groupState = {}
+  const observer = new MutationObserver(() => {
+    scheduleProcess();
+    scheduleFontCompatSettle();
+  });
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: [
+      "title",
+      "aria-label",
+      "data-tooltip",
+      "data-title"
+    ]
+  });
+  const GROUP_STATE_KEY = `${UI_STATE_KEY}:groups`;
+  let groupState = {};
   try {
-    groupState = JSON.parse(
-      localStorage.getItem(
-        GROUP_STATE_KEY
-      ) || '{}'
-    )
+    groupState = JSON.parse(localStorage.getItem(GROUP_STATE_KEY) || "{}");
   } catch {
-    groupState = {}
+    groupState = {};
   }
-
-  document
-    .querySelectorAll(
-      '.lumibionic-group'
-    )
-    .forEach(details => {
-      const key =
-        details.getAttribute(
-          'data-lumibionic-group'
-        )
-
-      if (
-        key &&
-        typeof groupState[key] ===
-          'boolean'
-      ) {
-        details.open =
-          groupState[key]
-      }
-
-      details.addEventListener(
-        'toggle',
-        () => {
-          if (!key) return
-          groupState[key] =
-            details.open
-          try {
-            localStorage.setItem(
-              GROUP_STATE_KEY,
-              JSON.stringify(
-                groupState
-              )
-            )
-          } catch {}
-        }
-      )
-    })
-
-  applyCssSettings()
-  syncControls()
-  renderPreview()
-  processAll()
-
+  document.querySelectorAll(".lumibionic-group").forEach((details) => {
+    const key = details.getAttribute("data-lumibionic-group");
+    if (key && typeof groupState[key] === "boolean") {
+      details.open = groupState[key];
+    }
+    details.addEventListener("toggle", () => {
+      if (!key)
+        return;
+      groupState[key] = details.open;
+      try {
+        localStorage.setItem(GROUP_STATE_KEY, JSON.stringify(groupState));
+      } catch {}
+    });
+  });
+  applyCssSettings();
+  syncControls();
+  renderPreview();
+  processAll();
   return () => {
-    observer.disconnect()
-    unsubBackendMessage?.()
-    unsubAutoRegenerate?.()
-
+    observer.disconnect();
+    unsubBackendMessage?.();
+    unsubAutoRegenerate?.();
     if (pendingAutoRegenTimer) {
-      clearTimeout(
-        pendingAutoRegenTimer
-      )
-      pendingAutoRegenTimer = null
+      clearTimeout(pendingAutoRegenTimer);
+      pendingAutoRegenTimer = null;
     }
-
     if (fontCompatSettleTimer) {
-      clearTimeout(
-        fontCompatSettleTimer
-      )
-      fontCompatSettleTimer = null
+      clearTimeout(fontCompatSettleTimer);
+      fontCompatSettleTimer = null;
     }
-
     if (fontCompatLateTimer) {
-      clearTimeout(
-        fontCompatLateTimer
-      )
-      fontCompatLateTimer = null
+      clearTimeout(fontCompatLateTimer);
+      fontCompatLateTimer = null;
     }
-
     if (kenSleepModal) {
       try {
-        kenSleepModal.dismiss()
+        kenSleepModal.dismiss();
       } catch {}
-      kenSleepModal = null
+      kenSleepModal = null;
     }
-
-    unwrap()
-    unloadLocalFont(false)
-    clearToolbarVisibility()
-
-    document
-      .querySelectorAll(
-        `[${SCROLL_LATEST_WRAPPER_ATTR}]`
-      )
-      .forEach(wrapper => wrapper.remove())
-
-    document
-      .querySelectorAll(
-        `[${SCROLL_LATEST_BUTTON_ATTR}]`
-      )
-      .forEach(button => button.remove())
-
-    document
-      .querySelectorAll(
-        `[${AUTO_REGENERATE_WRAPPER_ATTR}], ` +
-        `[${AUTO_REGENERATE_BUTTON_ATTR}]`
-      )
-      .forEach(element => element.remove())
-
-    document
-      .querySelectorAll('.lumibionic-bubble-scope')
-      .forEach(el => {
-        el.classList.remove('lumibionic-bubble-scope')
-      })
-
-    const root = document.documentElement
-
+    unwrap();
+    unloadLocalFont(false);
+    clearToolbarVisibility();
+    document.querySelectorAll(`[${SCROLL_LATEST_WRAPPER_ATTR}]`).forEach((wrapper) => wrapper.remove());
+    document.querySelectorAll(`[${SCROLL_LATEST_BUTTON_ATTR}]`).forEach((button) => button.remove());
+    document.querySelectorAll(`[${AUTO_REGENERATE_WRAPPER_ATTR}], ` + `[${AUTO_REGENERATE_BUTTON_ATTR}]`).forEach((element) => element.remove());
+    document.querySelectorAll(".lumibionic-bubble-scope").forEach((el) => {
+      el.classList.remove("lumibionic-bubble-scope");
+    });
+    const root = document.documentElement;
     for (const className of [
-      'lb-font-messages',
-      'lb-font-bubble',
-      'lb-font-composer',
-      'lb-font-menus',
-      'lb-font-navigation',
-      'lb-font-all',
-      ...TOOLBAR_BUTTONS.map(item => item.className),
+      "lb-font-messages",
+      "lb-font-bubble",
+      "lb-font-composer",
+      "lb-font-menus",
+      "lb-font-navigation",
+      "lb-font-all",
+      ...TOOLBAR_BUTTONS.map((item) => item.className)
     ]) {
-      root.classList.remove(className)
+      root.classList.remove(className);
     }
-
     for (const property of [
-      '--lumibionic-weight',
-      '--lumibionic-font-family',
-      '--lumibionic-preview-font',
-      '--lumibionic-text-size',
-      '--lumibionic-line-height',
-      '--lumibionic-reading-width',
-      '--lumibionic-paragraph-spacing',
-      '--lumibionic-letter-spacing',
-      '--lumibionic-word-spacing',
-      '--lumibionic-preview-letter-spacing',
-      '--lumibionic-preview-word-spacing',
-      '--lumibionic-preview-hyphens',
+      "--lumibionic-weight",
+      "--lumibionic-font-family",
+      "--lumibionic-preview-font",
+      "--lumibionic-text-size",
+      "--lumibionic-line-height",
+      "--lumibionic-reading-width",
+      "--lumibionic-paragraph-spacing",
+      "--lumibionic-letter-spacing",
+      "--lumibionic-word-spacing",
+      "--lumibionic-preview-letter-spacing",
+      "--lumibionic-preview-word-spacing",
+      "--lumibionic-preview-hyphens"
     ]) {
-      root.style.removeProperty(property)
+      root.style.removeProperty(property);
     }
-
-    tab.destroy()
-    removeStyle()
-    ctx.dom.cleanup()
-  }
+    tab.destroy();
+    removeStyle();
+    ctx.dom.cleanup();
+  };
 }
+export {
+  setup
+};

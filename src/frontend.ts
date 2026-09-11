@@ -695,8 +695,22 @@ export function setup(ctx) {
       word-spacing: normal !important;
     }
 
+    [data-lumibionic-word] {
+      display: inline !important;
+      line-height: inherit !important;
+      font-size: inherit !important;
+      letter-spacing: inherit !important;
+      word-spacing: inherit !important;
+      vertical-align: baseline !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+
     [data-lumibionic-fix] {
       font-weight: var(--lumibionic-weight, 600) !important;
+      line-height: inherit !important;
+      font-size: inherit !important;
+      vertical-align: baseline !important;
     }
 
     /* Chat toolbar visibility — exact title matches requested by the user. */
@@ -1264,6 +1278,9 @@ export function setup(ctx) {
   const LUMIREALM_FONT_LOCK_ATTR =
     'data-lumibionic-font-lock'
 
+  const LUMIREALM_LAYOUT_LOCK_ATTR =
+    'data-lumibionic-layout-lock'
+
   const LUMIREALM_PROSE_SELECTOR = [
     'p',
     'li',
@@ -1323,24 +1340,9 @@ export function setup(ctx) {
     })
   }
 
-  function hasOwnVisibleText(element) {
-    return Array.from(
-      element.childNodes
-    ).some(node => {
-      return (
-        node.nodeType ===
-          Node.TEXT_NODE &&
-        Boolean(
-          node.textContent?.trim()
-        )
-      )
-    })
-  }
-
   function applyFontLockToRoot(
     root,
-    font,
-    messageSize
+    font
   ) {
     if (!root) return
 
@@ -1377,38 +1379,89 @@ export function setup(ctx) {
         })
     }
 
+    const useFont =
+      shouldApplyMessageFontLock()
+
     for (const element of targets) {
       if (
-        element instanceof Element &&
+        !(element instanceof Element) ||
         isProtectedFontElement(element)
       ) {
         continue
       }
 
-      element.style.setProperty(
-        'font-family',
-        font,
-        'important'
-      )
-
       /*
-        LumiRealm's shadow stylesheet also sets its own text sizes
-        (14px and smaller in the diagnostic). Match the normal Bionic
-        MessageContent size so the same reply does not shrink merely
-        because it crossed into the HTML-island shadow root.
+        Keep deep font-family support, but do not force a single font-size
+        onto LumiRealm descendants. That used to flatten its own type scale.
       */
-      if (messageSize) {
+      if (useFont) {
         element.style.setProperty(
-          'font-size',
-          messageSize,
+          'font-family',
+          font,
           'important'
+        )
+        element.setAttribute(
+          LUMIREALM_FONT_LOCK_ATTR,
+          'true'
+        )
+      } else if (
+        element.hasAttribute(
+          LUMIREALM_FONT_LOCK_ATTR
+        )
+      ) {
+        element.style.removeProperty(
+          'font-family'
+        )
+        element.removeAttribute(
+          LUMIREALM_FONT_LOCK_ATTR
         )
       }
 
+      /*
+        Explicitly carry line spacing through the open shadow root.
+      */
+      element.style.setProperty(
+        'line-height',
+        String(settings.lineHeight),
+        'important'
+      )
       element.setAttribute(
-        LUMIREALM_FONT_LOCK_ATTR,
+        LUMIREALM_LAYOUT_LOCK_ATTR,
         'true'
       )
+
+      /*
+        Explicitly carry paragraph spacing through the shadow root.
+        0 means "theme default", so remove our inline margins in that case.
+      */
+      if (
+        element.matches?.('p')
+      ) {
+        if (
+          settings.paragraphSpacing > 0.001
+        ) {
+          element.style.setProperty(
+            'margin-block-start',
+            '0',
+            'important'
+          )
+
+          element.style.setProperty(
+            'margin-block-end',
+            element.matches(':last-child')
+              ? '0'
+              : `${settings.paragraphSpacing}em`,
+            'important'
+          )
+        } else {
+          element.style.removeProperty(
+            'margin-block-start'
+          )
+          element.style.removeProperty(
+            'margin-block-end'
+          )
+        }
+      }
     }
 
     root
@@ -1417,8 +1470,7 @@ export function setup(ctx) {
         if (element.shadowRoot) {
           applyFontLockToRoot(
             element.shadowRoot,
-            font,
-            messageSize
+            font
           )
         }
       })
@@ -1426,38 +1478,11 @@ export function setup(ctx) {
 
 
   function applyLumiRealmFontLock(root) {
-    if (
-      !root ||
-      !shouldApplyMessageFontLock()
-    ) {
-      return
-    }
-
-    const messageRoot =
-      root instanceof Element &&
-      root.matches?.(
-        MESSAGE_SELECTOR
-      )
-        ? root
-        : (
-            root instanceof Element
-              ? root.closest?.(
-                  MESSAGE_SELECTOR
-                )
-              : null
-          )
-
-    const messageSize =
-      messageRoot
-        ? getComputedStyle(
-            messageRoot
-          ).fontSize
-        : null
+    if (!root) return
 
     applyFontLockToRoot(
       root,
-      currentFont(),
-      messageSize
+      currentFont()
     )
   }
 
@@ -1466,18 +1491,42 @@ export function setup(ctx) {
 
     root
       .querySelectorAll?.(
-        `[${LUMIREALM_FONT_LOCK_ATTR}]`
+        `[${LUMIREALM_FONT_LOCK_ATTR}], ` +
+        `[${LUMIREALM_LAYOUT_LOCK_ATTR}]`
       )
       .forEach(element => {
-        element.style.removeProperty(
-          'font-family'
-        )
+        if (
+          element.hasAttribute(
+            LUMIREALM_FONT_LOCK_ATTR
+          )
+        ) {
+          element.style.removeProperty(
+            'font-family'
+          )
+        }
+
+        /*
+          Older releases used the font-lock attr while forcing deep font-size.
+          Remove it during cleanup so a live upgrade cannot leave stale sizing.
+        */
         element.style.removeProperty(
           'font-size'
+        )
+        element.style.removeProperty(
+          'line-height'
+        )
+        element.style.removeProperty(
+          'margin-block-start'
+        )
+        element.style.removeProperty(
+          'margin-block-end'
         )
 
         element.removeAttribute(
           LUMIREALM_FONT_LOCK_ATTR
+        )
+        element.removeAttribute(
+          LUMIREALM_LAYOUT_LOCK_ATTR
         )
       })
 
@@ -1497,6 +1546,7 @@ export function setup(ctx) {
   ) {
     clearFontLocksInRoot(root)
   }
+
 
   function elementDescriptor(element) {
     if (!(element instanceof Element)) {
@@ -2497,10 +2547,6 @@ export function setup(ctx) {
   let fontCompatLateTimer = null
 
   function reapplyMessageFonts() {
-    if (!shouldApplyMessageFontLock()) {
-      return
-    }
-
     document
       .querySelectorAll(
         MESSAGE_SELECTOR
@@ -2974,7 +3020,7 @@ export function setup(ctx) {
             <label for="lb-size">Message text size</label>
             <span class="lumibionic-value" id="lb-size-value"></span>
           </div>
-          <input id="lb-size" type="range" min="80" max="140" step="5">
+          <input id="lb-size" type="range" min="80" max="140" step="1">
         </div>
 
         <div class="lumibionic-control">
