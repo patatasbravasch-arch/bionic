@@ -106,6 +106,10 @@ function setup(ctx) {
     autoRegenerateTriggerText: "",
     autoRegenerateMaxAttempts: 3,
     settingsPersistenceMode: "account",
+    extensionUiVisibility: {
+      entries: {}
+    },
+    uiLanguage: null,
     toolbarSpacing: 4,
     toolbarHidden: { ...DEFAULT_TOOLBAR_HIDDEN }
   };
@@ -244,6 +248,10 @@ function setup(ctx) {
         autoRegenerateTriggerText: typeof saved.autoRegenerateTriggerText === "string" ? saved.autoRegenerateTriggerText : DEFAULTS.autoRegenerateTriggerText,
         autoRegenerateMaxAttempts: clamp(saved.autoRegenerateMaxAttempts, 1, 10, DEFAULTS.autoRegenerateMaxAttempts),
         settingsPersistenceMode: saved.settingsPersistenceMode === "browser" ? "browser" : "account",
+        extensionUiVisibility: {
+          entries: saved.extensionUiVisibility?.entries && typeof saved.extensionUiVisibility.entries === "object" && !Array.isArray(saved.extensionUiVisibility.entries) ? Object.fromEntries(Object.entries(saved.extensionUiVisibility.entries).filter(([key, value]) => typeof key === "string" && key.length <= 500 && typeof value === "boolean").slice(0, 256)) : {}
+        },
+        uiLanguage: ["en", "zh", "zh-TW", "ja", "fr", "it"].includes(saved.uiLanguage) ? saved.uiLanguage : null,
         toolbarSpacing: clamp(saved.toolbarSpacing, 0, 16, DEFAULTS.toolbarSpacing),
         toolbarHidden: Object.fromEntries(TOOLBAR_BUTTONS.map((item) => [
           item.key,
@@ -255,6 +263,10 @@ function setup(ctx) {
     }
   }
   let applyingAccountSettings = false;
+  let extensionUiProfileReady = settings.settingsPersistenceMode === "browser";
+  let extensionUiObserver = null;
+  let extensionUiApplyTimer = null;
+  const extensionUiPendingUserToggles = new Map;
   function saveSettings() {
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
@@ -289,6 +301,170 @@ function setup(ctx) {
       }
     }
   }
+  const LUMIVERSE_UI_LANGUAGES = new Set(["en", "zh", "zh-TW", "ja", "fr", "it"]);
+  let uiLanguageApplyTimer = null;
+  function normalizeUiLanguage(value) {
+    return typeof value === "string" && LUMIVERSE_UI_LANGUAGES.has(value) ? value : null;
+  }
+  function syncUiLanguage() {
+    if (!extensionUiProfileReady)
+      return;
+    const select = document.querySelector("#lumiverse-ui-language");
+    if (!(select instanceof HTMLSelectElement))
+      return;
+    const current = normalizeUiLanguage(select.value);
+    const wanted = normalizeUiLanguage(settings.uiLanguage);
+    if (!wanted) {
+      if (!current)
+        return;
+      settings = {
+        ...settings,
+        uiLanguage: current
+      };
+      saveSettings();
+      return;
+    }
+    if (current === wanted)
+      return;
+    select.value = wanted;
+    select.dispatchEvent(new Event("change", {
+      bubbles: true
+    }));
+  }
+  function scheduleUiLanguageSync() {
+    if (uiLanguageApplyTimer !== null)
+      return;
+    uiLanguageApplyTimer = window.setTimeout(() => {
+      uiLanguageApplyTimer = null;
+      syncUiLanguage();
+    }, 50);
+  }
+  function handleUiLanguageChange(event) {
+    if (!event.isTrusted || !extensionUiProfileReady) {
+      return;
+    }
+    const target = event.target;
+    if (!(target instanceof HTMLSelectElement) || target.id !== "lumiverse-ui-language") {
+      return;
+    }
+    const language = normalizeUiLanguage(target.value);
+    if (!language || settings.uiLanguage === language) {
+      return;
+    }
+    settings = {
+      ...settings,
+      uiLanguage: language
+    };
+    saveSettings();
+  }
+  function extensionUiStableKey(label, kind) {
+    return `${kind}\x00${label}`;
+  }
+  function getExtensionUiProfile() {
+    const entries = settings.extensionUiVisibility?.entries;
+    return entries && typeof entries === "object" ? entries : {};
+  }
+  function saveExtensionUiChoice(key, hidden) {
+    const current = getExtensionUiProfile();
+    if (current[key] === hidden)
+      return;
+    settings = {
+      ...settings,
+      extensionUiVisibility: {
+        entries: {
+          ...current,
+          [key]: hidden
+        }
+      }
+    };
+    saveSettings();
+  }
+  function readExtensionUiToggle(button) {
+    if (!(button instanceof HTMLButtonElement))
+      return null;
+    const eyeOff = button.querySelector("svg.lucide-eye-off");
+    const eye = button.querySelector("svg.lucide-eye");
+    if (!eyeOff && !eye)
+      return null;
+    const row = button.parentElement;
+    if (!row)
+      return null;
+    const spans = Array.from(row.querySelectorAll("span"));
+    if (spans.length < 2)
+      return null;
+    const label = spans[0]?.textContent?.trim() || "";
+    const kind = spans[1]?.textContent?.trim() || "";
+    if (!label || !kind)
+      return null;
+    return {
+      button,
+      key: extensionUiStableKey(label, kind),
+      hidden: Boolean(eyeOff)
+    };
+  }
+  function findExtensionUiToggles() {
+    return Array.from(document.querySelectorAll("button")).map((button) => readExtensionUiToggle(button)).filter(Boolean);
+  }
+  function syncExtensionUiVisibility() {
+    if (!extensionUiProfileReady)
+      return;
+    const profile = getExtensionUiProfile();
+    for (const item of findExtensionUiToggles()) {
+      const before = extensionUiPendingUserToggles.get(item.key);
+      if (typeof before === "boolean") {
+        if (item.hidden !== before) {
+          extensionUiPendingUserToggles.delete(item.key);
+          saveExtensionUiChoice(item.key, item.hidden);
+        }
+        continue;
+      }
+      const wanted = profile[item.key];
+      if (typeof wanted === "boolean" && wanted !== item.hidden) {
+        item.button.click();
+      }
+    }
+  }
+  function scheduleExtensionUiVisibilitySync() {
+    scheduleUiLanguageSync();
+    if (extensionUiApplyTimer !== null)
+      return;
+    extensionUiApplyTimer = window.setTimeout(() => {
+      extensionUiApplyTimer = null;
+      syncExtensionUiVisibility();
+    }, 30);
+  }
+  function handleExtensionUiVisibilityClick(event) {
+    if (!event.isTrusted || !extensionUiProfileReady)
+      return;
+    const target = event.target;
+    if (!(target instanceof Element))
+      return;
+    const button = target.closest("button");
+    const item = readExtensionUiToggle(button);
+    if (!item)
+      return;
+    extensionUiPendingUserToggles.set(item.key, item.hidden);
+    window.setTimeout(() => {
+      scheduleExtensionUiVisibilitySync();
+    }, 50);
+  }
+  function startExtensionUiVisibilitySync() {
+    if (!document.body) {
+      window.setTimeout(startExtensionUiVisibilitySync, 100);
+      return;
+    }
+    document.addEventListener("click", handleExtensionUiVisibilityClick, true);
+    document.addEventListener("change", handleUiLanguageChange, true);
+    extensionUiObserver = new MutationObserver(scheduleExtensionUiVisibilitySync);
+    extensionUiObserver.observe(document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["class", "title", "aria-label"]
+    });
+    scheduleExtensionUiVisibilitySync();
+  }
+  queueMicrotask(startExtensionUiVisibilitySync);
   function graphemes(value) {
     if (!segmenter)
       return Array.from(value);
@@ -3044,6 +3220,8 @@ function setup(ctx) {
             settingsPersistenceMode: saved.settingsPersistenceMode === "browser" ? "browser" : "account"
           }));
           settings = loadSettings();
+          extensionUiProfileReady = true;
+          scheduleExtensionUiVisibilitySync();
           applyCssSettings();
           syncControls();
           rebuildAll();
@@ -3056,6 +3234,8 @@ function setup(ctx) {
           applyingAccountSettings = false;
         }
       } else {
+        extensionUiProfileReady = true;
+        scheduleExtensionUiVisibilitySync();
         if (settings.settingsPersistenceMode === "account") {
           saveSettings();
         }
