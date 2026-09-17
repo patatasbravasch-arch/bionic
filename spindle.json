@@ -1,11 +1,11 @@
 {
-  "version": "0.45.0",
+  "version": "0.47.0",
   "name": "Bionic Reading & Fonts",
   "identifier": "bionic_style_reading",
   "author": "patatasbravasch-arch",
   "github": "https://github.com/patatasbravasch-arch/bionic",
   "homepage": "https://github.com/patatasbravasch-arch/bionic",
-  "description": "Bionic reading, typography, toolbar controls, FF think fix, LumiRealm compatibility, configurable auto-regeneration, persistent settings, and Lorebook Cleanup. The cleaner scans duplicate-name world books, compares entries, shows character/global references, rewires card attachments, and can safely remove exact duplicates or merge unique entries before cleanup.",
+  "description": "Bionic reading, typography, toolbar controls, FF think fix, LumiRealm compatibility, configurable auto-regeneration, persistent settings, and Lorebook Cleanup. v0.47 fixes operator-scoped lorebook cleanup by forwarding the active Lumiverse user ID through world-book and character operations.",
   "permissions": [
     "generation",
     "chat_mutation",
