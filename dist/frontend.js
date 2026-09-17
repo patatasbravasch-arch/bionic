@@ -39,7 +39,7 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.47'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.48'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -3125,14 +3125,43 @@ export function setup(ctx) {
         <summary>Lorebook Cleanup</summary>
         <div class="lumibionic-group-body">
           <div class="lumibionic-section">
-            <div class="lumibionic-section-title">Duplicate lorebooks</div>
-            <div class="lumibionic-muted">Scan duplicate-name lorebooks, compare entries, and inspect character/global references. Scanning never deletes anything.</div>
+            <div class="lumibionic-section-title">Library scan</div>
+            <div class="lumibionic-muted">
+              Scans your signed-in Lumiverse library directly. It finds lorebooks
+              not linked to any character card and exact duplicate lorebooks.
+              Scanning itself never deletes anything.
+            </div>
             <div class="lumibionic-toolbar-actions">
-              <button type="button" id="lb-lore-scan">Scan duplicates</button>
-              <button type="button" id="lb-lore-clean-exact">Clean all exact duplicates</button>
+              <button type="button" id="lb-lore-scan">Scan lorebooks</button>
+              <button type="button" id="lb-lore-clean-exact">Relink & delete all exact duplicates</button>
             </div>
             <div class="lumibionic-muted" id="lb-lore-status">Not scanned yet.</div>
+          </div>
+
+          <div class="lumibionic-section">
+            <div class="lumibionic-section-title">Not linked to any card</div>
+            <div class="lumibionic-muted">
+              Possible old or forgotten lorebooks. Nothing here is deleted automatically.
+            </div>
+            <div class="lumibionic-lorebook-list" id="lb-lore-unlinked"></div>
+          </div>
+
+          <div class="lumibionic-section">
+            <div class="lumibionic-section-title">Exact duplicates</div>
+            <div class="lumibionic-muted">
+              Exact means the normalized lorebook name and all non-ID entry data match.
+              Cleanup keeps the most-used copy, relinks every affected card to it,
+              then removes redundant copies.
+            </div>
             <div class="lumibionic-lorebook-list" id="lb-lore-results"></div>
+          </div>
+
+          <div class="lumibionic-section">
+            <div class="lumibionic-section-title">Folder organization</div>
+            <div class="lumibionic-muted">
+              Lumiverse has native lorebook folders. LLM-assisted folder suggestions
+              are planned separately; this cleanup version will not move books by itself.
+            </div>
           </div>
         </div>
       </details>
@@ -3271,6 +3300,7 @@ export function setup(ctx) {
   const loreScan = $('#lb-lore-scan')
   const loreCleanExact = $('#lb-lore-clean-exact')
   const loreStatus = $('#lb-lore-status')
+  const loreUnlinked = $('#lb-lore-unlinked')
   const loreResults = $('#lb-lore-results')
 
   const preview = $('#lb-preview')
@@ -4565,6 +4595,8 @@ export function setup(ctx) {
   }
 
   let loreCleanupGroups = []
+  let loreCleanupUnlinked = []
+  let loreCleanupCharacters = []
   let loreCleanupBusy = false
 
   function escapeLoreHtml(value) {
@@ -4580,53 +4612,604 @@ export function setup(ctx) {
     loreCleanupBusy = Boolean(busy)
     if (loreScan) loreScan.disabled = loreCleanupBusy
     if (loreCleanExact) loreCleanExact.disabled = loreCleanupBusy
-    if (loreStatus && typeof message === 'string') loreStatus.textContent = message
+    if (loreStatus && typeof message === 'string') {
+      loreStatus.textContent = message
+    }
   }
 
-  function renderLoreCleanupGroups() {
+  async function loreApi(path, options = {}) {
+    const response = await fetch(path, {
+      credentials: 'same-origin',
+      cache: 'no-store',
+      ...options,
+      headers: {
+        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(options.headers || {}),
+      },
+    })
+
+    if (!response.ok) {
+      let detail = ''
+      try {
+        const body = await response.json()
+        detail = body?.error ? `: ${body.error}` : ''
+      } catch {}
+      throw new Error(`${response.status} ${response.statusText}${detail}`)
+    }
+
+    if (response.status === 204) return null
+    return response.json()
+  }
+
+  async function lorePaged(path) {
+    const all = []
+    let offset = 0
+
+    while (true) {
+      const separator = path.includes('?') ? '&' : '?'
+      const page = await loreApi(
+        `${path}${separator}limit=200&offset=${offset}`
+      )
+      const data = Array.isArray(page?.data) ? page.data : []
+      all.push(...data)
+      const total = Number(page?.total ?? all.length)
+
+      if (!data.length || all.length >= total) return all
+      offset += data.length
+    }
+  }
+
+  async function loreBookEntries(bookId) {
+    return lorePaged(
+      `/api/v1/world-books/${encodeURIComponent(bookId)}/entries`
+    )
+  }
+
+  function characterLoreIds(character) {
+    if (Array.isArray(character?.world_book_ids)) {
+      return character.world_book_ids.filter(id => typeof id === 'string')
+    }
+
+    const ext = character?.extensions || {}
+
+    if (Array.isArray(ext.world_book_ids)) {
+      return ext.world_book_ids.filter(id => typeof id === 'string')
+    }
+
+    if (typeof ext.world_book_id === 'string' && ext.world_book_id) {
+      return [ext.world_book_id]
+    }
+
+    return []
+  }
+
+  function stableLoreValue(value, key = '') {
+    if (Array.isArray(value)) {
+      const mapped = value.map(item => stableLoreValue(item))
+      if (key === 'key' || key === 'keysecondary') {
+        return mapped.map(String).sort()
+      }
+      return mapped
+    }
+
+    if (value && typeof value === 'object') {
+      const result = {}
+
+      for (const childKey of Object.keys(value).sort()) {
+        if (
+          [
+            'id',
+            'uid',
+            'world_book_id',
+            'created_at',
+            'updated_at',
+            'revision',
+          ].includes(childKey)
+        ) {
+          continue
+        }
+
+        result[childKey] =
+          stableLoreValue(
+            value[childKey],
+            childKey
+          )
+      }
+
+      return result
+    }
+
+    return value
+  }
+
+  function loreEntrySignature(entry) {
+    return JSON.stringify(
+      stableLoreValue(entry)
+    )
+  }
+
+  function normalizedLoreName(name) {
+    return String(name || '')
+      .normalize('NFKC')
+      .trim()
+      .toLocaleLowerCase()
+      .replace(/[\s_-]+/g, ' ')
+  }
+
+  function bookExactSignature(book, entries) {
+    return JSON.stringify({
+      name: normalizedLoreName(book?.name),
+      entries:
+        entries
+          .map(loreEntrySignature)
+          .sort(),
+    })
+  }
+
+  function cardRefsByBook(characters) {
+    const refs = new Map()
+
+    for (const character of characters) {
+      for (const bookId of characterLoreIds(character)) {
+        const current = refs.get(bookId) || []
+        current.push({
+          id: character.id,
+          name: character.name || 'Unnamed character',
+        })
+        refs.set(bookId, current)
+      }
+    }
+
+    return refs
+  }
+
+  function renderLoreCleanup() {
+    if (loreUnlinked) {
+      loreUnlinked.innerHTML =
+        loreCleanupUnlinked.length
+          ? loreCleanupUnlinked.map(book => `
+              <div class="lumibionic-lorebook-card">
+                <div class="lumibionic-lorebook-card-title">
+                  ${escapeLoreHtml(book.name)}
+                </div>
+                <div class="lumibionic-muted">
+                  ${book.entryCount} entries · no character-card links detected
+                </div>
+                <div class="lumibionic-lorebook-actions">
+                  <button
+                    type="button"
+                    data-lore-delete-unlinked="${escapeLoreHtml(book.id)}"
+                  >
+                    Delete this unlinked lorebook
+                  </button>
+                </div>
+              </div>
+            `).join('')
+          : '<div class="lumibionic-muted">No unlinked lorebooks found.</div>'
+    }
+
     if (!loreResults) return
-    if (!loreCleanupGroups.length) { loreResults.innerHTML = ''; return }
-    loreResults.innerHTML = loreCleanupGroups.map(group => {
-      const cls = group.classification === 'exact' ? 'Exact duplicate' : group.classification === 'near' ? `Near duplicate (${Math.round((group.similarity || 0) * 100)}% overlap)` : 'Conflicting duplicate'
-      const books = (group.books || []).map(book => {
-        const keep = book.id === group.recommendedKeepId
-        return `<div class="lumibionic-lorebook-book"><div>${keep ? '★ ' : ''}${escapeLoreHtml(book.name)} <span class="lumibionic-muted">— ${book.entryCount} entries, ${book.characterRefs} character refs${book.globalRef ? ', global' : ''}</span></div><code>${escapeLoreHtml(book.id)}</code></div>`
-      }).join('')
-      const exact = group.classification === 'exact' ? `<button type="button" data-lore-action="clean" data-lore-group="${escapeLoreHtml(group.groupId)}">Keep ★ and delete exact copies</button>` : ''
-      return `<div class="lumibionic-lorebook-card"><div class="lumibionic-lorebook-card-title">${escapeLoreHtml(group.name)} — ${cls}</div>${books}<div class="lumibionic-lorebook-actions">${exact}<button type="button" data-lore-action="merge" data-lore-group="${escapeLoreHtml(group.groupId)}">Merge unique entries into ★, rewire & delete copies</button></div></div>`
-    }).join('')
+
+    loreResults.innerHTML =
+      loreCleanupGroups.length
+        ? loreCleanupGroups.map(group => {
+            const books =
+              group.books
+                .map(book => {
+                  const keep =
+                    book.id === group.recommendedKeepId
+
+                  const refs =
+                    book.cardRefs.length
+                      ? book.cardRefs
+                          .map(ref => ref.name)
+                          .join(', ')
+                      : 'no cards'
+
+                  return `
+                    <div class="lumibionic-lorebook-book">
+                      <div>
+                        ${keep ? '★ ' : ''}${escapeLoreHtml(book.name)}
+                        <span class="lumibionic-muted">
+                          — ${book.entryCount} entries · ${escapeLoreHtml(refs)}
+                        </span>
+                      </div>
+                      <code>${escapeLoreHtml(book.id)}</code>
+                    </div>
+                  `
+                })
+                .join('')
+
+            return `
+              <div class="lumibionic-lorebook-card">
+                <div class="lumibionic-lorebook-card-title">
+                  ${escapeLoreHtml(group.name)} — exact duplicate
+                </div>
+                ${books}
+                <div class="lumibionic-lorebook-actions">
+                  <button
+                    type="button"
+                    data-lore-clean-group="${escapeLoreHtml(group.groupId)}"
+                  >
+                    Keep ★, relink cards, delete copies
+                  </button>
+                </div>
+              </div>
+            `
+          }).join('')
+        : '<div class="lumibionic-muted">No exact duplicate lorebooks found.</div>'
   }
 
-  function requestLorebookScan() {
-    if (loreCleanupBusy) return
-    setLoreCleanupBusy(true, 'Scanning world books and character attachments…')
-    ctx.sendToBackend({ type: 'lorebook_cleanup_scan' })
+  async function scanLorebooksDirect() {
+    const [books, characters] =
+      await Promise.all([
+        lorePaged('/api/v1/world-books'),
+        lorePaged('/api/v1/characters'),
+      ])
+
+    loreCleanupCharacters = characters
+
+    const refs =
+      cardRefsByBook(characters)
+
+    const enriched = []
+    let completed = 0
+
+    for (const book of books) {
+      const entries =
+        await loreBookEntries(book.id)
+
+      completed += 1
+
+      if (loreStatus) {
+        loreStatus.textContent =
+          `Reading lorebook entries… ${completed}/${books.length}`
+      }
+
+      enriched.push({
+        id: book.id,
+        name: book.name || 'Unnamed lorebook',
+        entryCount: entries.length,
+        cardRefs: refs.get(book.id) || [],
+        signature:
+          bookExactSignature(
+            book,
+            entries
+          ),
+      })
+    }
+
+    loreCleanupUnlinked =
+      enriched
+        .filter(
+          book =>
+            book.cardRefs.length === 0
+        )
+        .sort(
+          (a, b) =>
+            a.name.localeCompare(b.name)
+        )
+
+    const bySignature =
+      new Map()
+
+    for (const book of enriched) {
+      /*
+        Empty placeholder books are deliberately not auto-grouped.
+        Two empty books can be unrelated even though their entry sets match.
+      */
+      if (book.entryCount === 0) continue
+
+      const list =
+        bySignature.get(
+          book.signature
+        ) || []
+
+      list.push(book)
+
+      bySignature.set(
+        book.signature,
+        list
+      )
+    }
+
+    loreCleanupGroups = []
+
+    let groupNumber = 0
+
+    for (const booksInGroup of bySignature.values()) {
+      if (booksInGroup.length < 2) continue
+
+      groupNumber += 1
+
+      const sorted =
+        [...booksInGroup]
+          .sort((a, b) => {
+            if (
+              a.cardRefs.length !==
+              b.cardRefs.length
+            ) {
+              return (
+                b.cardRefs.length -
+                a.cardRefs.length
+              )
+            }
+
+            return a.id.localeCompare(b.id)
+          })
+
+      loreCleanupGroups.push({
+        groupId:
+          `exact-${groupNumber}`,
+        name: sorted[0].name,
+        recommendedKeepId:
+          sorted[0].id,
+        books: sorted,
+      })
+    }
+
+    loreCleanupGroups.sort(
+      (a, b) =>
+        a.name.localeCompare(b.name)
+    )
+
+    renderLoreCleanup()
+
+    setLoreCleanupBusy(
+      false,
+      `Scan complete: ${books.length} lorebooks · ${loreCleanupUnlinked.length} not linked to any card · ${loreCleanupGroups.length} exact duplicate group${loreCleanupGroups.length === 1 ? '' : 's'}.`
+    )
   }
 
-  function requestLorebookAction(action, groupId) {
-    if (loreCleanupBusy) return
-    const group = loreCleanupGroups.find(item => item.groupId === groupId)
-    if (!group) return
-    const verb = action === 'merge' ? 'merge unique entries, rewire references, and delete the extra copies' : 'rewire references and delete exact duplicate copies'
-    if (!window.confirm(`Lorebook cleanup\n\n${group.name}\n\nThis will ${verb}.\n\nContinue?`)) return
-    setLoreCleanupBusy(true, action === 'merge' ? `Merging ${group.name}…` : `Cleaning ${group.name}…`)
-    ctx.sendToBackend({ type: action === 'merge' ? 'lorebook_cleanup_merge' : 'lorebook_cleanup_clean_exact', group })
+  async function updateCharacterLoreIds(
+    character,
+    nextIds
+  ) {
+    await loreApi(
+      `/api/v1/characters/${encodeURIComponent(character.id)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          world_book_ids: nextIds,
+        }),
+      }
+    )
   }
 
-  loreScan?.addEventListener('click', requestLorebookScan)
-  loreCleanExact?.addEventListener('click', () => {
+  async function cleanExactLoreGroup(group) {
+    const keepId =
+      group.recommendedKeepId
+
+    const duplicateIds =
+      group.books
+        .map(book => book.id)
+        .filter(id => id !== keepId)
+
+    const duplicateSet =
+      new Set(duplicateIds)
+
+    /*
+      Rewire every card before deleting any book.
+      A failed card update aborts cleanup before deletion begins.
+    */
+    for (const character of loreCleanupCharacters) {
+      const current =
+        characterLoreIds(character)
+
+      if (
+        !current.some(
+          id =>
+            duplicateSet.has(id)
+        )
+      ) {
+        continue
+      }
+
+      const next =
+        Array.from(
+          new Set(
+            current.map(
+              id =>
+                duplicateSet.has(id)
+                  ? keepId
+                  : id
+            )
+          )
+        )
+
+      await updateCharacterLoreIds(
+        character,
+        next
+      )
+    }
+
+    for (const id of duplicateIds) {
+      await loreApi(
+        `/api/v1/world-books/${encodeURIComponent(id)}`,
+        {
+          method: 'DELETE',
+        }
+      )
+    }
+  }
+
+  async function requestLorebookScan() {
     if (loreCleanupBusy) return
-    const groups = loreCleanupGroups.filter(group => group.classification === 'exact')
-    if (!groups.length) { if (loreStatus) loreStatus.textContent = 'No exact duplicate groups are currently listed.'; return }
-    if (!window.confirm(`Clean ${groups.length} exact duplicate group${groups.length === 1 ? '' : 's'}?\n\nReferences will be rewired before duplicate books are deleted.`)) return
-    setLoreCleanupBusy(true, 'Cleaning exact duplicate lorebooks…')
-    ctx.sendToBackend({ type: 'lorebook_cleanup_clean_all_exact', groups })
-  })
-  loreResults?.addEventListener('click', event => {
-    const button = event.target?.closest?.('[data-lore-action]')
-    if (!button) return
-    requestLorebookAction(button.getAttribute('data-lore-action'), button.getAttribute('data-lore-group'))
-  })
+
+    setLoreCleanupBusy(
+      true,
+      'Scanning lorebooks and character-card links…'
+    )
+
+    try {
+      await scanLorebooksDirect()
+    } catch (error) {
+      setLoreCleanupBusy(
+        false,
+        `Lorebook cleanup failed: ${
+          error?.message ||
+          String(error)
+        }`
+      )
+    }
+  }
+
+  loreScan?.addEventListener(
+    'click',
+    requestLorebookScan
+  )
+
+  loreCleanExact?.addEventListener(
+    'click',
+    async () => {
+      if (loreCleanupBusy) return
+
+      if (!loreCleanupGroups.length) {
+        if (loreStatus) {
+          loreStatus.textContent =
+            'No exact duplicate groups are currently listed.'
+        }
+        return
+      }
+
+      if (
+        !window.confirm(
+          `Relink and clean ${loreCleanupGroups.length} exact duplicate group${loreCleanupGroups.length === 1 ? '' : 's'}?\n\nCards are relinked before redundant lorebooks are deleted.`
+        )
+      ) {
+        return
+      }
+
+      setLoreCleanupBusy(
+        true,
+        'Relinking cards and removing exact duplicates…'
+      )
+
+      try {
+        for (const group of loreCleanupGroups) {
+          await cleanExactLoreGroup(group)
+        }
+
+        await scanLorebooksDirect()
+      } catch (error) {
+        setLoreCleanupBusy(
+          false,
+          `Lorebook cleanup failed: ${
+            error?.message ||
+            String(error)
+          }`
+        )
+      }
+    }
+  )
+
+  loreResults?.addEventListener(
+    'click',
+    async event => {
+      const button =
+        event.target?.closest?.(
+          '[data-lore-clean-group]'
+        )
+
+      if (!button || loreCleanupBusy) return
+
+      const groupId =
+        button.getAttribute(
+          'data-lore-clean-group'
+        )
+
+      const group =
+        loreCleanupGroups.find(
+          item =>
+            item.groupId === groupId
+        )
+
+      if (!group) return
+
+      if (
+        !window.confirm(
+          `Keep the ★ copy of "${group.name}", relink every card using the redundant copies, then delete those copies?`
+        )
+      ) {
+        return
+      }
+
+      setLoreCleanupBusy(
+        true,
+        `Cleaning ${group.name}…`
+      )
+
+      try {
+        await cleanExactLoreGroup(group)
+        await scanLorebooksDirect()
+      } catch (error) {
+        setLoreCleanupBusy(
+          false,
+          `Lorebook cleanup failed: ${
+            error?.message ||
+            String(error)
+          }`
+        )
+      }
+    }
+  )
+
+  loreUnlinked?.addEventListener(
+    'click',
+    async event => {
+      const button =
+        event.target?.closest?.(
+          '[data-lore-delete-unlinked]'
+        )
+
+      if (!button || loreCleanupBusy) return
+
+      const id =
+        button.getAttribute(
+          'data-lore-delete-unlinked'
+        )
+
+      const book =
+        loreCleanupUnlinked.find(
+          item =>
+            item.id === id
+        )
+
+      if (!book) return
+
+      if (
+        !window.confirm(
+          `Delete unlinked lorebook "${book.name}"?\n\nThe current scan found no character card referencing it. This cannot be undone.`
+        )
+      ) {
+        return
+      }
+
+      setLoreCleanupBusy(
+        true,
+        `Deleting ${book.name}…`
+      )
+
+      try {
+        await loreApi(
+          `/api/v1/world-books/${encodeURIComponent(book.id)}`,
+          {
+            method: 'DELETE',
+          }
+        )
+
+        await scanLorebooksDirect()
+      } catch (error) {
+        setLoreCleanupBusy(
+          false,
+          `Lorebook cleanup failed: ${
+            error?.message ||
+            String(error)
+          }`
+        )
+      }
+    }
+  )
 
   const unsubAutoRegenerate =
     ctx.events?.on?.(
@@ -4735,21 +5318,6 @@ export function setup(ctx) {
                 : `▶ Backend v${payload.version || '?'} found the assistant — applying native reasoning update…`
           }
         }
-        return
-      }
-
-      if (payload?.type === 'lorebook_cleanup_scan_result') {
-        loreCleanupGroups = Array.isArray(payload.groups) ? payload.groups : []
-        renderLoreCleanupGroups()
-        const exact = loreCleanupGroups.filter(group => group.classification === 'exact').length
-        const near = loreCleanupGroups.filter(group => group.classification === 'near').length
-        const conflict = loreCleanupGroups.filter(group => group.classification === 'conflicting').length
-        setLoreCleanupBusy(false, loreCleanupGroups.length ? `Found ${loreCleanupGroups.length} duplicate-name groups: ${exact} exact, ${near} near, ${conflict} conflicting.` : 'No duplicate-name lorebook groups found.')
-        return
-      }
-      if (payload?.type === 'lorebook_cleanup_action_result') {
-        setLoreCleanupBusy(false, payload?.ok === false ? `Lorebook cleanup failed: ${payload?.error || 'Unknown error'}` : `Lorebook cleanup complete: ${payload?.summary || 'done'}.`)
-        if (payload?.ok !== false) requestLorebookScan()
         return
       }
 
