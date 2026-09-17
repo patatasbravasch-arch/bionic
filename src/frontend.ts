@@ -39,7 +39,7 @@ export function setup(ctx) {
     'lumiverse:bionic-style-reading:v0.8',
     'lumiverse:bionic-style-reading:v0.7',
   ]
-  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.44'
+  const UI_STATE_KEY = 'lumiverse:bionic-style-ui:v0.45'
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
@@ -116,12 +116,6 @@ export function setup(ctx) {
     autoRegenerateMaxAttempts: 3,
 
     settingsPersistenceMode: 'account',
-
-    extensionUiVisibility: {
-      entries: {},
-    },
-
-    uiLanguage: null,
 
     toolbarSpacing: 4,
     toolbarHidden: { ...DEFAULT_TOOLBAR_HIDDEN },
@@ -396,29 +390,6 @@ export function setup(ctx) {
             ? 'browser'
             : 'account',
 
-        extensionUiVisibility: {
-          entries:
-            saved.extensionUiVisibility?.entries &&
-            typeof saved.extensionUiVisibility.entries === 'object' &&
-            !Array.isArray(saved.extensionUiVisibility.entries)
-              ? Object.fromEntries(
-                  Object.entries(saved.extensionUiVisibility.entries)
-                    .filter(
-                      ([key, value]) =>
-                        typeof key === 'string' &&
-                        key.length <= 500 &&
-                        typeof value === 'boolean'
-                    )
-                    .slice(0, 256)
-                )
-              : {},
-        },
-
-        uiLanguage:
-          ['en', 'zh', 'zh-TW', 'ja', 'fr', 'it'].includes(saved.uiLanguage)
-            ? saved.uiLanguage
-            : null,
-
         toolbarSpacing: clamp(
           saved.toolbarSpacing,
           0,
@@ -441,15 +412,6 @@ export function setup(ctx) {
   }
 
   let applyingAccountSettings = false
-
-  let extensionUiProfileReady =
-    settings.settingsPersistenceMode === 'browser'
-
-  let extensionUiObserver: MutationObserver | null = null
-  let extensionUiApplyTimer: number | null = null
-
-  const extensionUiPendingUserToggles =
-    new Map<string, boolean>()
 
   function saveSettings() {
     try {
@@ -497,260 +459,6 @@ export function setup(ctx) {
       }
     }
   }
-
-
-  const LUMIVERSE_UI_LANGUAGES =
-    new Set(['en', 'zh', 'zh-TW', 'ja', 'fr', 'it'])
-
-  let uiLanguageApplyTimer = null
-
-  function normalizeUiLanguage(value) {
-    return typeof value === 'string' &&
-      LUMIVERSE_UI_LANGUAGES.has(value)
-      ? value
-      : null
-  }
-
-  function syncUiLanguage() {
-    if (!extensionUiProfileReady) return
-
-    const select =
-      document.querySelector('#lumiverse-ui-language')
-
-    if (!(select instanceof HTMLSelectElement)) return
-
-    const current =
-      normalizeUiLanguage(select.value)
-
-    const wanted =
-      normalizeUiLanguage(settings.uiLanguage)
-
-    if (!wanted) {
-      if (!current) return
-
-      settings = {
-        ...settings,
-        uiLanguage: current,
-      }
-
-      saveSettings()
-      return
-    }
-
-    if (current === wanted) return
-
-    select.value = wanted
-
-    select.dispatchEvent(
-      new Event('change', {
-        bubbles: true,
-      })
-    )
-  }
-
-  function scheduleUiLanguageSync() {
-    if (uiLanguageApplyTimer !== null) return
-
-    uiLanguageApplyTimer =
-      window.setTimeout(() => {
-        uiLanguageApplyTimer = null
-        syncUiLanguage()
-      }, 50)
-  }
-
-  function handleUiLanguageChange(event) {
-    if (
-      !event.isTrusted ||
-      !extensionUiProfileReady
-    ) {
-      return
-    }
-
-    const target = event.target
-
-    if (
-      !(target instanceof HTMLSelectElement) ||
-      target.id !== 'lumiverse-ui-language'
-    ) {
-      return
-    }
-
-    const language =
-      normalizeUiLanguage(target.value)
-
-    if (
-      !language ||
-      settings.uiLanguage === language
-    ) {
-      return
-    }
-
-    settings = {
-      ...settings,
-      uiLanguage: language,
-    }
-
-    saveSettings()
-  }
-
-  function extensionUiStableKey(label, kind) {
-    return `${kind}\u0000${label}`
-  }
-
-  function getExtensionUiProfile() {
-    const entries = settings.extensionUiVisibility?.entries
-    return entries && typeof entries === 'object'
-      ? entries
-      : {}
-  }
-
-  function saveExtensionUiChoice(key, hidden) {
-    const current = getExtensionUiProfile()
-
-    if (current[key] === hidden) return
-
-    settings = {
-      ...settings,
-      extensionUiVisibility: {
-        entries: {
-          ...current,
-          [key]: hidden,
-        },
-      },
-    }
-
-    saveSettings()
-  }
-
-  function readExtensionUiToggle(button) {
-    if (!(button instanceof HTMLButtonElement)) return null
-
-    const eyeOff =
-      button.querySelector('svg.lucide-eye-off')
-
-    const eye =
-      button.querySelector('svg.lucide-eye')
-
-    if (!eyeOff && !eye) return null
-
-    const row = button.parentElement
-    if (!row) return null
-
-    const spans = Array.from(row.querySelectorAll('span'))
-    if (spans.length < 2) return null
-
-    const label = spans[0]?.textContent?.trim() || ''
-    const kind = spans[1]?.textContent?.trim() || ''
-
-    if (!label || !kind) return null
-
-    return {
-      button,
-      key: extensionUiStableKey(label, kind),
-      hidden: Boolean(eyeOff),
-    }
-  }
-
-  function findExtensionUiToggles() {
-    return Array.from(document.querySelectorAll('button'))
-      .map(button => readExtensionUiToggle(button))
-      .filter(Boolean)
-  }
-
-  function syncExtensionUiVisibility() {
-    if (!extensionUiProfileReady) return
-
-    const profile = getExtensionUiProfile()
-
-    for (const item of findExtensionUiToggles()) {
-      const before =
-        extensionUiPendingUserToggles.get(item.key)
-
-      if (typeof before === 'boolean') {
-        if (item.hidden !== before) {
-          extensionUiPendingUserToggles.delete(item.key)
-          saveExtensionUiChoice(item.key, item.hidden)
-        }
-        continue
-      }
-
-      const wanted = profile[item.key]
-
-      if (
-        typeof wanted === 'boolean' &&
-        wanted !== item.hidden
-      ) {
-        item.button.click()
-      }
-    }
-  }
-
-  function scheduleExtensionUiVisibilitySync() {
-    scheduleUiLanguageSync()
-
-    if (extensionUiApplyTimer !== null) return
-
-    extensionUiApplyTimer = window.setTimeout(() => {
-      extensionUiApplyTimer = null
-      syncExtensionUiVisibility()
-    }, 30)
-  }
-
-  function handleExtensionUiVisibilityClick(event) {
-    if (!event.isTrusted || !extensionUiProfileReady) return
-
-    const target = event.target
-    if (!(target instanceof Element)) return
-
-    const button = target.closest('button')
-    const item = readExtensionUiToggle(button)
-
-    if (!item) return
-
-    extensionUiPendingUserToggles.set(
-      item.key,
-      item.hidden
-    )
-
-    window.setTimeout(() => {
-      scheduleExtensionUiVisibilitySync()
-    }, 50)
-  }
-
-  function startExtensionUiVisibilitySync() {
-    if (!document.body) {
-      window.setTimeout(startExtensionUiVisibilitySync, 100)
-      return
-    }
-
-    document.addEventListener(
-      'click',
-      handleExtensionUiVisibilityClick,
-      true
-    )
-
-    document.addEventListener(
-      'change',
-      handleUiLanguageChange,
-      true
-    )
-
-    extensionUiObserver =
-      new MutationObserver(
-        scheduleExtensionUiVisibilitySync
-      )
-
-    extensionUiObserver.observe(document.body, {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      attributeFilter: ['class', 'title', 'aria-label'],
-    })
-
-    scheduleExtensionUiVisibilitySync()
-  }
-
-  queueMicrotask(startExtensionUiVisibilitySync)
 
   function graphemes(value) {
     if (!segmenter) return Array.from(value)
@@ -987,22 +695,8 @@ export function setup(ctx) {
       word-spacing: normal !important;
     }
 
-    [data-lumibionic-word] {
-      display: inline !important;
-      line-height: inherit !important;
-      font-size: inherit !important;
-      letter-spacing: inherit !important;
-      word-spacing: inherit !important;
-      vertical-align: baseline !important;
-      margin: 0 !important;
-      padding: 0 !important;
-    }
-
     [data-lumibionic-fix] {
       font-weight: var(--lumibionic-weight, 600) !important;
-      line-height: inherit !important;
-      font-size: inherit !important;
-      vertical-align: baseline !important;
     }
 
     /* Chat toolbar visibility — exact title matches requested by the user. */
@@ -1133,6 +827,12 @@ export function setup(ctx) {
     .lumibionic-group-body {
       padding: 0 12px 12px;
     }
+
+    .lumibionic-lorebook-list { display:grid; gap:10px; margin-top:10px; }
+    .lumibionic-lorebook-card { border:1px solid var(--lumi-border, rgba(127,127,127,.24)); border-radius:10px; padding:10px; }
+    .lumibionic-lorebook-card-title { font-weight:700; margin-bottom:6px; }
+    .lumibionic-lorebook-book { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:baseline; padding:4px 0; font-size:12px; }
+    .lumibionic-lorebook-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
 
     .lumibionic-status-pill {
       display: inline-flex;
@@ -1570,12 +1270,6 @@ export function setup(ctx) {
   const LUMIREALM_FONT_LOCK_ATTR =
     'data-lumibionic-font-lock'
 
-  const LUMIREALM_LAYOUT_LOCK_ATTR =
-    'data-lumibionic-layout-lock'
-
-  const LUMIREALM_BASE_FONT_SIZE_ATTR =
-    'data-lumibionic-base-font-size'
-
   const LUMIREALM_PROSE_SELECTOR = [
     'p',
     'li',
@@ -1635,30 +1329,26 @@ export function setup(ctx) {
     })
   }
 
-  function numericPx(value) {
-    const parsed =
-      Number.parseFloat(
-        String(value || '')
+  function hasOwnVisibleText(element) {
+    return Array.from(
+      element.childNodes
+    ).some(node => {
+      return (
+        node.nodeType ===
+          Node.TEXT_NODE &&
+        Boolean(
+          node.textContent?.trim()
+        )
       )
-
-    return Number.isFinite(parsed)
-      ? parsed
-      : null
-  }
-
-  function formatPx(value) {
-    return `${Number(value.toFixed(3))}px`
+    })
   }
 
   function applyFontLockToRoot(
     root,
-    font
+    font,
+    messageSize
   ) {
     if (!root) return
-
-    const inShadowRoot =
-      typeof ShadowRoot !== 'undefined' &&
-      root instanceof ShadowRoot
 
     const targets =
       new Set()
@@ -1678,11 +1368,10 @@ export function setup(ctx) {
           targets.add(element)
       )
 
-    if (inShadowRoot) {
-      /*
-        LumiRealm sometimes uses non-semantic containers for visible prose.
-        Include text-bearing nodes inside the shadow root as well.
-      */
+    if (
+      typeof ShadowRoot !== 'undefined' &&
+      root instanceof ShadowRoot
+    ) {
       root
         .querySelectorAll?.('*')
         .forEach(element => {
@@ -1694,239 +1383,38 @@ export function setup(ctx) {
         })
     }
 
-    const useFont =
-      shouldApplyMessageFontLock()
-
-    const sizeScale =
-      clamp(
-        settings.textSize,
-        80,
-        140,
-        DEFAULTS.textSize
-      ) / 100
-
-    /*
-      Capture every native shadow-DOM font size BEFORE writing scaled sizes.
-      This preserves LumiRealm's own hierarchy instead of giving all text the
-      same MessageContent px value.
-
-      Existing elements keep their baseline in a data attribute so repeated
-      MutationObserver passes cannot compound 109% -> 118.8% -> etc.
-    */
-    const nativeSizes =
-      new Map()
-
-    if (inShadowRoot) {
-      const hostStyle =
-        getComputedStyle(
-          root.host
-        )
-
-      const hostComputed =
-        numericPx(
-          hostStyle.fontSize
-        )
-
-      /* hostComputed is already measured at the temporary 100% baseline. */
-      const hostBase =
-        hostComputed === null
-          ? null
-          : hostComputed
-
-      for (const element of targets) {
-        if (
-          !(element instanceof Element) ||
-          isProtectedFontElement(element)
-        ) {
-          continue
-        }
-
-        let base =
-          numericPx(
-            element.getAttribute(
-              LUMIREALM_BASE_FONT_SIZE_ATTR
-            )
-          )
-
-        if (base === null) {
-          const computed =
-            numericPx(
-              getComputedStyle(
-                element
-              ).fontSize
-            )
-
-          if (computed !== null) {
-            const parent =
-              element.parentElement
-
-            const parentBase =
-              parent
-                ? numericPx(
-                    parent.getAttribute(
-                      LUMIREALM_BASE_FONT_SIZE_ATTR
-                    )
-                  )
-                : null
-
-            const parentComputed =
-              parent
-                ? numericPx(
-                    getComputedStyle(
-                      parent
-                    ).fontSize
-                  )
-                : hostComputed
-
-            /*
-              If this element simply inherits its parent's current size,
-              use the parent's unscaled baseline. This is particularly useful
-              for nodes inserted while LumiRealm is streaming/rendering.
-            */
-            if (
-              parentComputed !== null &&
-              Math.abs(
-                computed -
-                parentComputed
-              ) < 0.02
-            ) {
-              base =
-                parentBase ??
-                hostBase ??
-                computed
-            } else {
-              base = computed
-            }
-          }
-        }
-
-        if (
-          base !== null &&
-          base > 0
-        ) {
-          nativeSizes.set(
-            element,
-            base
-          )
-
-          element.setAttribute(
-            LUMIREALM_BASE_FONT_SIZE_ATTR,
-            String(base)
-          )
-        }
-      }
-    }
-
     for (const element of targets) {
       if (
-        !(element instanceof Element) ||
+        element instanceof Element &&
         isProtectedFontElement(element)
       ) {
         continue
       }
 
+      element.style.setProperty(
+        'font-family',
+        font,
+        'important'
+      )
+
       /*
-        Normal light-DOM messages already receive Font reach through the
-        stylesheet. Shadow DOM needs an explicit deep font-family override.
+        LumiRealm's shadow stylesheet also sets its own text sizes
+        (14px and smaller in the diagnostic). Match the normal Bionic
+        MessageContent size so the same reply does not shrink merely
+        because it crossed into the HTML-island shadow root.
       */
-      if (
-        inShadowRoot &&
-        useFont
-      ) {
+      if (messageSize) {
         element.style.setProperty(
-          'font-family',
-          font,
+          'font-size',
+          messageSize,
           'important'
-        )
-        element.setAttribute(
-          LUMIREALM_FONT_LOCK_ATTR,
-          'true'
-        )
-      } else if (
-        element.hasAttribute(
-          LUMIREALM_FONT_LOCK_ATTR
-        )
-      ) {
-        element.style.removeProperty(
-          'font-family'
-        )
-        element.removeAttribute(
-          LUMIREALM_FONT_LOCK_ATTR
         )
       }
 
-      if (inShadowRoot) {
-        const nativeSize =
-          nativeSizes.get(
-            element
-          )
-
-        if (
-          nativeSize !== undefined
-        ) {
-          element.style.setProperty(
-            'font-size',
-            formatPx(
-              nativeSize *
-              sizeScale
-            ),
-            'important'
-          )
-        }
-
-        /*
-          A unitless line-height tracks each element's newly scaled font size.
-        */
-        element.style.setProperty(
-          'line-height',
-          String(
-            settings.lineHeight
-          ),
-          'important'
-        )
-
-        element.setAttribute(
-          LUMIREALM_LAYOUT_LOCK_ATTR,
-          'true'
-        )
-
-        /*
-          Paragraph spacing cannot cross a shadow boundary via the outer
-          MessageContent selector, so mirror it on LumiRealm paragraphs.
-          Zero means "theme default".
-        */
-        if (
-          element.matches?.('p')
-        ) {
-          if (
-            settings.paragraphSpacing >
-            0.001
-          ) {
-            element.style.setProperty(
-              'margin-block-start',
-              '0',
-              'important'
-            )
-
-            element.style.setProperty(
-              'margin-block-end',
-              element.matches(
-                ':last-child'
-              )
-                ? '0'
-                : `${settings.paragraphSpacing}em`,
-              'important'
-            )
-          } else {
-            element.style.removeProperty(
-              'margin-block-start'
-            )
-            element.style.removeProperty(
-              'margin-block-end'
-            )
-          }
-        }
-      }
+      element.setAttribute(
+        LUMIREALM_FONT_LOCK_ATTR,
+        'true'
+      )
     }
 
     root
@@ -1935,7 +1423,8 @@ export function setup(ctx) {
         if (element.shadowRoot) {
           applyFontLockToRoot(
             element.shadowRoot,
-            font
+            font,
+            messageSize
           )
         }
       })
@@ -1943,15 +1432,13 @@ export function setup(ctx) {
 
 
   function applyLumiRealmFontLock(root) {
-    if (!root) return
+    if (
+      !root ||
+      !shouldApplyMessageFontLock()
+    ) {
+      return
+    }
 
-    /*
-      Measure LumiRealm at Bionic's 100% baseline before calculating the
-      proportional deep font sizes. This prevents inherited/em text from
-      being scaled twice merely because MessageContent itself is already 109%.
-      The temporary inline value is changed synchronously and restored before
-      the browser can paint.
-    */
     const messageRoot =
       root instanceof Element &&
       root.matches?.(
@@ -1966,44 +1453,18 @@ export function setup(ctx) {
               : null
           )
 
-    const oldFontSize =
-      messageRoot?.style.getPropertyValue(
-        'font-size'
-      ) || ''
+    const messageSize =
+      messageRoot
+        ? getComputedStyle(
+            messageRoot
+          ).fontSize
+        : null
 
-    const oldFontSizePriority =
-      messageRoot?.style.getPropertyPriority(
-        'font-size'
-      ) || ''
-
-    if (messageRoot) {
-      messageRoot.style.setProperty(
-        'font-size',
-        '100%',
-        'important'
-      )
-    }
-
-    try {
-      applyFontLockToRoot(
-        root,
-        currentFont()
-      )
-    } finally {
-      if (messageRoot) {
-        if (oldFontSize) {
-          messageRoot.style.setProperty(
-            'font-size',
-            oldFontSize,
-            oldFontSizePriority
-          )
-        } else {
-          messageRoot.style.removeProperty(
-            'font-size'
-          )
-        }
-      }
-    }
+    applyFontLockToRoot(
+      root,
+      currentFont(),
+      messageSize
+    )
   }
 
   function clearFontLocksInRoot(root) {
@@ -2011,9 +1472,7 @@ export function setup(ctx) {
 
     root
       .querySelectorAll?.(
-        `[${LUMIREALM_FONT_LOCK_ATTR}], ` +
-        `[${LUMIREALM_LAYOUT_LOCK_ATTR}], ` +
-        `[${LUMIREALM_BASE_FONT_SIZE_ATTR}]`
+        `[${LUMIREALM_FONT_LOCK_ATTR}]`
       )
       .forEach(element => {
         element.style.removeProperty(
@@ -2022,24 +1481,9 @@ export function setup(ctx) {
         element.style.removeProperty(
           'font-size'
         )
-        element.style.removeProperty(
-          'line-height'
-        )
-        element.style.removeProperty(
-          'margin-block-start'
-        )
-        element.style.removeProperty(
-          'margin-block-end'
-        )
 
         element.removeAttribute(
           LUMIREALM_FONT_LOCK_ATTR
-        )
-        element.removeAttribute(
-          LUMIREALM_LAYOUT_LOCK_ATTR
-        )
-        element.removeAttribute(
-          LUMIREALM_BASE_FONT_SIZE_ATTR
         )
       })
 
@@ -2059,7 +1503,6 @@ export function setup(ctx) {
   ) {
     clearFontLocksInRoot(root)
   }
-
 
   function elementDescriptor(element) {
     if (!(element instanceof Element)) {
@@ -3060,6 +2503,10 @@ export function setup(ctx) {
   let fontCompatLateTimer = null
 
   function reapplyMessageFonts() {
+    if (!shouldApplyMessageFontLock()) {
+      return
+    }
+
     document
       .querySelectorAll(
         MESSAGE_SELECTOR
@@ -3533,7 +2980,7 @@ export function setup(ctx) {
             <label for="lb-size">Message text size</label>
             <span class="lumibionic-value" id="lb-size-value"></span>
           </div>
-          <input id="lb-size" type="range" min="80" max="140" step="1">
+          <input id="lb-size" type="range" min="80" max="140" step="5">
         </div>
 
         <div class="lumibionic-control">
@@ -3674,6 +3121,22 @@ export function setup(ctx) {
         </div>
       </details>
 
+      <details class="lumibionic-group" data-lumibionic-group="Lorebook Cleanup">
+        <summary>Lorebook Cleanup</summary>
+        <div class="lumibionic-group-body">
+          <div class="lumibionic-section">
+            <div class="lumibionic-section-title">Duplicate lorebooks</div>
+            <div class="lumibionic-muted">Scan duplicate-name lorebooks, compare entries, and inspect character/global references. Scanning never deletes anything.</div>
+            <div class="lumibionic-toolbar-actions">
+              <button type="button" id="lb-lore-scan">Scan duplicates</button>
+              <button type="button" id="lb-lore-clean-exact">Clean all exact duplicates</button>
+            </div>
+            <div class="lumibionic-muted" id="lb-lore-status">Not scanned yet.</div>
+            <div class="lumibionic-lorebook-list" id="lb-lore-results"></div>
+          </div>
+        </div>
+      </details>
+
       <details class="lumibionic-group" data-lumibionic-group="Chat Toolbar">
         <summary>Chat Toolbar</summary>
         <div class="lumibionic-group-body">
@@ -3805,6 +3268,10 @@ export function setup(ctx) {
   const autoRegenStatus = $('#lb-auto-regen-status')
   const settingsPersistence = $('#lb-settings-persistence')
   const settingsSaveStatus = $('#lb-settings-save-status')
+  const loreScan = $('#lb-lore-scan')
+  const loreCleanExact = $('#lb-lore-clean-exact')
+  const loreStatus = $('#lb-lore-status')
+  const loreResults = $('#lb-lore-results')
 
   const preview = $('#lb-preview')
   const reset = $('#lb-reset')
@@ -5097,6 +4564,70 @@ export function setup(ctx) {
     }
   }
 
+  let loreCleanupGroups = []
+  let loreCleanupBusy = false
+
+  function escapeLoreHtml(value) {
+    return String(value ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;')
+  }
+
+  function setLoreCleanupBusy(busy, message) {
+    loreCleanupBusy = Boolean(busy)
+    if (loreScan) loreScan.disabled = loreCleanupBusy
+    if (loreCleanExact) loreCleanExact.disabled = loreCleanupBusy
+    if (loreStatus && typeof message === 'string') loreStatus.textContent = message
+  }
+
+  function renderLoreCleanupGroups() {
+    if (!loreResults) return
+    if (!loreCleanupGroups.length) { loreResults.innerHTML = ''; return }
+    loreResults.innerHTML = loreCleanupGroups.map(group => {
+      const cls = group.classification === 'exact' ? 'Exact duplicate' : group.classification === 'near' ? `Near duplicate (${Math.round((group.similarity || 0) * 100)}% overlap)` : 'Conflicting duplicate'
+      const books = (group.books || []).map(book => {
+        const keep = book.id === group.recommendedKeepId
+        return `<div class="lumibionic-lorebook-book"><div>${keep ? '★ ' : ''}${escapeLoreHtml(book.name)} <span class="lumibionic-muted">— ${book.entryCount} entries, ${book.characterRefs} character refs${book.globalRef ? ', global' : ''}</span></div><code>${escapeLoreHtml(book.id)}</code></div>`
+      }).join('')
+      const exact = group.classification === 'exact' ? `<button type="button" data-lore-action="clean" data-lore-group="${escapeLoreHtml(group.groupId)}">Keep ★ and delete exact copies</button>` : ''
+      return `<div class="lumibionic-lorebook-card"><div class="lumibionic-lorebook-card-title">${escapeLoreHtml(group.name)} — ${cls}</div>${books}<div class="lumibionic-lorebook-actions">${exact}<button type="button" data-lore-action="merge" data-lore-group="${escapeLoreHtml(group.groupId)}">Merge unique entries into ★, rewire & delete copies</button></div></div>`
+    }).join('')
+  }
+
+  function requestLorebookScan() {
+    if (loreCleanupBusy) return
+    setLoreCleanupBusy(true, 'Scanning world books and character attachments…')
+    ctx.sendToBackend({ type: 'lorebook_cleanup_scan' })
+  }
+
+  function requestLorebookAction(action, groupId) {
+    if (loreCleanupBusy) return
+    const group = loreCleanupGroups.find(item => item.groupId === groupId)
+    if (!group) return
+    const verb = action === 'merge' ? 'merge unique entries, rewire references, and delete the extra copies' : 'rewire references and delete exact duplicate copies'
+    if (!window.confirm(`Lorebook cleanup\n\n${group.name}\n\nThis will ${verb}.\n\nContinue?`)) return
+    setLoreCleanupBusy(true, action === 'merge' ? `Merging ${group.name}…` : `Cleaning ${group.name}…`)
+    ctx.sendToBackend({ type: action === 'merge' ? 'lorebook_cleanup_merge' : 'lorebook_cleanup_clean_exact', group })
+  }
+
+  loreScan?.addEventListener('click', requestLorebookScan)
+  loreCleanExact?.addEventListener('click', () => {
+    if (loreCleanupBusy) return
+    const groups = loreCleanupGroups.filter(group => group.classification === 'exact')
+    if (!groups.length) { if (loreStatus) loreStatus.textContent = 'No exact duplicate groups are currently listed.'; return }
+    if (!window.confirm(`Clean ${groups.length} exact duplicate group${groups.length === 1 ? '' : 's'}?\n\nReferences will be rewired before duplicate books are deleted.`)) return
+    setLoreCleanupBusy(true, 'Cleaning exact duplicate lorebooks…')
+    ctx.sendToBackend({ type: 'lorebook_cleanup_clean_all_exact', groups })
+  })
+  loreResults?.addEventListener('click', event => {
+    const button = event.target?.closest?.('[data-lore-action]')
+    if (!button) return
+    requestLorebookAction(button.getAttribute('data-lore-action'), button.getAttribute('data-lore-group'))
+  })
+
   const unsubAutoRegenerate =
     ctx.events?.on?.(
       'GENERATION_ENDED',
@@ -5127,10 +4658,6 @@ export function setup(ctx) {
               })
             )
             settings = loadSettings()
-
-            extensionUiProfileReady = true
-            scheduleExtensionUiVisibilitySync()
-
             applyCssSettings()
             syncControls()
             rebuildAll()
@@ -5145,9 +4672,6 @@ export function setup(ctx) {
             applyingAccountSettings = false
           }
         } else {
-          extensionUiProfileReady = true
-          scheduleExtensionUiVisibilitySync()
-
           if (settings.settingsPersistenceMode === 'account') {
             saveSettings()
           }
@@ -5211,6 +4735,21 @@ export function setup(ctx) {
                 : `▶ Backend v${payload.version || '?'} found the assistant — applying native reasoning update…`
           }
         }
+        return
+      }
+
+      if (payload?.type === 'lorebook_cleanup_scan_result') {
+        loreCleanupGroups = Array.isArray(payload.groups) ? payload.groups : []
+        renderLoreCleanupGroups()
+        const exact = loreCleanupGroups.filter(group => group.classification === 'exact').length
+        const near = loreCleanupGroups.filter(group => group.classification === 'near').length
+        const conflict = loreCleanupGroups.filter(group => group.classification === 'conflicting').length
+        setLoreCleanupBusy(false, loreCleanupGroups.length ? `Found ${loreCleanupGroups.length} duplicate-name groups: ${exact} exact, ${near} near, ${conflict} conflicting.` : 'No duplicate-name lorebook groups found.')
+        return
+      }
+      if (payload?.type === 'lorebook_cleanup_action_result') {
+        setLoreCleanupBusy(false, payload?.ok === false ? `Lorebook cleanup failed: ${payload?.error || 'Unknown error'}` : `Lorebook cleanup complete: ${payload?.summary || 'done'}.`)
+        if (payload?.ok !== false) requestLorebookScan()
         return
       }
 

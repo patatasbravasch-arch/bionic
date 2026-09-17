@@ -1,6 +1,6 @@
 declare const spindle: import('lumiverse-spindle-types').SpindleAPI
 
-const FF_THINK_FIX_VERSION = '0.44.0'
+const FF_THINK_FIX_VERSION = '0.45.0'
 
 type FFThinkFixConfig = {
   boundaryText: string
@@ -378,6 +378,73 @@ async function repairMessage(
   }
 }
 
+type LoreBookSummary = { id: string; name: string; entryCount: number; characterRefs: number; globalRef: boolean; signatures: string[] }
+
+function normalizeLoreName(value: unknown): string {
+  return String(value || '').normalize('NFKC').trim().toLocaleLowerCase().replace(/[\s_-]+/g, ' ')
+}
+function stableLoreValue(value: any): any {
+  if (Array.isArray(value)) return value.map(stableLoreValue)
+  if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map(key => [key, stableLoreValue(value[key])]))
+  return value
+}
+function loreEntrySignature(entry: any): string {
+  const copy: Record<string, any> = {}
+  for (const [key, value] of Object.entries(entry || {})) {
+    if (['id','uid','world_book_id','created_at','updated_at'].includes(key)) continue
+    copy[key] = stableLoreValue(value)
+  }
+  return JSON.stringify(stableLoreValue(copy))
+}
+async function listAllLoreBooks() {
+  const all: any[] = []; let offset = 0
+  while (true) { const page = await spindle.world_books.list({ limit: 200, offset }); all.push(...page.data); if (all.length >= page.total || !page.data.length) return all; offset += page.data.length }
+}
+async function listAllLoreEntries(worldBookId: string) {
+  const all: any[] = []; let offset = 0
+  while (true) { const page = await spindle.world_books.entries.list(worldBookId,{limit:200,offset}); all.push(...page.data); if (all.length >= page.total || !page.data.length) return all; offset += page.data.length }
+}
+async function listAllCharacters() {
+  const all: any[] = []; let offset = 0
+  while (true) { const page = await spindle.characters.list({limit:200,offset}); all.push(...page.data); if (all.length >= page.total || !page.data.length) return all; offset += page.data.length }
+}
+function loreSimilarity(a: string[], b: string[]): number {
+  const left = new Set(a), right = new Set(b), union = new Set([...left,...right]); if (!union.size) return 1
+  let common = 0; for (const value of left) if (right.has(value)) common += 1
+  return common / union.size
+}
+function recommendedLoreKeeper(books: LoreBookSummary[]): string {
+  return [...books].sort((a,b) => { const ra=a.characterRefs+(a.globalRef?1:0), rb=b.characterRefs+(b.globalRef?1:0); if (ra!==rb) return rb-ra; if (a.entryCount!==b.entryCount) return b.entryCount-a.entryCount; return a.id.localeCompare(b.id) })[0].id
+}
+async function scanLorebookDuplicates() {
+  const [books,characters,globalIds]=await Promise.all([listAllLoreBooks(),listAllCharacters(),spindle.world_books.getGlobal()])
+  const charRefs=new Map<string,number>(); for (const character of characters) for (const id of character.world_book_ids||[]) charRefs.set(id,(charRefs.get(id)||0)+1)
+  const globalSet=new Set(globalIds); const summaries: LoreBookSummary[]=[]
+  for (const book of books) { const entries=await listAllLoreEntries(book.id); summaries.push({id:book.id,name:book.name,entryCount:entries.length,characterRefs:charRefs.get(book.id)||0,globalRef:globalSet.has(book.id),signatures:entries.map(loreEntrySignature).sort()}) }
+  const groups=new Map<string,LoreBookSummary[]>(); for (const summary of summaries) { const key=normalizeLoreName(summary.name); if (!key) continue; const arr=groups.get(key)||[]; arr.push(summary); groups.set(key,arr) }
+  const results:any[]=[]
+  for (const [normalized,items] of groups) { if (items.length<2) continue; let min=1; for(let i=0;i<items.length;i++) for(let j=i+1;j<items.length;j++) min=Math.min(min,loreSimilarity(items[i].signatures,items[j].signatures)); const exact=min===1&&items.every(x=>x.signatures.length===items[0].signatures.length); const classification=exact?'exact':min>=.75?'near':'conflicting'; const keep=recommendedLoreKeeper(items); results.push({groupId:encodeURIComponent(normalized),name:items[0].name,classification,similarity:min,recommendedKeepId:keep,books:items.map(x=>({id:x.id,name:x.name,entryCount:x.entryCount,characterRefs:x.characterRefs,globalRef:x.globalRef}))}) }
+  return results.sort((a,b)=>a.name.localeCompare(b.name))
+}
+async function rewireLorebookReferences(keepId:string, duplicateIds:string[]) {
+  const dup=new Set(duplicateIds), characters=await listAllCharacters(); let updated=0
+  for (const character of characters) { const current=Array.isArray(character.world_book_ids)?character.world_book_ids:[]; if(!current.some((id:string)=>dup.has(id))) continue; const next=Array.from(new Set(current.map((id:string)=>dup.has(id)?keepId:id))); await spindle.characters.update(character.id,{world_book_ids:next}); updated += 1 }
+  const globals=await spindle.world_books.getGlobal(); if(globals.some((id:string)=>dup.has(id))) await spindle.world_books.setGlobal(Array.from(new Set(globals.map((id:string)=>dup.has(id)?keepId:id))))
+  return updated
+}
+async function mergeLorebookEntries(keepId:string, duplicateIds:string[]) {
+  const signatures=new Set((await listAllLoreEntries(keepId)).map(loreEntrySignature)); let created=0
+  for (const duplicateId of duplicateIds) for (const entry of await listAllLoreEntries(duplicateId)) { const sig=loreEntrySignature(entry); if(signatures.has(sig)) continue; const input:any={...entry}; for(const k of ['id','uid','world_book_id','created_at','updated_at']) delete input[k]; await spindle.world_books.entries.create(keepId,input); signatures.add(sig); created += 1 }
+  return created
+}
+async function applyLorebookCleanupGroup(group:any, merge:boolean) {
+  const keepId=typeof group?.recommendedKeepId==='string'?group.recommendedKeepId:''; const duplicateIds=Array.isArray(group?.books)?group.books.map((book:any)=>String(book?.id||'')).filter((id:string)=>id&&id!==keepId):[]
+  if(!keepId||!duplicateIds.length) throw new Error('Invalid cleanup group.')
+  const mergedEntries=merge?await mergeLorebookEntries(keepId,duplicateIds):0; const updatedCharacters=await rewireLorebookReferences(keepId,duplicateIds); let deletedBooks=0
+  for(const id of duplicateIds) if(await spindle.world_books.delete(id)) deletedBooks += 1
+  return {mergedEntries,updatedCharacters,deletedBooks}
+}
+
 /*
   Register frontend RPC first. This means the health ping is available
   even if generation-event registration is rejected for permissions.
@@ -455,6 +522,22 @@ spindle.onFrontendMessage(
           userId,
         )
       }
+      return
+    }
+
+    if (payload?.type === 'lorebook_cleanup_scan') {
+      try { spindle.sendToFrontend({ type: 'lorebook_cleanup_scan_result', groups: await scanLorebookDuplicates() }, userId) }
+      catch (error: any) { spindle.sendToFrontend({ type: 'lorebook_cleanup_action_result', ok: false, error: error?.message || String(error) }, userId) }
+      return
+    }
+    if (payload?.type === 'lorebook_cleanup_clean_exact' || payload?.type === 'lorebook_cleanup_merge') {
+      try { const group=payload?.group; if(payload.type==='lorebook_cleanup_clean_exact'&&group?.classification!=='exact') throw new Error('Safe clean only accepts exact duplicate groups.'); const result=await applyLorebookCleanupGroup(group,payload.type==='lorebook_cleanup_merge'); spindle.sendToFrontend({type:'lorebook_cleanup_action_result',ok:true,summary:`${result.deletedBooks} duplicate book(s) deleted, ${result.updatedCharacters} character attachment(s) rewired, ${result.mergedEntries} unique entry/entries merged`},userId) }
+      catch(error:any){ spindle.sendToFrontend({type:'lorebook_cleanup_action_result',ok:false,error:error?.message||String(error)},userId) }
+      return
+    }
+    if (payload?.type === 'lorebook_cleanup_clean_all_exact') {
+      try { const groups=Array.isArray(payload?.groups)?payload.groups.filter((g:any)=>g?.classification==='exact'):[]; let deletedBooks=0,updatedCharacters=0; for(const group of groups){const r=await applyLorebookCleanupGroup(group,false);deletedBooks+=r.deletedBooks;updatedCharacters+=r.updatedCharacters} spindle.sendToFrontend({type:'lorebook_cleanup_action_result',ok:true,summary:`${deletedBooks} duplicate book(s) deleted across ${groups.length} exact group(s); ${updatedCharacters} character attachment(s) rewired`},userId) }
+      catch(error:any){spindle.sendToFrontend({type:'lorebook_cleanup_action_result',ok:false,error:error?.message||String(error)},userId)}
       return
     }
 
