@@ -222,6 +222,7 @@ function installLorebookOrganizer(ctx, settingsRoot, options = {}) {
   let linkTargetKind = "character";
   let linkTargetId = "";
   let linkTargetSearch = "";
+  let inlineLinkBookId = "";
   let lastScanAt = null;
   let busy = false;
   let connections = [];
@@ -1815,6 +1816,8 @@ Chats, personas, global activation, unrelated lorebooks, and the other lorebook 
                                     Link this copy…
                                   </button>
 
+                                  ${linkPanelOpen && inlineLinkBookId === book.id ? renderInlineLinkControls() : ""}
+
                                   <button
                                     type="button"
                                     data-organizer-similar-delete-book="${escapeHtml(book.id)}"
@@ -2163,6 +2166,7 @@ Bionic will refresh characters, chats, personas and global activation immediatel
       updateLocalRefs(refreshed.snapshot);
       selectedUnlinked.clear();
       linkPanelOpen = false;
+      inlineLinkBookId = "";
       linkTargetSearch = "";
       renderAll(`Linked ${selected.length} lorebook${selected.length === 1 ? "" : "s"} successfully.`);
     } catch (error) {
@@ -2205,6 +2209,111 @@ Bionic will refresh characters, chats, personas and global activation immediatel
     linkPanelOpen = previousLinkPanel;
     folderPanelOpen = previousFolderPanel;
     renderAll();
+  }
+  function renderInlineLinkControls() {
+    const needle = linkTargetSearch.trim().toLocaleLowerCase();
+    const targets = linkTargets().filter((target) => !needle || target.name.toLocaleLowerCase().includes(needle));
+    return `
+      <div
+        class="lb-organizer-card"
+        style="
+          width:100%;
+          margin-top:10px;
+        "
+      >
+        <div class="lb-organizer-card-title">
+          Link this lorebook
+        </div>
+
+        <div
+          class="lb-organizer-toolbar"
+          style="margin-top:8px"
+        >
+          <select
+            id="lb-organizer-link-kind"
+            ${busy ? "disabled" : ""}
+          >
+            <option
+              value="character"
+              ${linkTargetKind === "character" ? "selected" : ""}
+            >
+              Character
+            </option>
+
+            <option
+              value="chat"
+              ${linkTargetKind === "chat" ? "selected" : ""}
+            >
+              Chat
+            </option>
+
+            <option
+              value="persona"
+              ${linkTargetKind === "persona" ? "selected" : ""}
+            >
+              Persona
+            </option>
+
+            <option
+              value="global"
+              ${linkTargetKind === "global" ? "selected" : ""}
+            >
+              Global activation
+            </option>
+          </select>
+
+          ${linkTargetKind !== "global" ? `
+                <input
+                  id="lb-organizer-link-target-search"
+                  type="search"
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder="Type ${escapeHtml(linkTargetKind)} name…"
+                  value="${escapeHtml(linkTargetSearch)}"
+                  ${busy ? "disabled" : ""}
+                >
+
+                <select
+                  id="lb-organizer-link-target"
+                  ${busy ? "disabled" : ""}
+                >
+                  <option value="">
+                    Choose ${escapeHtml(linkTargetKind)}…
+                  </option>
+
+                  ${targets.map((target) => `
+                      <option
+                        value="${escapeHtml(target.id)}"
+                        ${target.id === linkTargetId ? "selected" : ""}
+                      >
+                        ${escapeHtml(target.name)}
+                      </option>
+                    `).join("")}
+                </select>
+              ` : `
+                <span class="lb-organizer-badge">
+                  Global lorebooks
+                </span>
+              `}
+
+          <button
+            type="button"
+            data-organizer-link-apply
+            ${busy ? "disabled" : ""}
+          >
+            Link this lorebook
+          </button>
+
+          <button
+            type="button"
+            data-organizer-inline-link-cancel
+            ${busy ? "disabled" : ""}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    `;
   }
   function renderUnlinked() {
     const visible = visibleUnlinkedBooks();
@@ -2459,15 +2568,16 @@ Bionic will refresh characters, chats, personas and global activation immediatel
                           </button>
                         ` : ""}
 
-                    ${singleBookInlineLink && selectedUnlinked.has(book.id) ? `
-                          <button
-                            type="button"
-                            data-organizer-link-apply
-                            ${busy ? "disabled" : ""}
-                          >
-                            Link selected
-                          </button>
-                        ` : ""}
+
+                    <button
+                      type="button"
+                      data-organizer-open-link-one="${escapeHtml(book.id)}"
+                      ${busy ? "disabled" : ""}
+                    >
+                      Link…
+                    </button>
+
+                    ${linkPanelOpen && inlineLinkBookId === book.id ? renderInlineLinkControls() : ""}
 
                     <button
                       type="button"
@@ -2761,6 +2871,15 @@ Bionic will refresh characters, chats, personas and global activation immediatel
     renderModal();
     syncSummary();
   }
+  function renderAllPreservingScroll(message) {
+    const content = modalRoot?.querySelector(".lb-organizer-content");
+    const scrollTop = content?.scrollTop || 0;
+    renderAll(message);
+    const next = modalRoot?.querySelector(".lb-organizer-content");
+    if (next) {
+      next.scrollTop = scrollTop;
+    }
+  }
   function suggestionAssignments(card) {
     const nameInput = card.querySelector(".lb-organizer-suggestion-name");
     const folder = nameInput?.value.trim() || "";
@@ -2786,6 +2905,32 @@ Bionic will refresh characters, chats, personas and global activation immediatel
     renderAll();
     modalRoot.addEventListener("click", (event) => {
       const target = event.target;
+      if (target.closest("[data-organizer-inline-link-cancel]")) {
+        linkPanelOpen = false;
+        inlineLinkBookId = "";
+        linkTargetId = "";
+        linkTargetSearch = "";
+        renderAllPreservingScroll();
+        return;
+      }
+      const openLinkOneButton = target.closest("[data-organizer-open-link-one]");
+      if (openLinkOneButton) {
+        const id = openLinkOneButton.dataset.organizerOpenLinkOne || "";
+        const book = books.find((item) => item.id === id);
+        if (!book || !isUnlinked(book)) {
+          renderAllPreservingScroll("That lorebook is no longer unlinked.");
+          return;
+        }
+        selectedUnlinked.clear();
+        selectedUnlinked.add(book.id);
+        inlineLinkBookId = book.id;
+        linkPanelOpen = true;
+        linkTargetKind = "character";
+        linkTargetId = "";
+        linkTargetSearch = "";
+        renderAllPreservingScroll(`Choose where to link "${book.name}".`);
+        return;
+      }
       const replaceSimilarButton = target.closest("[data-organizer-similar-replace-with]");
       if (replaceSimilarButton) {
         const keeperId = replaceSimilarButton.dataset.organizerSimilarReplaceWith || "";
@@ -2812,12 +2957,12 @@ Bionic will refresh characters, chats, personas and global activation immediatel
         }
         selectedUnlinked.clear();
         selectedUnlinked.add(book.id);
+        inlineLinkBookId = book.id;
         linkTargetKind = "character";
         linkTargetId = "";
         linkTargetSearch = "";
         linkPanelOpen = true;
-        activeTab = "unlinked";
-        renderAll(`Choose where to link "${book.name}".`);
+        renderAllPreservingScroll(`Choose where to link "${book.name}".`);
         return;
       }
       const similarDeleteButton = target.closest("[data-organizer-similar-delete-book]");
@@ -3065,7 +3210,7 @@ Bionic will refresh characters, chats, personas and global activation immediatel
             selectedUnlinked.delete(id);
           }
         }
-        renderAll();
+        renderAllPreservingScroll();
         return;
       }
       if (target.matches("[data-organizer-show-ignored]")) {
@@ -3077,7 +3222,7 @@ Bionic will refresh characters, chats, personas and global activation immediatel
         linkTargetKind = target.value;
         linkTargetId = "";
         linkTargetSearch = "";
-        renderAll();
+        renderAllPreservingScroll();
         return;
       }
       if (target.id === "lb-organizer-link-target") {
@@ -4225,6 +4370,16 @@ function setup(ctx) {
     .lumibionic-preview p + p {
       margin-block-start:
         var(--lumibionic-paragraph-spacing, 0em) !important;
+    }
+
+
+    /*
+     * Lumiverse Quick Toolbar customize button.
+     * The native button exposes both title and aria-label.
+     */
+    html.lb-hide-toolbar-customize button[title="Customize toolbar"],
+    html.lb-hide-toolbar-customize button[aria-label="Customize toolbar"] {
+      display: none !important;
     }
 
     .lumibionic-hidden {

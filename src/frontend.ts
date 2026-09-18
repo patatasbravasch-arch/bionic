@@ -1277,6 +1277,16 @@ export function setup(ctx) {
         var(--lumibionic-paragraph-spacing, 0em) !important;
     }
 
+
+    /*
+     * Lumiverse Quick Toolbar customize button.
+     * The native button exposes both title and aria-label.
+     */
+    html.lb-hide-toolbar-customize button[title="Customize toolbar"],
+    html.lb-hide-toolbar-customize button[aria-label="Customize toolbar"] {
+      display: none !important;
+    }
+
     .lumibionic-hidden {
       display: none !important;
     }
