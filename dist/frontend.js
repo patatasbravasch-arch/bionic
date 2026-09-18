@@ -966,6 +966,72 @@ Bionic will refresh all four reference sources first.`)) {
         gap: 5px;
       }
 
+
+      .lb-organizer-buttonlike,
+      .lb-organizer-actions button,
+      .lb-organizer-toolbar button,
+      .lb-organizer-card button,
+      .lb-organizer-list button {
+        appearance: none;
+        -webkit-appearance: none;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.06);
+        color: inherit;
+        border-radius: 10px;
+        padding: 8px 12px;
+        min-height: 34px;
+        line-height: 1.2;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+        transition:
+          background 120ms ease,
+          border-color 120ms ease,
+          transform 80ms ease,
+          box-shadow 120ms ease;
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+      }
+
+      .lb-organizer-buttonlike:hover,
+      .lb-organizer-actions button:hover,
+      .lb-organizer-toolbar button:hover,
+      .lb-organizer-card button:hover,
+      .lb-organizer-list button:hover {
+        background: rgba(255, 255, 255, 0.11);
+        border-color: rgba(255, 255, 255, 0.28);
+      }
+
+      .lb-organizer-buttonlike:active,
+      .lb-organizer-actions button:active,
+      .lb-organizer-toolbar button:active,
+      .lb-organizer-card button:active,
+      .lb-organizer-list button:active {
+        transform: translateY(1px);
+        background: rgba(255, 255, 255, 0.14);
+      }
+
+      .lb-organizer-buttonlike:focus-visible,
+      .lb-organizer-actions button:focus-visible,
+      .lb-organizer-toolbar button:focus-visible,
+      .lb-organizer-card button:focus-visible,
+      .lb-organizer-list button:focus-visible {
+        outline: none;
+        border-color: rgba(120, 170, 255, 0.75);
+        box-shadow:
+          0 0 0 2px rgba(120, 170, 255, 0.20),
+          inset 0 0 0 1px rgba(255,255,255,0.02);
+      }
+
+      .lb-organizer-buttonlike[disabled],
+      .lb-organizer-actions button[disabled],
+      .lb-organizer-toolbar button[disabled],
+      .lb-organizer-card button[disabled],
+      .lb-organizer-list button[disabled] {
+        opacity: 0.5;
+        cursor: not-allowed;
+        background: rgba(255, 255, 255, 0.03);
+      }
+
       .lb-organizer-check {
         display: flex;
         align-items: start;
