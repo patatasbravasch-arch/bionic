@@ -1,3 +1,4 @@
+import { handleLorebookOrganizerMessage } from './lorebook-organizer-backend'
 declare const spindle: import('lumiverse-spindle-types').SpindleAPI
 
 const FF_THINK_FIX_VERSION = '0.48.0'
@@ -380,6 +381,16 @@ async function repairMessage(
 
 spindle.onFrontendMessage(
   async (payload: any, userId: string) => {
+    if (
+      await handleLorebookOrganizerMessage(
+        spindle,
+        payload,
+        userId
+      )
+    ) {
+      return
+    }
+
     if (
       payload?.type ===
       'bionic_settings_load'

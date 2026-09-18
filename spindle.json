@@ -1,17 +1,18 @@
 {
-  "version": "0.48.1",
+  "version": "0.48.2",
   "name": "Bionic Reading & Fonts",
   "identifier": "bionic_style_reading",
   "author": "patatasbravasch-arch",
   "github": "https://github.com/patatasbravasch-arch/bionic",
   "homepage": "https://github.com/patatasbravasch-arch/bionic",
-  "description": "Bionic reading, typography, toolbar controls, FF think fix, LumiRealm compatibility, configurable auto-regeneration, persistent settings, and Lorebook Cleanup. v0.48 uses Lumiverse's authenticated same-origin REST API for lorebook cleanup, identifies books not linked to any character card, and finds exact duplicates that can be relinked to one shared copy.",
+  "description": "Bionic reading and typography controls with chat-toolbar customization, FF reasoning repair, and a reference-aware Lorebook Organizer with AI folder suggestions.",
   "permissions": [
     "generation",
     "chat_mutation",
     "personas",
     "world_books",
-    "characters"
+    "characters",
+    "chats"
   ],
   "entry_backend": "dist/backend.js",
   "entry_frontend": "dist/frontend.js"

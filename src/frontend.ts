@@ -1,3 +1,4 @@
+import { installLorebookOrganizer } from './lorebook-organizer-frontend'
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
   const SETTINGS_KEY = 'lumiverse:bionic-style-reading:settings'
@@ -56,6 +57,7 @@ export function setup(ctx) {
     { key: 'quickReplies', label: 'Quick replies', title: 'Quick replies', className: 'lb-hide-toolbar-quick-replies' },
     { key: 'tools', label: 'Tools', title: 'Tools', className: 'lb-hide-toolbar-tools' },
     { key: 'extras', label: 'Extras', title: 'Extras', className: 'lb-hide-toolbar-extras' },
+    { key: 'customizeToolbar', label: 'Customize toolbar', title: 'Customize toolbar', className: 'lb-hide-toolbar-customize' },
     {
       key: 'attachments',
       label: 'Attachments / paperclip',
@@ -972,9 +974,7 @@ export function setup(ctx) {
     }
 
     .lumibionic-preview-section {
-      position: sticky;
-      top: 0;
-      z-index: 30;
+      position: relative;
       margin: 0 -8px;
       padding: 10px 8px 12px !important;
       border-top: 0 !important;
@@ -3207,46 +3207,97 @@ export function setup(ctx) {
         </div>
       </details>
 
-      <details class="lumibionic-group" data-lumibionic-group="Lorebook Cleanup">
-        <summary>Lorebook Cleanup</summary>
+      <details
+        class="lumibionic-group"
+        data-lumibionic-group="Lorebook Organizer"
+      >
+        <summary>Lorebook Organizer</summary>
+
         <div class="lumibionic-group-body">
           <div class="lumibionic-section">
-            <div class="lumibionic-section-title">Library scan</div>
-            <div class="lumibionic-muted">
-              Scans your signed-in Lumiverse library directly. It finds lorebooks
-              not linked to any character card and exact duplicate lorebooks.
-              Scanning itself never deletes anything.
-            </div>
-            <div class="lumibionic-toolbar-actions">
-              <button type="button" id="lb-lore-scan">Scan lorebooks</button>
-              <button type="button" id="lb-lore-clean-exact">Relink & delete all exact duplicates</button>
-            </div>
-            <div class="lumibionic-muted" id="lb-lore-status">Not scanned yet.</div>
-          </div>
+            <div class="lb-organizer-summary">
+              <div class="lb-organizer-brand">
+                <div class="lb-organizer-logo" aria-hidden="true">
+                  <svg viewBox="0 0 64 64" width="100%" height="100%">
+                    <rect
+                      x="2"
+                      y="2"
+                      width="60"
+                      height="60"
+                      rx="14"
+                      fill="currentColor"
+                      opacity=".12"
+                    />
+                    <rect
+                      x="8"
+                      y="8"
+                      width="23"
+                      height="23"
+                      rx="7"
+                      fill="currentColor"
+                      opacity=".92"
+                    />
+                    <rect
+                      x="34"
+                      y="8"
+                      width="22"
+                      height="14"
+                      rx="6"
+                      fill="currentColor"
+                      opacity=".52"
+                    />
+                    <rect
+                      x="34"
+                      y="25"
+                      width="22"
+                      height="31"
+                      rx="7"
+                      fill="currentColor"
+                      opacity=".82"
+                    />
+                    <rect
+                      x="8"
+                      y="34"
+                      width="23"
+                      height="22"
+                      rx="7"
+                      fill="currentColor"
+                      opacity=".38"
+                    />
+                  </svg>
+                </div>
 
-          <div class="lumibionic-section">
-            <div class="lumibionic-section-title">Not linked to any card</div>
-            <div class="lumibionic-muted">
-              Possible old or forgotten lorebooks. Nothing here is deleted automatically.
-            </div>
-            <div class="lumibionic-lorebook-list" id="lb-lore-unlinked"></div>
-          </div>
+                <div class="lb-organizer-brand-copy">
+                  <strong>Bionic Lorebook Organizer</strong>
+                  <small>
+                    Reference-aware cleanup and AI-assisted folder organization.
+                    Characters, chats, personas and global activation are all checked.
+                  </small>
+                </div>
+              </div>
 
-          <div class="lumibionic-section">
-            <div class="lumibionic-section-title">Exact duplicates</div>
-            <div class="lumibionic-muted">
-              Exact means the normalized lorebook name and all non-ID entry data match.
-              Cleanup keeps the most-used copy, relinks every affected card to it,
-              then removes redundant copies.
-            </div>
-            <div class="lumibionic-lorebook-list" id="lb-lore-results"></div>
-          </div>
+              <div
+                class="lb-organizer-summary-stats"
+                id="lb-lore-organizer-summary"
+              >
+                Not scanned yet.
+              </div>
 
-          <div class="lumibionic-section">
-            <div class="lumibionic-section-title">Folder organization</div>
-            <div class="lumibionic-muted">
-              Lumiverse has native lorebook folders. LLM-assisted folder suggestions
-              are planned separately; this cleanup version will not move books by itself.
+              <div class="lumibionic-toolbar-actions">
+                <button
+                  type="button"
+                  id="lb-lore-organizer-open"
+                >
+                  Open Lorebook Organizer
+                </button>
+
+                <button
+                  type="button"
+                  id="lb-lore-organizer-rescan"
+                >
+                  Scan
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -3327,6 +3378,12 @@ export function setup(ctx) {
 
   const $ = selector =>
     tab.root.querySelector(selector)
+
+  const lorebookOrganizerCleanup =
+    installLorebookOrganizer(
+      ctx,
+      tab.root
+    )
 
   const preset = $('#lb-preset')
   const bionicEnabled = $('#lb-bionic-enabled')
@@ -5897,6 +5954,7 @@ export function setup(ctx) {
 
     tab.destroy()
     removeStyle()
+    lorebookOrganizerCleanup?.()
     ctx.dom.cleanup()
   }
 }
