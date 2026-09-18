@@ -165,8 +165,17 @@ function stableValue(value, key = "") {
   }
   return value;
 }
+function duplicateNameKey(value) {
+  let name = String(value ?? "").normalize("NFKC").trim().toLocaleLowerCase().replace(/[\s_-]+/g, " ");
+  let previous = "";
+  while (name !== previous) {
+    previous = name;
+    name = name.replace(/\s+(?:\(\d+\)|copy(?:\s+\d+)?|duplicate(?:\s+\d+)?)$/i, "").trim();
+  }
+  return name;
+}
 function bookSignature(book, entries) {
-  const name = String(book?.name || "").normalize("NFKC").trim().toLocaleLowerCase().replace(/[\s_-]+/g, " ");
+  const name = duplicateNameKey(book?.name);
   return JSON.stringify({
     name,
     entries: entries.map((entry) => JSON.stringify(stableValue(entry))).sort()
@@ -203,8 +212,13 @@ function installLorebookOrganizer(ctx, settingsRoot, options = {}) {
   let ignored = [];
   let referenceSnapshot = null;
   const selectedUnlinked = new Set;
+  const selectedOverview = new Set;
+  let overviewFolderPanelOpen = false;
+  let overviewFolderTargetName = "";
   let showIgnored = false;
   let linkPanelOpen = false;
+  let folderPanelOpen = false;
+  let folderTargetName = "";
   let linkTargetKind = "character";
   let linkTargetId = "";
   let lastScanAt = null;
@@ -336,6 +350,12 @@ function installLorebookOrganizer(ctx, settingsRoot, options = {}) {
     for (const id of selectedUnlinked) {
       if (!validSelection.has(id)) {
         selectedUnlinked.delete(id);
+      }
+    }
+    const validOverviewSelection = new Set(books.map((book) => book.id));
+    for (const id of selectedOverview) {
+      if (!validOverviewSelection.has(id)) {
+        selectedOverview.delete(id);
       }
     }
   }
@@ -1067,8 +1087,38 @@ Bionic will refresh all four reference sources first.`)) {
       </div>
     `;
   }
+  function selectedOverviewBooks() {
+    return books.filter((book) => selectedOverview.has(book.id));
+  }
+  async function moveSelectedOverviewToFolder() {
+    if (busy)
+      return;
+    const selected = selectedOverviewBooks();
+    if (!selected.length) {
+      return;
+    }
+    const folder = overviewFolderTargetName.trim();
+    if (!folder) {
+      renderAll("Enter a folder name first.");
+      return;
+    }
+    const applied = await applyAssignments(selected.map((book) => ({
+      bookId: book.id,
+      folder
+    })));
+    if (!applied) {
+      return;
+    }
+    selectedOverview.clear();
+    overviewFolderPanelOpen = false;
+    overviewFolderTargetName = "";
+    renderAll(`Moved ${selected.length} lorebook${selected.length === 1 ? "" : "s"} to "${folder}".`);
+  }
   function renderOverview() {
     const visible = filteredBooks();
+    const selected = selectedOverviewBooks();
+    const folders = existingFolderNames();
+    const allVisibleSelected = visible.length > 0 && visible.every((book) => selectedOverview.has(book.id));
     return `
       <div class="lb-organizer-grid">
         <div class="lb-organizer-stat">
@@ -1092,8 +1142,112 @@ Bionic will refresh all four reference sources first.`)) {
         </div>
       </div>
 
+      <div
+        class="lb-organizer-card"
+        style="margin-bottom:10px"
+      >
+        <div class="lb-organizer-card-head">
+          <div>
+            <div class="lb-organizer-card-title">
+              Library selection
+            </div>
+
+            <div class="lb-organizer-meta">
+              ${selected.length} selected ·
+              foldering does not change character, chat,
+              persona or global links
+            </div>
+          </div>
+        </div>
+
+        <div class="lb-organizer-actions">
+          <button
+            type="button"
+            data-organizer-overview-select-visible
+            ${visible.length ? "" : "disabled"}
+          >
+            ${allVisibleSelected ? "Unselect visible" : "Select visible"}
+          </button>
+
+          <button
+            type="button"
+            data-organizer-overview-clear
+            ${selected.length ? "" : "disabled"}
+          >
+            Clear selection
+          </button>
+
+          <button
+            type="button"
+            data-organizer-overview-open-folder
+            ${selected.length ? "" : "disabled"}
+          >
+            Move selected to folder…
+          </button>
+        </div>
+      </div>
+
+      ${overviewFolderPanelOpen ? `
+            <div
+              class="lb-organizer-card"
+              style="margin-bottom:10px"
+            >
+              <div class="lb-organizer-card-title">
+                Move ${selected.length} selected lorebook${selected.length === 1 ? "" : "s"} to folder
+              </div>
+
+              <div class="lb-organizer-meta">
+                Choose an existing folder or type a new
+                name to create/use it immediately.
+              </div>
+
+              <div class="lb-organizer-toolbar">
+                <input
+                  id="lb-organizer-overview-folder-target"
+                  type="text"
+                  list="lb-organizer-overview-folder-options"
+                  value="${escapeHtml(overviewFolderTargetName)}"
+                  placeholder="Existing or new folder name…"
+                  autocomplete="off"
+                  ${busy ? "disabled" : ""}
+                >
+
+                <datalist
+                  id="lb-organizer-overview-folder-options"
+                >
+                  ${folders.map((folder) => `<option value="${escapeHtml(folder)}"></option>`).join("")}
+                </datalist>
+
+                <button
+                  type="button"
+                  data-organizer-overview-folder-apply
+                  ${busy ? "disabled" : ""}
+                >
+                  Move selected
+                </button>
+
+                <button
+                  type="button"
+                  data-organizer-overview-folder-cancel
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ` : ""}
+
       <div class="lb-organizer-list">
-        ${visible.length ? visible.map((book) => bookCard(book)).join("") : `
+        ${visible.length ? visible.map((book) => bookCard(book, `
+                      <label class="lb-organizer-check">
+                        <input
+                          type="checkbox"
+                          data-organizer-select-overview="${escapeHtml(book.id)}"
+                          ${selectedOverview.has(book.id) ? "checked" : ""}
+                          ${busy ? "disabled" : ""}
+                        >
+                        <span>Select</span>
+                      </label>
+                    `)).join("") : `
               <div class="lb-organizer-empty">
                 ${books.length ? "No lorebooks match this search." : "Scan the library to begin."}
               </div>
@@ -1187,6 +1341,32 @@ Bionic will refresh all four reference sources first.`)) {
   function selectedUnlinkedBooks() {
     return books.filter((book) => selectedUnlinked.has(book.id) && isUnlinked(book));
   }
+  function existingFolderNames() {
+    return Array.from(new Set(books.map((book) => String(book.folder || "").trim()).filter((folder) => folder && folder !== IGNORED_FOLDER))).sort((a, b) => a.localeCompare(b));
+  }
+  function characterMatchKey(value) {
+    let name = String(value ?? "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase().replace(/&/g, " and ").replace(/[_\-.]+/g, " ").replace(/[’']/g, "'").replace(/\s+/g, " ").trim();
+    let previous = "";
+    while (name !== previous) {
+      previous = name;
+      name = name.replace(/\s+(?:\(\d+\)|copy(?:\s+\d+)?|duplicate(?:\s+\d+)?)$/i, "").replace(/\s+(?:lore\s*book|lorebook|world\s*book|worldbook|world\s*info|worldinfo)$/i, "").replace(/\s+(?:silly\s*tavern|sillytavern)$/i, "").replace(/\s+(?:nsfw|sfw)$/i, "").replace(/\s+v\d+(?:\.\d+)*$/i, "").trim();
+    }
+    return name.replace(/['’]s$/i, "").replace(/[^\p{L}\p{N}]+/gu, " ").replace(/\s+/g, " ").trim();
+  }
+  function suggestedCharacter(book) {
+    const key = characterMatchKey(book.name);
+    if (key.length < 2) {
+      return null;
+    }
+    const matches = (referenceSnapshot?.characters || []).filter((character) => typeof character?.id === "string" && characterMatchKey(character?.name) === key);
+    if (matches.length !== 1) {
+      return null;
+    }
+    return {
+      id: matches[0].id,
+      name: matches[0].name || "Unnamed character"
+    };
+  }
   function linkTargets() {
     if (linkTargetKind === "character") {
       return (referenceSnapshot?.characters || []).map((item) => ({
@@ -1233,6 +1413,27 @@ Bionic will refresh all four reference sources first.`)) {
       return;
     selectedUnlinked.clear();
     renderAll(`Restored ${selected.length} ignored lorebook${selected.length === 1 ? "" : "s"}.`);
+  }
+  async function moveSelectedBooksToFolder() {
+    const selected = selectedUnlinkedBooks();
+    if (!selected.length) {
+      return;
+    }
+    const folder = folderTargetName.trim();
+    if (!folder) {
+      renderAll("Enter a folder name first.");
+      return;
+    }
+    const applied = await applyAssignments(selected.map((book) => ({
+      bookId: book.id,
+      folder
+    })));
+    if (!applied)
+      return;
+    selectedUnlinked.clear();
+    folderPanelOpen = false;
+    folderTargetName = "";
+    renderAll(`Moved ${selected.length} lorebook${selected.length === 1 ? "" : "s"} to "${folder}".`);
   }
   async function deleteSelectedBooks() {
     if (busy)
@@ -1376,10 +1577,45 @@ Bionic will refresh characters, chats, personas and global activation immediatel
       syncSummary();
     }
   }
+  async function linkSuggestedCharacter(bookId, characterId) {
+    if (busy)
+      return;
+    const book = books.find((item) => item.id === bookId && isUnlinked(item));
+    const character = (referenceSnapshot?.characters || []).find((item) => item.id === characterId);
+    if (!book || !character) {
+      renderAll("That lorebook or character is no longer available. Rescan and try again.");
+      return;
+    }
+    const previousSelection = new Set(selectedUnlinked);
+    const previousKind = linkTargetKind;
+    const previousTarget = linkTargetId;
+    const previousLinkPanel = linkPanelOpen;
+    const previousFolderPanel = folderPanelOpen;
+    selectedUnlinked.clear();
+    selectedUnlinked.add(bookId);
+    linkTargetKind = "character";
+    linkTargetId = characterId;
+    linkPanelOpen = false;
+    folderPanelOpen = false;
+    await linkSelectedBooks();
+    selectedUnlinked.clear();
+    for (const id of previousSelection) {
+      const current = books.find((item) => item.id === id);
+      if (current && isUnlinked(current)) {
+        selectedUnlinked.add(id);
+      }
+    }
+    linkTargetKind = previousKind;
+    linkTargetId = previousTarget;
+    linkPanelOpen = previousLinkPanel;
+    folderPanelOpen = previousFolderPanel;
+    renderAll();
+  }
   function renderUnlinked() {
     const visible = visibleUnlinkedBooks();
     const selected = selectedUnlinkedBooks();
     const targets = linkTargets();
+    const folders = existingFolderNames();
     const allVisibleSelected = visible.length > 0 && visible.every((book) => selectedUnlinked.has(book.id));
     const selectedIgnored = selected.filter((book) => String(book.folder || "").trim() === IGNORED_FOLDER).length;
     return `
@@ -1434,6 +1670,14 @@ Bionic will refresh characters, chats, personas and global activation immediatel
 
           <button
             type="button"
+            data-organizer-open-folder
+            ${selected.length ? "" : "disabled"}
+          >
+            Move selected to folder…
+          </button>
+
+          <button
+            type="button"
             data-organizer-ignore-selected
             ${selected.length ? "" : "disabled"}
           >
@@ -1457,6 +1701,49 @@ Bionic will refresh characters, chats, personas and global activation immediatel
           </button>
         </div>
       </div>
+
+      ${folderPanelOpen ? `
+            <div class="lb-organizer-card" style="margin-bottom:10px">
+              <div class="lb-organizer-card-title">
+                Move ${selected.length} selected lorebook${selected.length === 1 ? "" : "s"} to folder
+              </div>
+
+              <div class="lb-organizer-meta">
+                Pick an existing folder or type a new folder name.
+              </div>
+
+              <div class="lb-organizer-toolbar">
+                <input
+                  id="lb-organizer-folder-target"
+                  type="text"
+                  list="lb-organizer-folder-options"
+                  value="${escapeHtml(folderTargetName)}"
+                  placeholder="Existing or new folder name…"
+                  autocomplete="off"
+                  ${busy ? "disabled" : ""}
+                >
+
+                <datalist id="lb-organizer-folder-options">
+                  ${folders.map((folder) => `<option value="${escapeHtml(folder)}"></option>`).join("")}
+                </datalist>
+
+                <button
+                  type="button"
+                  data-organizer-folder-apply
+                  ${busy ? "disabled" : ""}
+                >
+                  Move selected
+                </button>
+
+                <button
+                  type="button"
+                  data-organizer-folder-cancel
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ` : ""}
 
       ${linkPanelOpen ? `
             <div class="lb-organizer-card" style="margin-bottom:10px">
@@ -1537,6 +1824,7 @@ Bionic will refresh characters, chats, personas and global activation immediatel
             <div class="lb-organizer-list">
               ${visible.map((book) => {
       const isIgnored = String(book.folder || "").trim() === IGNORED_FOLDER;
+      const suggested = suggestedCharacter(book);
       return bookCard(book, `
                     <label class="lb-organizer-check">
                       <input
@@ -1548,6 +1836,17 @@ Bionic will refresh characters, chats, personas and global activation immediatel
                         ${isIgnored ? "Ignored" : "Select"}
                       </span>
                     </label>
+
+                    ${suggested ? `
+                          <button
+                            type="button"
+                            data-organizer-link-suggested-character="${escapeHtml(suggested.id)}"
+                            data-organizer-link-book="${escapeHtml(book.id)}"
+                            ${busy ? "disabled" : ""}
+                          >
+                            Link to ${escapeHtml(suggested.name)}
+                          </button>
+                        ` : ""}
 
                     <button
                       type="button"
@@ -1923,6 +2222,70 @@ Bionic will refresh characters, chats, personas and global activation immediatel
         linkSelectedBooks();
         return;
       }
+      if (target.closest("[data-organizer-overview-select-visible]")) {
+        const visible = filteredBooks();
+        const allSelected = visible.length > 0 && visible.every((book) => selectedOverview.has(book.id));
+        for (const book of visible) {
+          if (allSelected) {
+            selectedOverview.delete(book.id);
+          } else {
+            selectedOverview.add(book.id);
+          }
+        }
+        renderAll();
+        return;
+      }
+      if (target.closest("[data-organizer-overview-clear]")) {
+        selectedOverview.clear();
+        overviewFolderPanelOpen = false;
+        overviewFolderTargetName = "";
+        renderAll();
+        return;
+      }
+      if (target.closest("[data-organizer-overview-open-folder]")) {
+        overviewFolderPanelOpen = true;
+        renderAll();
+        return;
+      }
+      if (target.closest("[data-organizer-overview-folder-cancel]")) {
+        overviewFolderPanelOpen = false;
+        overviewFolderTargetName = "";
+        renderAll();
+        return;
+      }
+      if (target.closest("[data-organizer-overview-folder-apply]")) {
+        const input = modalRoot?.querySelector("#lb-organizer-overview-folder-target");
+        overviewFolderTargetName = input?.value || "";
+        moveSelectedOverviewToFolder();
+        return;
+      }
+      if (target.closest("[data-organizer-open-folder]")) {
+        folderPanelOpen = true;
+        linkPanelOpen = false;
+        renderAll();
+        return;
+      }
+      if (target.closest("[data-organizer-folder-cancel]")) {
+        folderPanelOpen = false;
+        folderTargetName = "";
+        renderAll();
+        return;
+      }
+      if (target.closest("[data-organizer-folder-apply]")) {
+        const input = modalRoot?.querySelector("#lb-organizer-folder-target");
+        folderTargetName = input?.value || "";
+        moveSelectedBooksToFolder();
+        return;
+      }
+      const suggestedLink = target.closest("[data-organizer-link-suggested-character]");
+      if (suggestedLink) {
+        const characterId = suggestedLink.dataset.organizerLinkSuggestedCharacter || "";
+        const bookId = suggestedLink.dataset.organizerLinkBook || "";
+        if (characterId && bookId) {
+          linkSuggestedCharacter(bookId, characterId);
+        }
+        return;
+      }
       if (target.closest("[data-organizer-ignore-selected]")) {
         ignoreSelectedBooks();
         return;
@@ -1963,6 +2326,14 @@ Bionic will refresh characters, chats, personas and global activation immediatel
     });
     modalRoot.addEventListener("input", (event) => {
       const target = event.target;
+      if (target.id === "lb-organizer-overview-folder-target") {
+        overviewFolderTargetName = target.value;
+        return;
+      }
+      if (target.id === "lb-organizer-folder-target") {
+        folderTargetName = target.value;
+        return;
+      }
       if (target.id === "lb-organizer-search") {
         searchText = target.value;
         const content = modalRoot?.querySelector(".lb-organizer-content");
@@ -1973,6 +2344,18 @@ Bionic will refresh characters, chats, personas and global activation immediatel
     });
     modalRoot.addEventListener("change", (event) => {
       const target = event.target;
+      if (target.matches("[data-organizer-select-overview]")) {
+        const id = target.dataset.organizerSelectOverview || "";
+        if (id) {
+          if (target.checked) {
+            selectedOverview.add(id);
+          } else {
+            selectedOverview.delete(id);
+          }
+        }
+        renderAll();
+        return;
+      }
       if (target.matches("[data-organizer-select-unlinked]")) {
         const id = target.dataset.organizerSelectUnlinked || "";
         if (id) {
