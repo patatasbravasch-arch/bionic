@@ -2656,6 +2656,403 @@ export function installLorebookOrganizer(
     return result
   }
 
+  async function replaceSimilarReferences(
+    keeperId: string
+  ) {
+    if (busy) return
+
+    let group =
+      similarNameGroups()
+        .find(
+          item =>
+            item.books.some(
+              book =>
+                book.id === keeperId
+            )
+        )
+
+    if (!group) {
+      renderAll(
+        'That similar-name group no longer exists. Rescan and try again.'
+      )
+      return
+    }
+
+    const keeper =
+      group.books.find(
+        book =>
+          book.id === keeperId
+      )
+
+    if (!keeper) return
+
+    const oldBooks =
+      group.books.filter(
+        book =>
+          book.id !== keeperId
+      )
+
+    const affectedRefs =
+      oldBooks.flatMap(
+        book =>
+          book.references
+      )
+
+    if (!affectedRefs.length) {
+      renderAll(
+        'The other similar-name lorebooks have no references to replace.'
+      )
+      return
+    }
+
+    const affectedCharacterIds =
+      new Set(
+        affectedRefs
+          .filter(
+            ref =>
+              ref.kind ===
+              'character'
+          )
+          .map(ref => ref.id)
+          .filter(Boolean)
+      )
+
+    const affectedChatIds =
+      new Set(
+        affectedRefs
+          .filter(
+            ref =>
+              ref.kind ===
+              'chat'
+          )
+          .map(ref => ref.id)
+          .filter(Boolean)
+      )
+
+    const affectedPersonaIds =
+      new Set(
+        affectedRefs
+          .filter(
+            ref =>
+              ref.kind ===
+              'persona'
+          )
+          .map(ref => ref.id)
+          .filter(Boolean)
+      )
+
+    const affectsGlobal =
+      affectedRefs.some(
+        ref =>
+          ref.kind ===
+          'global'
+      )
+
+    const summary = [
+      affectedCharacterIds.size
+        ? `${affectedCharacterIds.size} character${affectedCharacterIds.size === 1 ? '' : 's'}`
+        : '',
+      affectedChatIds.size
+        ? `${affectedChatIds.size} chat${affectedChatIds.size === 1 ? '' : 's'}`
+        : '',
+      affectedPersonaIds.size
+        ? `${affectedPersonaIds.size} persona${affectedPersonaIds.size === 1 ? '' : 's'}`
+        : '',
+      affectsGlobal
+        ? 'global activation'
+        : '',
+    ]
+      .filter(Boolean)
+      .join(', ')
+
+    if (
+      !window.confirm(
+        `Use "${keeper.name}" as the replacement for the other similarly named lorebooks?\n\nReferences to the other copies will be moved to this one: ${summary}.\n\nUnrelated lorebooks will be preserved. The old lorebook files will NOT be deleted automatically.`
+      )
+    ) {
+      return
+    }
+
+    busy = true
+
+    renderAll(
+      `Refreshing references before replacing with "${keeper.name}"…`
+    )
+
+    let resultMessage = ''
+
+    try {
+      const snapshot =
+        await freshReferences()
+
+      group =
+        similarNameGroups()
+          .find(
+            item =>
+              item.books.some(
+                book =>
+                  book.id === keeperId
+              )
+          )
+
+      if (!group) {
+        throw new Error(
+          'The similar-name group changed during verification.'
+        )
+      }
+
+      const groupIds =
+        new Set(
+          group.books.map(
+            book => book.id
+          )
+        )
+
+      const oldIds =
+        new Set(
+          group.books
+            .filter(
+              book =>
+                book.id !== keeperId
+            )
+            .map(book => book.id)
+        )
+
+      /*
+        Characters:
+        remove every old member of this similar-name group,
+        preserve unrelated books, then attach the keeper.
+      */
+      for (
+        const characterId of
+          affectedCharacterIds
+      ) {
+        const characterUrl =
+          `/api/v1/characters/${encodeURIComponent(characterId)}`
+
+        const freshCharacter =
+          await api(characterUrl)
+
+        const extensions:
+          Record<string, any> =
+            freshCharacter?.extensions &&
+            typeof freshCharacter.extensions ===
+              'object' &&
+            !Array.isArray(
+              freshCharacter.extensions
+            )
+              ? {
+                  ...freshCharacter.extensions,
+                }
+              : {}
+
+        const currentIds =
+          Array.isArray(
+            freshCharacter?.world_book_ids
+          )
+            ? freshCharacter
+                .world_book_ids
+                .filter(
+                  (id: unknown) =>
+                    typeof id ===
+                      'string' &&
+                    Boolean(id)
+                )
+            : Array.isArray(
+                extensions.world_book_ids
+              )
+              ? extensions
+                  .world_book_ids
+                  .filter(
+                    (id: unknown) =>
+                      typeof id ===
+                        'string' &&
+                      Boolean(id)
+                  )
+              : typeof extensions
+                  .world_book_id ===
+                  'string' &&
+                extensions.world_book_id
+                ? [
+                    extensions
+                      .world_book_id,
+                  ]
+                : []
+
+        const nextIds =
+          Array.from(
+            new Set([
+              ...currentIds.filter(
+                (id: string) =>
+                  !groupIds.has(id)
+              ),
+              keeperId,
+            ])
+          )
+
+        delete extensions.world_book_id
+
+        extensions.world_book_ids =
+          nextIds
+
+        await api(
+          characterUrl,
+          {
+            method: 'PUT',
+            body:
+              JSON.stringify({
+                extensions,
+              }),
+          }
+        )
+      }
+
+      /*
+        Chats:
+        preserve unrelated chat lorebooks and replace only
+        members of this similar-name group.
+      */
+      for (
+        const chatId of
+          affectedChatIds
+      ) {
+        const freshChat =
+          await api(
+            `/api/v1/chats/${encodeURIComponent(chatId)}?messages=false`
+          )
+
+        const currentIds =
+          Array.isArray(
+            freshChat?.metadata
+              ?.chat_world_book_ids
+          )
+            ? freshChat.metadata
+                .chat_world_book_ids
+                .filter(
+                  (id: unknown) =>
+                    typeof id ===
+                      'string' &&
+                    Boolean(id)
+                )
+            : []
+
+        const nextIds =
+          Array.from(
+            new Set([
+              ...currentIds.filter(
+                (id: string) =>
+                  !groupIds.has(id)
+              ),
+              keeperId,
+            ])
+          )
+
+        await api(
+          `/api/v1/chats/${encodeURIComponent(chatId)}/metadata`,
+          {
+            method: 'PATCH',
+            body:
+              JSON.stringify({
+                chat_world_book_ids:
+                  nextIds,
+              }),
+          }
+        )
+      }
+
+      /*
+        Personas have a single lorebook attachment.
+      */
+      if (
+        affectedPersonaIds.size
+      ) {
+        await api(
+          '/api/v1/personas/bulk-update',
+          {
+            method: 'POST',
+            body:
+              JSON.stringify({
+                ids:
+                  Array.from(
+                    affectedPersonaIds
+                  ),
+                attached_world_book_id:
+                  keeperId,
+              }),
+          }
+        )
+      }
+
+      /*
+        Global activation:
+        replace old group members with the selected keeper.
+      */
+      if (affectsGlobal) {
+        const currentGlobalIds =
+          Array.isArray(
+            snapshot?.globalIds
+          )
+            ? snapshot.globalIds
+            : []
+
+        const nextGlobalIds =
+          Array.from(
+            new Set([
+              ...currentGlobalIds.filter(
+                (id: string) =>
+                  !oldIds.has(id)
+              ),
+              keeperId,
+            ])
+          )
+
+        await sendBackend(
+          'bionic_lore_set_global',
+          {
+            ids:
+              nextGlobalIds,
+          }
+        )
+      }
+
+      /*
+        Refresh and verify that none of the old copies retain
+        references.
+      */
+      await freshReferences()
+
+      const remainingReferencedOldBooks =
+        books.filter(
+          book =>
+            oldIds.has(book.id) &&
+            book.references.length > 0
+        )
+
+      if (
+        remainingReferencedOldBooks.length
+      ) {
+        throw new Error(
+          `${remainingReferencedOldBooks.length} old similar-name lorebook${remainingReferencedOldBooks.length === 1 ? '' : 's'} still have references after replacement.`
+        )
+      }
+
+      resultMessage =
+        `Replaced references with "${keeper.name}". The old copies are now left in the library for review/deletion.`
+    } catch (error: any) {
+      resultMessage =
+        `Replacement stopped: ${
+          error?.message ||
+          String(error)
+        }`
+    } finally {
+      busy = false
+      renderAll(
+        resultMessage
+      )
+      syncSummary()
+    }
+  }
+
   async function unifySimilarCharacters(
     keeperId: string
   ) {
@@ -3121,6 +3518,27 @@ export function installLorebookOrganizer(
                               otherBook =>
                                 otherBook.id !==
                                   book.id &&
+                                otherBook.references.length > 0
+                            )
+                              ? `
+                                <div class="lb-organizer-actions">
+                                  <button
+                                    type="button"
+                                    data-organizer-similar-replace-with="${escapeHtml(book.id)}"
+                                    ${busy ? 'disabled' : ''}
+                                  >
+                                    Use this as replacement
+                                  </button>
+                                </div>
+                              `
+                              : ''
+                          }
+
+                          ${
+                            group.books.some(
+                              otherBook =>
+                                otherBook.id !==
+                                  book.id &&
                                 otherBook.references.some(
                                   ref =>
                                     ref.kind ===
@@ -3402,7 +3820,11 @@ export function installLorebookOrganizer(
           ''
         )
         .replace(
-          /\s+v\d+(?:\.\d+)*$/i,
+          /\s+(?:v(?:ersion)?\s*)?\d+(?:[\s.]+\d+)+$/i,
+          ''
+        )
+        .replace(
+          /\s+v(?:ersion)?\s*\d+$/i,
           ''
         )
         .trim()
@@ -4943,6 +5365,26 @@ export function installLorebookOrganizer(
       event => {
         const target =
           event.target as HTMLElement
+
+        const replaceSimilarButton =
+          target.closest(
+            '[data-organizer-similar-replace-with]'
+          ) as HTMLElement | null
+
+        if (replaceSimilarButton) {
+          const keeperId =
+            replaceSimilarButton.dataset
+              .organizerSimilarReplaceWith ||
+            ''
+
+          if (keeperId) {
+            void replaceSimilarReferences(
+              keeperId
+            )
+          }
+
+          return
+        }
 
         const unifyCharactersButton =
           target.closest(
