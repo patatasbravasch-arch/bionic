@@ -442,18 +442,33 @@ function installLorebookOrganizer(ctx, settingsRoot, options = {}) {
   async function relinkCharacter(character, duplicateSet, keepId) {
     const current = Array.isArray(character.world_book_ids) ? character.world_book_ids : [];
     const next = replaceLoreIds(current, duplicateSet, keepId);
-    await api(`/api/v1/characters/${encodeURIComponent(character.id)}`, {
+    const characterUrl = `/api/v1/characters/${encodeURIComponent(character.id)}`;
+    const freshCharacter = await api(characterUrl);
+    const extensions = freshCharacter?.extensions && typeof freshCharacter.extensions === "object" && !Array.isArray(freshCharacter.extensions) ? {
+      ...freshCharacter.extensions
+    } : {};
+    const freshIds = Array.isArray(freshCharacter?.world_book_ids) ? freshCharacter.world_book_ids.filter((id) => typeof id === "string" && Boolean(id)) : Array.isArray(extensions.world_book_ids) ? extensions.world_book_ids.filter((id) => typeof id === "string" && Boolean(id)) : typeof extensions.world_book_id === "string" && extensions.world_book_id ? [
+      extensions.world_book_id
+    ] : [];
+    const concurrentIds = freshIds.filter((id) => !current.includes(id));
+    const writeIds = Array.from(new Set([
+      ...next,
+      ...concurrentIds
+    ]));
+    delete extensions.world_book_id;
+    extensions.world_book_ids = writeIds;
+    await api(characterUrl, {
       method: "PUT",
       body: JSON.stringify({
-        world_book_ids: next
+        extensions
       })
     });
-    const verified = await api(`/api/v1/characters/${encodeURIComponent(character.id)}`);
+    const verified = await api(characterUrl);
     const ids = Array.isArray(verified?.world_book_ids) ? verified.world_book_ids : Array.isArray(verified?.extensions?.world_book_ids) ? verified.extensions.world_book_ids : [];
-    if (next.some((id) => !ids.includes(id)) || ids.some((id) => duplicateSet.has(id))) {
+    if (writeIds.some((id) => !ids.includes(id))) {
       throw new Error(`Character ${character.name || character.id} did not verify after relinking.`);
     }
-    character.world_book_ids = [...next];
+    character.world_book_ids = [...writeIds];
   }
   async function relinkChat(chat, duplicateSet, keepId) {
     const current = Array.isArray(chat?.metadata?.chat_world_book_ids) ? chat.metadata.chat_world_book_ids : [];
@@ -743,6 +758,67 @@ Bionic will refresh all four reference sources first.`)) {
       .lb-organizer-summary-stats {
         font-size: .88rem;
         opacity: .78;
+      }
+
+      /* Organizer segmented tabs */
+      .lb-organizer-shell [data-organizer-tab] {
+        appearance: none;
+        -webkit-appearance: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 36px;
+        padding: 8px 13px !important;
+        margin: 2px 4px 2px 0;
+        border:
+          1px solid
+          rgba(255,255,255,.17) !important;
+        border-radius: 9px !important;
+        background:
+          rgba(255,255,255,.045) !important;
+        color: inherit !important;
+        font: inherit;
+        font-weight: 650;
+        line-height: 1.1;
+        text-decoration: none !important;
+        cursor: pointer;
+        transition:
+          background 120ms ease,
+          border-color 120ms ease,
+          transform 80ms ease;
+      }
+
+      .lb-organizer-shell
+      [data-organizer-tab]:hover {
+        background:
+          rgba(255,255,255,.10) !important;
+        border-color:
+          rgba(255,255,255,.30) !important;
+        text-decoration: none !important;
+      }
+
+      .lb-organizer-shell
+      [data-organizer-tab]:active {
+        transform: translateY(1px);
+      }
+
+      .lb-organizer-shell
+      [data-organizer-tab][aria-selected="true"] {
+        background:
+          rgba(255,255,255,.18) !important;
+        border-color:
+          rgba(255,255,255,.42) !important;
+        box-shadow:
+          inset 0 0 0 1px
+          rgba(255,255,255,.06);
+        text-decoration: none !important;
+      }
+
+      .lb-organizer-shell
+      [data-organizer-tab]:focus-visible {
+        outline:
+          2px solid currentColor;
+        outline-offset: 2px;
       }
 
       .lb-organizer-shell {
@@ -1564,17 +1640,27 @@ Bionic will refresh characters, chats, personas and global activation immediatel
         if (!target) {
           throw new Error("Character target no longer exists.");
         }
-        const next = Array.from(new Set([
-          ...target.world_book_ids || [],
+        const characterUrl = `/api/v1/characters/${encodeURIComponent(target.id)}`;
+        const currentCharacter = await api(characterUrl);
+        const extensions = currentCharacter?.extensions && typeof currentCharacter.extensions === "object" && !Array.isArray(currentCharacter.extensions) ? {
+          ...currentCharacter.extensions
+        } : {};
+        const existingIds = Array.isArray(currentCharacter?.world_book_ids) ? currentCharacter.world_book_ids.filter((id) => typeof id === "string" && Boolean(id)) : Array.isArray(extensions.world_book_ids) ? extensions.world_book_ids.filter((id) => typeof id === "string" && Boolean(id)) : typeof extensions.world_book_id === "string" && extensions.world_book_id ? [
+          extensions.world_book_id
+        ] : [];
+        const nextIds = Array.from(new Set([
+          ...existingIds,
           ...selectedIds
         ]));
-        await api(`/api/v1/characters/${encodeURIComponent(target.id)}`, {
+        delete extensions.world_book_id;
+        extensions.world_book_ids = nextIds;
+        await api(characterUrl, {
           method: "PUT",
           body: JSON.stringify({
-            world_book_ids: next
+            extensions
           })
         });
-        const verified = await api(`/api/v1/characters/${encodeURIComponent(target.id)}`);
+        const verified = await api(characterUrl);
         const verifiedIds = Array.isArray(verified?.world_book_ids) ? verified.world_book_ids : Array.isArray(verified?.extensions?.world_book_ids) ? verified.extensions.world_book_ids : [];
         for (const id of selectedIds) {
           if (!verifiedIds.includes(id)) {
@@ -2160,6 +2246,7 @@ Bionic will refresh characters, chats, personas and global activation immediatel
                 type="button"
                 class="lb-organizer-tab"
                 data-organizer-tab="${key}"
+              role="tab"
                 aria-selected="${String(activeTab === key)}"
               >
                 ${label}
@@ -3342,6 +3429,9 @@ function setup(ctx) {
       background: color-mix(in srgb, var(--lumiverse-bg, #080812) 92%, transparent);
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.28);
     }
 
     .lumibionic-preview-toolbar {
@@ -4963,14 +5053,25 @@ function setup(ctx) {
     try {
       const saved = JSON.parse(localStorage.getItem(UI_STATE_KEY) || "{}");
       return {
-        previewVisible: typeof saved.previewVisible === "boolean" ? saved.previewVisible : false,
+        previewVisible: typeof saved.previewVisible === "boolean" ? saved.previewVisible : true,
         sections: saved.sections && typeof saved.sections === "object" ? saved.sections : {}
       };
     } catch {
-      return { previewVisible: false, sections: {} };
+      return { previewVisible: true, sections: {} };
     }
   }
   let uiState = loadUiState();
+  try {
+    const previewMigrationKey = `${UI_STATE_KEY}:preview-sticky-v0486`;
+    if (localStorage.getItem(previewMigrationKey) !== "1") {
+      uiState = {
+        ...uiState,
+        previewVisible: true
+      };
+      localStorage.setItem(UI_STATE_KEY, JSON.stringify(uiState));
+      localStorage.setItem(previewMigrationKey, "1");
+    }
+  } catch {}
   function saveUiState() {
     try {
       localStorage.setItem(UI_STATE_KEY, JSON.stringify(uiState));

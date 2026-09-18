@@ -773,20 +773,94 @@ export function installLorebookOrganizer(
         keepId
       )
 
+    const characterUrl =
+      `/api/v1/characters/${encodeURIComponent(character.id)}`
+
+    const freshCharacter =
+      await api(characterUrl)
+
+    const extensions:
+      Record<string, any> =
+        freshCharacter?.extensions &&
+        typeof freshCharacter.extensions ===
+          'object' &&
+        !Array.isArray(
+          freshCharacter.extensions
+        )
+          ? {
+              ...freshCharacter.extensions,
+            }
+          : {}
+
+    const freshIds =
+      Array.isArray(
+        freshCharacter?.world_book_ids
+      )
+        ? freshCharacter
+            .world_book_ids
+            .filter(
+              (id: unknown) =>
+                typeof id ===
+                  'string' &&
+                Boolean(id)
+            )
+        : Array.isArray(
+            extensions.world_book_ids
+          )
+          ? extensions
+              .world_book_ids
+              .filter(
+                (id: unknown) =>
+                  typeof id ===
+                    'string' &&
+                  Boolean(id)
+              )
+          : typeof extensions
+              .world_book_id ===
+              'string' &&
+            extensions.world_book_id
+            ? [
+                extensions
+                  .world_book_id,
+              ]
+            : []
+
+    /*
+      Preserve any attachment that appeared after the organizer
+      snapshot was taken.
+    */
+    const concurrentIds =
+      freshIds.filter(
+        (id: string) =>
+          !current.includes(id)
+      )
+
+    const writeIds =
+      Array.from(
+        new Set([
+          ...next,
+          ...concurrentIds,
+        ])
+      )
+
+    delete extensions.world_book_id
+
+    extensions.world_book_ids =
+      writeIds
+
     await api(
-      `/api/v1/characters/${encodeURIComponent(character.id)}`,
+      characterUrl,
       {
         method: 'PUT',
-        body: JSON.stringify({
-          world_book_ids: next,
-        }),
+        body:
+          JSON.stringify({
+            extensions,
+          }),
       }
     )
 
     const verified =
-      await api(
-        `/api/v1/characters/${encodeURIComponent(character.id)}`
-      )
+      await api(characterUrl)
 
     const ids =
       Array.isArray(
@@ -802,12 +876,9 @@ export function installLorebookOrganizer(
           : []
 
     if (
-      next.some(
-        id => !ids.includes(id)
-      ) ||
-      ids.some(
-        (id: string) =>
-          duplicateSet.has(id)
+      writeIds.some(
+        id =>
+          !ids.includes(id)
       )
     ) {
       throw new Error(
@@ -816,7 +887,7 @@ export function installLorebookOrganizer(
     }
 
     character.world_book_ids =
-      [...next]
+      [...writeIds]
   }
 
   async function relinkChat(
@@ -1607,6 +1678,67 @@ export function installLorebookOrganizer(
       .lb-organizer-summary-stats {
         font-size: .88rem;
         opacity: .78;
+      }
+
+      /* Organizer segmented tabs */
+      .lb-organizer-shell [data-organizer-tab] {
+        appearance: none;
+        -webkit-appearance: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 36px;
+        padding: 8px 13px !important;
+        margin: 2px 4px 2px 0;
+        border:
+          1px solid
+          rgba(255,255,255,.17) !important;
+        border-radius: 9px !important;
+        background:
+          rgba(255,255,255,.045) !important;
+        color: inherit !important;
+        font: inherit;
+        font-weight: 650;
+        line-height: 1.1;
+        text-decoration: none !important;
+        cursor: pointer;
+        transition:
+          background 120ms ease,
+          border-color 120ms ease,
+          transform 80ms ease;
+      }
+
+      .lb-organizer-shell
+      [data-organizer-tab]:hover {
+        background:
+          rgba(255,255,255,.10) !important;
+        border-color:
+          rgba(255,255,255,.30) !important;
+        text-decoration: none !important;
+      }
+
+      .lb-organizer-shell
+      [data-organizer-tab]:active {
+        transform: translateY(1px);
+      }
+
+      .lb-organizer-shell
+      [data-organizer-tab][aria-selected="true"] {
+        background:
+          rgba(255,255,255,.18) !important;
+        border-color:
+          rgba(255,255,255,.42) !important;
+        box-shadow:
+          inset 0 0 0 1px
+          rgba(255,255,255,.06);
+        text-decoration: none !important;
+      }
+
+      .lb-organizer-shell
+      [data-organizer-tab]:focus-visible {
+        outline:
+          2px solid currentColor;
+        outline-offset: 2px;
       }
 
       .lb-organizer-shell {
@@ -2910,46 +3042,99 @@ export function installLorebookOrganizer(
           )
         }
 
-        const next =
+        const characterUrl =
+          `/api/v1/characters/${encodeURIComponent(target.id)}`
+
+        /*
+          Read immediately before writing so we preserve all of
+          the character's existing extension data and attachments.
+        */
+        const currentCharacter =
+          await api(characterUrl)
+
+        const extensions:
+          Record<string, any> =
+            currentCharacter?.extensions &&
+            typeof currentCharacter.extensions ===
+              'object' &&
+            !Array.isArray(
+              currentCharacter.extensions
+            )
+              ? {
+                  ...currentCharacter.extensions,
+                }
+              : {}
+
+        const existingIds =
+          Array.isArray(
+            currentCharacter?.world_book_ids
+          )
+            ? currentCharacter
+                .world_book_ids
+                .filter(
+                  (id: unknown) =>
+                    typeof id ===
+                      'string' &&
+                    Boolean(id)
+                )
+            : Array.isArray(
+                extensions.world_book_ids
+              )
+              ? extensions
+                  .world_book_ids
+                  .filter(
+                    (id: unknown) =>
+                      typeof id ===
+                        'string' &&
+                      Boolean(id)
+                  )
+              : typeof extensions
+                  .world_book_id ===
+                  'string' &&
+                extensions.world_book_id
+                ? [
+                    extensions
+                      .world_book_id,
+                  ]
+                : []
+
+        const nextIds =
           Array.from(
             new Set([
-              ...(target
-                .world_book_ids ||
-                []),
+              ...existingIds,
               ...selectedIds,
             ])
           )
 
+        delete extensions.world_book_id
+
+        extensions.world_book_ids =
+          nextIds
+
         await api(
-          `/api/v1/characters/${encodeURIComponent(target.id)}`,
+          characterUrl,
           {
             method: 'PUT',
-            body: JSON.stringify({
-              world_book_ids:
-                next,
-            }),
+            body:
+              JSON.stringify({
+                extensions,
+              }),
           }
         )
 
         const verified =
-          await api(
-            `/api/v1/characters/${encodeURIComponent(target.id)}`
-          )
+          await api(characterUrl)
 
         const verifiedIds =
           Array.isArray(
-            verified
-              ?.world_book_ids
+            verified?.world_book_ids
           )
-            ? verified
-                .world_book_ids
+            ? verified.world_book_ids
             : Array.isArray(
-                verified
-                  ?.extensions
+                verified?.extensions
                   ?.world_book_ids
               )
-              ? verified
-                  .extensions
+              ? verified.extensions
                   .world_book_ids
               : []
 
@@ -2958,9 +3143,7 @@ export function installLorebookOrganizer(
             selectedIds
         ) {
           if (
-            !verifiedIds.includes(
-              id
-            )
+            !verifiedIds.includes(id)
           ) {
             throw new Error(
               `Character link verification failed for ${shortLoreId(id)}.`
@@ -3854,6 +4037,7 @@ export function installLorebookOrganizer(
                 type="button"
                 class="lb-organizer-tab"
                 data-organizer-tab="${key}"
+              role="tab"
                 aria-selected="${String(activeTab === key)}"
               >
                 ${label}

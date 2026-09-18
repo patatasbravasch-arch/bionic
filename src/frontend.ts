@@ -1027,6 +1027,9 @@ export function setup(ctx) {
       background: color-mix(in srgb, var(--lumiverse-bg, #080812) 92%, transparent);
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.28);
     }
 
     .lumibionic-preview-toolbar {
@@ -3496,18 +3499,42 @@ export function setup(ctx) {
         previewVisible:
           typeof saved.previewVisible === 'boolean'
             ? saved.previewVisible
-            : false,
+            : true,
         sections:
           saved.sections && typeof saved.sections === 'object'
             ? saved.sections
             : {},
       }
     } catch {
-      return { previewVisible: false, sections: {} }
+      return { previewVisible: true, sections: {} }
     }
   }
 
   let uiState = loadUiState()
+
+  try {
+    const previewMigrationKey =
+      `${UI_STATE_KEY}:preview-sticky-v0486`
+
+    if (
+      localStorage.getItem(previewMigrationKey) !== '1'
+    ) {
+      uiState = {
+        ...uiState,
+        previewVisible: true,
+      }
+
+      localStorage.setItem(
+        UI_STATE_KEY,
+        JSON.stringify(uiState)
+      )
+
+      localStorage.setItem(
+        previewMigrationKey,
+        '1'
+      )
+    }
+  } catch {}
 
   function saveUiState() {
     try {
