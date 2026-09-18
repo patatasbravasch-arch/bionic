@@ -1,4 +1,49 @@
 import { installLorebookOrganizer } from './lorebook-organizer-frontend'
+
+const BIONIC_DRAWER_ICON_SVG = `
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 24 24"
+  fill="none"
+>
+  <rect
+    x="3"
+    y="3"
+    width="8"
+    height="8"
+    rx="2.2"
+    fill="currentColor"
+  />
+  <rect
+    x="13"
+    y="3"
+    width="8"
+    height="5"
+    rx="2"
+    fill="currentColor"
+    opacity=".55"
+  />
+  <rect
+    x="13"
+    y="10"
+    width="8"
+    height="11"
+    rx="2.2"
+    fill="currentColor"
+    opacity=".88"
+  />
+  <rect
+    x="3"
+    y="13"
+    width="8"
+    height="8"
+    rx="2.2"
+    fill="currentColor"
+    opacity=".4"
+  />
+</svg>
+`
+
 export function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]'
   const SETTINGS_KEY = 'lumiverse:bionic-style-reading:settings'
@@ -1241,6 +1286,7 @@ export function setup(ctx) {
 
   const tab = ctx.ui.registerDrawerTab({
     id: 'bionic-reading',
+    iconSvg: BIONIC_DRAWER_ICON_SVG,
     title: 'Reading & Fonts',
     shortName: 'Reading',
     headerTitle: 'Reading & Fonts',
@@ -3217,56 +3263,6 @@ export function setup(ctx) {
           <div class="lumibionic-section">
             <div class="lb-organizer-summary">
               <div class="lb-organizer-brand">
-                <div class="lb-organizer-logo" aria-hidden="true">
-                  <svg viewBox="0 0 64 64" width="100%" height="100%">
-                    <rect
-                      x="2"
-                      y="2"
-                      width="60"
-                      height="60"
-                      rx="14"
-                      fill="currentColor"
-                      opacity=".12"
-                    />
-                    <rect
-                      x="8"
-                      y="8"
-                      width="23"
-                      height="23"
-                      rx="7"
-                      fill="currentColor"
-                      opacity=".92"
-                    />
-                    <rect
-                      x="34"
-                      y="8"
-                      width="22"
-                      height="14"
-                      rx="6"
-                      fill="currentColor"
-                      opacity=".52"
-                    />
-                    <rect
-                      x="34"
-                      y="25"
-                      width="22"
-                      height="31"
-                      rx="7"
-                      fill="currentColor"
-                      opacity=".82"
-                    />
-                    <rect
-                      x="8"
-                      y="34"
-                      width="23"
-                      height="22"
-                      rx="7"
-                      fill="currentColor"
-                      opacity=".38"
-                    />
-                  </svg>
-                </div>
-
                 <div class="lb-organizer-brand-copy">
                   <strong>Bionic Lorebook Organizer</strong>
                   <small>

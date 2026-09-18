@@ -1,5 +1,5 @@
 {
-  "version": "0.48.2",
+  "version": "0.48.3",
   "name": "Bionic Reading & Fonts",
   "identifier": "bionic_style_reading",
   "author": "patatasbravasch-arch",
@@ -12,7 +12,8 @@
     "personas",
     "world_books",
     "characters",
-    "chats"
+    "chats",
+    "app_manipulation"
   ],
   "entry_backend": "dist/backend.js",
   "entry_frontend": "dist/frontend.js"

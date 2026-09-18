@@ -133,6 +133,8 @@ function summarizeReferences(refs) {
 
 // src/lorebook-organizer-frontend.ts
 var CONNECTION_KEY = "lumiverse:bionic-style-reading:lore-organizer-connection";
+var IGNORED_FOLDER = "Bionic — Ignored";
+var AI_BATCH_SIZE = 70;
 function escapeHtml(value) {
   return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
 }
@@ -198,7 +200,13 @@ function installLorebookOrganizer(ctx, settingsRoot, options = {}) {
   let books = [];
   let groups = [];
   let unlinked = [];
+  let ignored = [];
   let referenceSnapshot = null;
+  const selectedUnlinked = new Set;
+  let showIgnored = false;
+  let linkPanelOpen = false;
+  let linkTargetKind = "character";
+  let linkTargetId = "";
   let lastScanAt = null;
   let busy = false;
   let connections = [];
@@ -321,7 +329,15 @@ function installLorebookOrganizer(ctx, settingsRoot, options = {}) {
       });
     }
     groups.sort((a, b) => a.name.localeCompare(b.name));
-    unlinked = books.filter(isUnlinked).sort((a, b) => a.name.localeCompare(b.name));
+    const zeroReferenceBooks = books.filter(isUnlinked);
+    ignored = zeroReferenceBooks.filter((book) => String(book.folder || "").trim() === IGNORED_FOLDER).sort((a, b) => a.name.localeCompare(b.name));
+    unlinked = zeroReferenceBooks.filter((book) => String(book.folder || "").trim() !== IGNORED_FOLDER).sort((a, b) => a.name.localeCompare(b.name));
+    const validSelection = new Set(zeroReferenceBooks.map((book) => book.id));
+    for (const id of selectedUnlinked) {
+      if (!validSelection.has(id)) {
+        selectedUnlinked.delete(id);
+      }
+    }
   }
   function applyReferenceSnapshot(snapshot) {
     referenceSnapshot = snapshot;
@@ -473,8 +489,12 @@ function installLorebookOrganizer(ctx, settingsRoot, options = {}) {
       }));
       if (personaAssignments.length) {
         renderAll(`Relinking ${personaAssignments.length} persona reference${personaAssignments.length === 1 ? "" : "s"}…`);
-        await sendBackend("bionic_lore_relink_personas", {
-          assignments: personaAssignments
+        await api("/api/v1/personas/bulk-update", {
+          method: "POST",
+          body: JSON.stringify({
+            ids: personaAssignments.map((item) => item.id),
+            attached_world_book_id: keepId
+          })
         });
       }
       const currentGlobal = Array.isArray(snapshot.globalIds) ? snapshot.globalIds : [];
@@ -541,7 +561,8 @@ Bionic will refresh all four reference sources first.`)) {
       syncSummary();
     }
   }
-  function selectedConnectionId() {
+  let connectionsLoaded = false;
+  function rawSelectedConnectionId() {
     const external = options.getConnectionId?.();
     if (typeof external === "string") {
       return external;
@@ -552,6 +573,18 @@ Bionic will refresh all four reference sources first.`)) {
       return "";
     }
   }
+  function selectedConnectionId() {
+    const selected = rawSelectedConnectionId();
+    if (!selected || !connectionsLoaded) {
+      return selected;
+    }
+    const available = connections.some((connection) => connection?.id === selected);
+    if (available) {
+      return selected;
+    }
+    saveConnectionId("");
+    return "";
+  }
   function saveConnectionId(id) {
     options.setConnectionId?.(id);
     try {
@@ -561,6 +594,8 @@ Bionic will refresh all four reference sources first.`)) {
   async function loadConnections() {
     const result = await sendBackend("bionic_lore_connections");
     connections = Array.isArray(result?.connections) ? result.connections : [];
+    connectionsLoaded = true;
+    selectedConnectionId();
     renderAll();
   }
   async function analyzeFolders() {
@@ -569,21 +604,60 @@ Bionic will refresh all four reference sources first.`)) {
     }
     busy = true;
     suggestions = [];
-    renderAll("AI is analyzing folder groups…");
     try {
-      const result = await sendBackend("bionic_lore_ai_organize", {
-        connectionId: selectedConnectionId(),
-        books: books.map((book) => ({
-          id: book.id,
-          name: book.name,
-          folder: book.folder || "",
-          description: book.description || "",
-          entryCount: book.entryCount,
-          sampleKeys: Array.isArray(book.entries) ? book.entries : []
-        }))
-      }, 120000);
-      suggestions = Array.isArray(result?.folders) ? result.folders : [];
-      renderAll(suggestions.length ? `AI suggested ${suggestions.length} folder${suggestions.length === 1 ? "" : "s"}. Nothing has been changed yet.` : "AI returned no useful multi-book folder suggestions.");
+      const compactBooks = books.map((book) => ({
+        id: book.id,
+        name: book.name,
+        folder: book.folder || "",
+        description: book.description || "",
+        entryCount: book.entryCount,
+        sampleKeys: Array.isArray(book.entries) ? book.entries : []
+      }));
+      const connectionId = selectedConnectionId();
+      const batchCount = Math.ceil(compactBooks.length / AI_BATCH_SIZE);
+      const merged = new Map;
+      for (let offset = 0;offset < compactBooks.length; offset += AI_BATCH_SIZE) {
+        const batch = compactBooks.slice(offset, offset + AI_BATCH_SIZE);
+        const batchNumber = Math.floor(offset / AI_BATCH_SIZE) + 1;
+        const first = offset + 1;
+        const last = Math.min(offset + batch.length, compactBooks.length);
+        renderAll(`AI is analyzing folder groups… ${first}–${last} of ${compactBooks.length} · batch ${batchNumber}/${batchCount}`);
+        const result = await sendBackend("bionic_lore_ai_organize", {
+          connectionId,
+          books: batch
+        }, 120000);
+        const batchFolders = Array.isArray(result?.folders) ? result.folders : [];
+        const batchIds = new Set(batch.map((book) => book.id));
+        for (const folder of batchFolders) {
+          const name = String(folder?.name || "").trim();
+          if (!name)
+            continue;
+          const bookIds = Array.from(new Set(Array.isArray(folder?.bookIds) ? folder.bookIds.filter((id) => typeof id === "string" && batchIds.has(id)) : []));
+          if (bookIds.length < 2) {
+            continue;
+          }
+          const reason = String(folder?.reason || "").trim();
+          const key = name.normalize("NFKC").toLocaleLowerCase();
+          const existing = merged.get(key);
+          if (existing) {
+            existing.bookIds = Array.from(new Set([
+              ...existing.bookIds,
+              ...bookIds
+            ]));
+            if (!existing.reason && reason) {
+              existing.reason = reason;
+            }
+            continue;
+          }
+          merged.set(key, {
+            name,
+            bookIds,
+            reason
+          });
+        }
+      }
+      suggestions = Array.from(merged.values()).filter((suggestion) => suggestion.bookIds.length >= 2).sort((a, b) => a.name.localeCompare(b.name));
+      renderAll(suggestions.length ? `AI suggested ${suggestions.length} folder${suggestions.length === 1 ? "" : "s"} across ${batchCount} batch${batchCount === 1 ? "" : "es"}. Nothing has been changed yet.` : "AI returned no useful multi-book folder suggestions.");
     } catch (error) {
       renderAll(`AI organize failed: ${error?.message || String(error)}`);
     } finally {
@@ -592,7 +666,7 @@ Bionic will refresh all four reference sources first.`)) {
   }
   async function applyAssignments(assignments) {
     if (busy || assignments.length === 0) {
-      return;
+      return false;
     }
     busy = true;
     renderAll(`Applying ${assignments.length} folder assignment${assignments.length === 1 ? "" : "s"}…`);
@@ -606,9 +680,12 @@ Bionic will refresh all four reference sources first.`)) {
         ...book,
         folder: byId.get(book.id) ?? book.folder
       }));
+      rebuildGroups();
       renderAll(`Applied ${assignments.length} folder assignment${assignments.length === 1 ? "" : "s"}.`);
+      return true;
     } catch (error) {
       renderAll(`Folder update failed: ${error?.message || String(error)}`);
+      return false;
     } finally {
       busy = false;
     }
@@ -626,13 +703,6 @@ Bionic will refresh all four reference sources first.`)) {
         gap: 12px;
       }
 
-      .lb-organizer-logo {
-        width: 46px;
-        height: 46px;
-        flex: 0 0 46px;
-        border-radius: 12px;
-        overflow: hidden;
-      }
 
       .lb-organizer-brand-copy {
         min-width: 0;
@@ -909,67 +979,6 @@ Bionic will refresh all four reference sources first.`)) {
         }
       }
     `);
-  function bentoLogo() {
-    return `
-      <svg
-        viewBox="0 0 64 64"
-        width="100%"
-        height="100%"
-        aria-hidden="true"
-      >
-        <rect
-          x="2"
-          y="2"
-          width="60"
-          height="60"
-          rx="14"
-          fill="currentColor"
-          opacity=".12"
-        />
-        <rect
-          x="8"
-          y="8"
-          width="23"
-          height="23"
-          rx="7"
-          fill="currentColor"
-          opacity=".92"
-        />
-        <rect
-          x="34"
-          y="8"
-          width="22"
-          height="14"
-          rx="6"
-          fill="currentColor"
-          opacity=".52"
-        />
-        <rect
-          x="34"
-          y="25"
-          width="22"
-          height="31"
-          rx="7"
-          fill="currentColor"
-          opacity=".82"
-        />
-        <rect
-          x="8"
-          y="34"
-          width="23"
-          height="22"
-          rx="7"
-          fill="currentColor"
-          opacity=".38"
-        />
-        <path
-          d="M15 15h6.8c4.3 0 6.8 2 6.8 5.1 0 2-1.1 3.5-3 4.3 2.4.7 3.7 2.3 3.7 4.7 0 3.5-2.8 5.6-7.4 5.6H15V15Zm6.4 7.5c1.7 0 2.6-.7 2.6-2 0-1.2-.9-1.9-2.6-1.9h-2.1v3.9h2.1Zm.4 8.5c2 0 3-.8 3-2.3 0-1.4-1-2.2-3-2.2h-2.5V31h2.5Z"
-          fill="white"
-          transform="scale(.72) translate(1 1)"
-        />
-      </svg>
-    `;
-  }
   function filteredBooks(source = books) {
     const needle = searchText.trim().toLocaleLowerCase();
     let result = needle ? source.filter((book) => {
@@ -1171,27 +1180,390 @@ Bionic will refresh all four reference sources first.`)) {
       </div>
     `;
   }
-  function renderUnlinked() {
-    const visible = filteredBooks(unlinked);
-    if (!visible.length) {
-      return `
-        <div class="lb-organizer-empty">
-          ${unlinked.length ? "No unlinked lorebooks match this search." : books.length ? "No unlinked lorebooks found." : "Scan the library to begin."}
-        </div>
-      `;
+  function visibleUnlinkedBooks() {
+    const source = showIgnored ? [...unlinked, ...ignored] : [...unlinked];
+    return filteredBooks(source);
+  }
+  function selectedUnlinkedBooks() {
+    return books.filter((book) => selectedUnlinked.has(book.id) && isUnlinked(book));
+  }
+  function linkTargets() {
+    if (linkTargetKind === "character") {
+      return (referenceSnapshot?.characters || []).map((item) => ({
+        id: item.id,
+        name: item.name || "Unnamed character"
+      })).sort((a, b) => a.name.localeCompare(b.name));
     }
+    if (linkTargetKind === "chat") {
+      return (referenceSnapshot?.chats || []).map((item) => ({
+        id: item.id,
+        name: item.title || item.name || "Unnamed chat"
+      })).sort((a, b) => a.name.localeCompare(b.name));
+    }
+    if (linkTargetKind === "persona") {
+      return (referenceSnapshot?.personas || []).map((item) => ({
+        id: item.id,
+        name: item.name || "Unnamed persona"
+      })).sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return [];
+  }
+  async function ignoreSelectedBooks() {
+    const selected = selectedUnlinkedBooks();
+    if (!selected.length)
+      return;
+    const applied = await applyAssignments(selected.map((book) => ({
+      bookId: book.id,
+      folder: IGNORED_FOLDER
+    })));
+    if (!applied)
+      return;
+    selectedUnlinked.clear();
+    renderAll(`Ignored ${selected.length} lorebook${selected.length === 1 ? "" : "s"} in "${IGNORED_FOLDER}".`);
+  }
+  async function restoreSelectedBooks() {
+    const selected = selectedUnlinkedBooks().filter((book) => String(book.folder || "").trim() === IGNORED_FOLDER);
+    if (!selected.length)
+      return;
+    const applied = await applyAssignments(selected.map((book) => ({
+      bookId: book.id,
+      folder: ""
+    })));
+    if (!applied)
+      return;
+    selectedUnlinked.clear();
+    renderAll(`Restored ${selected.length} ignored lorebook${selected.length === 1 ? "" : "s"}.`);
+  }
+  async function deleteSelectedBooks() {
+    if (busy)
+      return;
+    const selected = selectedUnlinkedBooks();
+    if (!selected.length)
+      return;
+    if (!window.confirm(`Delete ${selected.length} selected unlinked lorebook${selected.length === 1 ? "" : "s"}?
+
+Bionic will refresh characters, chats, personas and global activation immediately before deletion.`)) {
+      return;
+    }
+    busy = true;
+    renderAll("Verifying selected lorebooks are still unlinked…");
+    try {
+      await freshReferences();
+      const selectedIds = new Set(selected.map((book) => book.id));
+      const nowReferenced = books.filter((book) => selectedIds.has(book.id) && book.references.length > 0);
+      if (nowReferenced.length) {
+        throw new Error(`Deletion stopped because ${nowReferenced.length} selected lorebook${nowReferenced.length === 1 ? "" : "s"} gained a reference.`);
+      }
+      let deleted = 0;
+      for (const book of selected) {
+        renderAll(`Deleting ${book.name}…`);
+        await api(`/api/v1/world-books/${encodeURIComponent(book.id)}`, {
+          method: "DELETE"
+        });
+        books = books.filter((item) => item.id !== book.id);
+        selectedUnlinked.delete(book.id);
+        deleted += 1;
+      }
+      rebuildGroups();
+      renderAll(`Deleted ${deleted} unlinked lorebook${deleted === 1 ? "" : "s"}.`);
+    } catch (error) {
+      renderAll(`Bulk delete stopped: ${error?.message || String(error)}`);
+    } finally {
+      busy = false;
+      syncSummary();
+    }
+  }
+  async function linkSelectedBooks() {
+    if (busy)
+      return;
+    const selected = selectedUnlinkedBooks();
+    if (!selected.length)
+      return;
+    if (linkTargetKind === "persona" && selected.length !== 1) {
+      renderAll("A persona can attach only one lorebook. Select exactly one lorebook for a persona target.");
+      return;
+    }
+    if (linkTargetKind !== "global" && !linkTargetId) {
+      renderAll("Choose a link target first.");
+      return;
+    }
+    busy = true;
+    renderAll("Refreshing references before linking…");
+    try {
+      const snapshot = await freshReferences();
+      const selectedIds = selected.map((book) => book.id);
+      if (linkTargetKind === "character") {
+        const target = (snapshot.characters || []).find((item) => item.id === linkTargetId);
+        if (!target) {
+          throw new Error("Character target no longer exists.");
+        }
+        const next = Array.from(new Set([
+          ...target.world_book_ids || [],
+          ...selectedIds
+        ]));
+        await api(`/api/v1/characters/${encodeURIComponent(target.id)}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            world_book_ids: next
+          })
+        });
+        const verified = await api(`/api/v1/characters/${encodeURIComponent(target.id)}`);
+        const verifiedIds = Array.isArray(verified?.world_book_ids) ? verified.world_book_ids : Array.isArray(verified?.extensions?.world_book_ids) ? verified.extensions.world_book_ids : [];
+        for (const id of selectedIds) {
+          if (!verifiedIds.includes(id)) {
+            throw new Error(`Character link verification failed for ${shortLoreId(id)}.`);
+          }
+        }
+      } else if (linkTargetKind === "chat") {
+        const target = (snapshot.chats || []).find((item) => item.id === linkTargetId);
+        if (!target) {
+          throw new Error("Chat target no longer exists.");
+        }
+        const current = Array.isArray(target?.metadata?.chat_world_book_ids) ? target.metadata.chat_world_book_ids : [];
+        const next = Array.from(new Set([
+          ...current,
+          ...selectedIds
+        ]));
+        const updated = await api(`/api/v1/chats/${encodeURIComponent(target.id)}/metadata`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            chat_world_book_ids: next
+          })
+        });
+        const verified = Array.isArray(updated?.metadata?.chat_world_book_ids) ? updated.metadata.chat_world_book_ids : [];
+        for (const id of selectedIds) {
+          if (!verified.includes(id)) {
+            throw new Error(`Chat link verification failed for ${shortLoreId(id)}.`);
+          }
+        }
+      } else if (linkTargetKind === "persona") {
+        const target = (snapshot.personas || []).find((item) => item.id === linkTargetId);
+        if (!target) {
+          throw new Error("Persona target no longer exists.");
+        }
+        const personaResult = await api("/api/v1/personas/bulk-update", {
+          method: "POST",
+          body: JSON.stringify({
+            ids: [
+              target.id
+            ],
+            attached_world_book_id: selectedIds[0]
+          })
+        });
+        if (!Array.isArray(personaResult?.updated) || personaResult.updated.length !== 1) {
+          throw new Error("Persona link did not verify.");
+        }
+      } else if (linkTargetKind === "global") {
+        const current = Array.isArray(snapshot.globalIds) ? snapshot.globalIds : [];
+        await sendBackend("bionic_lore_set_global", {
+          ids: Array.from(new Set([
+            ...current,
+            ...selectedIds
+          ]))
+        });
+      } else {
+        throw new Error("Unknown link target type.");
+      }
+      const refreshed = await sendBackend("bionic_lore_reference_snapshot");
+      updateLocalRefs(refreshed.snapshot);
+      selectedUnlinked.clear();
+      linkPanelOpen = false;
+      renderAll(`Linked ${selected.length} lorebook${selected.length === 1 ? "" : "s"} successfully.`);
+    } catch (error) {
+      renderAll(`Linking stopped: ${error?.message || String(error)}`);
+    } finally {
+      busy = false;
+      syncSummary();
+    }
+  }
+  function renderUnlinked() {
+    const visible = visibleUnlinkedBooks();
+    const selected = selectedUnlinkedBooks();
+    const targets = linkTargets();
+    const allVisibleSelected = visible.length > 0 && visible.every((book) => selectedUnlinked.has(book.id));
+    const selectedIgnored = selected.filter((book) => String(book.folder || "").trim() === IGNORED_FOLDER).length;
     return `
-      <div class="lb-organizer-list">
-        ${visible.map((book) => bookCard(book, `
-              <button
-                type="button"
-                data-organizer-delete-unlinked="${escapeHtml(book.id)}"
-                ${busy ? "disabled" : ""}
-              >
-                Delete unlinked lorebook
-              </button>
-            `)).join("")}
+      <div class="lb-organizer-card" style="margin-bottom:10px">
+        <div class="lb-organizer-card-head">
+          <div>
+            <div class="lb-organizer-card-title">
+              Unlinked library
+            </div>
+
+            <div class="lb-organizer-meta">
+              ${unlinked.length} active ·
+              ${ignored.length} ignored ·
+              ${selected.length} selected
+            </div>
+          </div>
+
+          <label class="lb-organizer-check">
+            <input
+              type="checkbox"
+              data-organizer-show-ignored
+              ${showIgnored ? "checked" : ""}
+            >
+            <span>Show ignored</span>
+          </label>
+        </div>
+
+        <div class="lb-organizer-actions">
+          <button
+            type="button"
+            data-organizer-select-visible
+            ${visible.length ? "" : "disabled"}
+          >
+            ${allVisibleSelected ? "Unselect visible" : "Select visible"}
+          </button>
+
+          <button
+            type="button"
+            data-organizer-clear-selection
+            ${selected.length ? "" : "disabled"}
+          >
+            Clear selection
+          </button>
+
+          <button
+            type="button"
+            data-organizer-open-link
+            ${selected.length ? "" : "disabled"}
+          >
+            Link selected…
+          </button>
+
+          <button
+            type="button"
+            data-organizer-ignore-selected
+            ${selected.length ? "" : "disabled"}
+          >
+            Ignore selected
+          </button>
+
+          <button
+            type="button"
+            data-organizer-restore-selected
+            ${selectedIgnored ? "" : "disabled"}
+          >
+            Restore ignored
+          </button>
+
+          <button
+            type="button"
+            data-organizer-delete-selected
+            ${selected.length ? "" : "disabled"}
+          >
+            Delete selected
+          </button>
+        </div>
       </div>
+
+      ${linkPanelOpen ? `
+            <div class="lb-organizer-card" style="margin-bottom:10px">
+              <div class="lb-organizer-card-title">
+                Link ${selected.length} selected lorebook${selected.length === 1 ? "" : "s"}
+              </div>
+
+              <div class="lb-organizer-meta">
+                Character, chat and Global can receive multiple lorebooks.
+                Persona supports one lorebook attachment.
+              </div>
+
+              <div class="lb-organizer-toolbar">
+                <select
+                  id="lb-organizer-link-kind"
+                  ${busy ? "disabled" : ""}
+                >
+                  <option value="character" ${linkTargetKind === "character" ? "selected" : ""}>
+                    Character
+                  </option>
+
+                  <option value="chat" ${linkTargetKind === "chat" ? "selected" : ""}>
+                    Chat
+                  </option>
+
+                  <option value="persona" ${linkTargetKind === "persona" ? "selected" : ""}>
+                    Persona
+                  </option>
+
+                  <option value="global" ${linkTargetKind === "global" ? "selected" : ""}>
+                    Global activation
+                  </option>
+                </select>
+
+                ${linkTargetKind !== "global" ? `
+                      <select
+                        id="lb-organizer-link-target"
+                        ${busy ? "disabled" : ""}
+                      >
+                        <option value="">
+                          Choose ${escapeHtml(linkTargetKind)}…
+                        </option>
+
+                        ${targets.map((target) => `
+                            <option
+                              value="${escapeHtml(target.id)}"
+                              ${target.id === linkTargetId ? "selected" : ""}
+                            >
+                              ${escapeHtml(target.name)}
+                            </option>
+                          `).join("")}
+                      </select>
+                    ` : `
+                      <span class="lb-organizer-badge">
+                        Global lorebooks
+                      </span>
+                    `}
+
+                <button
+                  type="button"
+                  data-organizer-link-apply
+                  ${busy ? "disabled" : ""}
+                >
+                  Link selected
+                </button>
+
+                <button
+                  type="button"
+                  data-organizer-link-cancel
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ` : ""}
+
+      ${visible.length ? `
+            <div class="lb-organizer-list">
+              ${visible.map((book) => {
+      const isIgnored = String(book.folder || "").trim() === IGNORED_FOLDER;
+      return bookCard(book, `
+                    <label class="lb-organizer-check">
+                      <input
+                        type="checkbox"
+                        data-organizer-select-unlinked="${escapeHtml(book.id)}"
+                        ${selectedUnlinked.has(book.id) ? "checked" : ""}
+                      >
+                      <span>
+                        ${isIgnored ? "Ignored" : "Select"}
+                      </span>
+                    </label>
+
+                    <button
+                      type="button"
+                      data-organizer-delete-unlinked="${escapeHtml(book.id)}"
+                      ${busy ? "disabled" : ""}
+                    >
+                      Delete
+                    </button>
+                  `);
+    }).join("")}
+            </div>
+          ` : `
+            <div class="lb-organizer-empty">
+              ${books.length ? showIgnored ? "No unlinked or ignored lorebooks match this search." : ignored.length ? `No active unlinked lorebooks. ${ignored.length} ignored.` : "No unlinked lorebooks found." : "Scan the library to begin."}
+            </div>
+          `}
     `;
   }
   function connectionOptions() {
@@ -1258,6 +1630,7 @@ Bionic will refresh all four reference sources first.`)) {
         The LLM only proposes folder names and membership.
         It cannot delete, merge, rename or rewrite lorebooks.
         Nothing moves until you press Apply.
+        Libraries larger than 70 books are analyzed in batches.
       </div>
 
       ${suggestions.length ? `
@@ -1360,10 +1733,6 @@ Bionic will refresh all four reference sources first.`)) {
       <div class="lb-organizer-shell">
         <div class="lb-organizer-hero">
           <div class="lb-organizer-hero-left">
-            <div class="lb-organizer-logo">
-              ${bentoLogo()}
-            </div>
-
             <div>
               <div class="lb-organizer-hero-title">
                 Bionic Lorebook Organizer
@@ -1518,6 +1887,54 @@ Bionic will refresh all four reference sources first.`)) {
         }
         return;
       }
+      if (target.closest("[data-organizer-select-visible]")) {
+        const visible = visibleUnlinkedBooks();
+        const allSelected = visible.length > 0 && visible.every((book) => selectedUnlinked.has(book.id));
+        for (const book of visible) {
+          if (allSelected) {
+            selectedUnlinked.delete(book.id);
+          } else {
+            selectedUnlinked.add(book.id);
+          }
+        }
+        renderAll();
+        return;
+      }
+      if (target.closest("[data-organizer-clear-selection]")) {
+        selectedUnlinked.clear();
+        renderAll();
+        return;
+      }
+      if (target.closest("[data-organizer-open-link]")) {
+        linkPanelOpen = true;
+        const targets = linkTargets();
+        if (linkTargetKind !== "global" && !targets.some((item) => item.id === linkTargetId)) {
+          linkTargetId = "";
+        }
+        renderAll();
+        return;
+      }
+      if (target.closest("[data-organizer-link-cancel]")) {
+        linkPanelOpen = false;
+        renderAll();
+        return;
+      }
+      if (target.closest("[data-organizer-link-apply]")) {
+        linkSelectedBooks();
+        return;
+      }
+      if (target.closest("[data-organizer-ignore-selected]")) {
+        ignoreSelectedBooks();
+        return;
+      }
+      if (target.closest("[data-organizer-restore-selected]")) {
+        restoreSelectedBooks();
+        return;
+      }
+      if (target.closest("[data-organizer-delete-selected]")) {
+        deleteSelectedBooks();
+        return;
+      }
       if (target.closest("[data-organizer-ai-analyze]")) {
         analyzeFolders();
         return;
@@ -1556,6 +1973,33 @@ Bionic will refresh all four reference sources first.`)) {
     });
     modalRoot.addEventListener("change", (event) => {
       const target = event.target;
+      if (target.matches("[data-organizer-select-unlinked]")) {
+        const id = target.dataset.organizerSelectUnlinked || "";
+        if (id) {
+          if (target.checked) {
+            selectedUnlinked.add(id);
+          } else {
+            selectedUnlinked.delete(id);
+          }
+        }
+        renderAll();
+        return;
+      }
+      if (target.matches("[data-organizer-show-ignored]")) {
+        showIgnored = target.checked;
+        renderAll();
+        return;
+      }
+      if (target.id === "lb-organizer-link-kind") {
+        linkTargetKind = target.value;
+        linkTargetId = "";
+        renderAll();
+        return;
+      }
+      if (target.id === "lb-organizer-link-target") {
+        linkTargetId = target.value;
+        return;
+      }
       if (target.id === "lb-organizer-sort") {
         sortMode = target.value;
         renderAll();
@@ -1607,6 +2051,49 @@ Bionic will refresh all four reference sources first.`)) {
 }
 
 // src/frontend.ts
+var BIONIC_DRAWER_ICON_SVG = `
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 24 24"
+  fill="none"
+>
+  <rect
+    x="3"
+    y="3"
+    width="8"
+    height="8"
+    rx="2.2"
+    fill="currentColor"
+  />
+  <rect
+    x="13"
+    y="3"
+    width="8"
+    height="5"
+    rx="2"
+    fill="currentColor"
+    opacity=".55"
+  />
+  <rect
+    x="13"
+    y="10"
+    width="8"
+    height="11"
+    rx="2.2"
+    fill="currentColor"
+    opacity=".88"
+  />
+  <rect
+    x="3"
+    y="13"
+    width="8"
+    height="8"
+    rx="2.2"
+    fill="currentColor"
+    opacity=".4"
+  />
+</svg>
+`;
 function setup(ctx) {
   const MESSAGE_SELECTOR = '[data-component="MessageContent"]';
   const SETTINGS_KEY = "lumiverse:bionic-style-reading:settings";
@@ -2664,6 +3151,7 @@ function setup(ctx) {
   `);
   const tab = ctx.ui.registerDrawerTab({
     id: "bionic-reading",
+    iconSvg: BIONIC_DRAWER_ICON_SVG,
     title: "Reading & Fonts",
     shortName: "Reading",
     headerTitle: "Reading & Fonts",
@@ -3822,56 +4310,6 @@ function setup(ctx) {
           <div class="lumibionic-section">
             <div class="lb-organizer-summary">
               <div class="lb-organizer-brand">
-                <div class="lb-organizer-logo" aria-hidden="true">
-                  <svg viewBox="0 0 64 64" width="100%" height="100%">
-                    <rect
-                      x="2"
-                      y="2"
-                      width="60"
-                      height="60"
-                      rx="14"
-                      fill="currentColor"
-                      opacity=".12"
-                    />
-                    <rect
-                      x="8"
-                      y="8"
-                      width="23"
-                      height="23"
-                      rx="7"
-                      fill="currentColor"
-                      opacity=".92"
-                    />
-                    <rect
-                      x="34"
-                      y="8"
-                      width="22"
-                      height="14"
-                      rx="6"
-                      fill="currentColor"
-                      opacity=".52"
-                    />
-                    <rect
-                      x="34"
-                      y="25"
-                      width="22"
-                      height="31"
-                      rx="7"
-                      fill="currentColor"
-                      opacity=".82"
-                    />
-                    <rect
-                      x="8"
-                      y="34"
-                      width="23"
-                      height="22"
-                      rx="7"
-                      fill="currentColor"
-                      opacity=".38"
-                    />
-                  </svg>
-                </div>
-
                 <div class="lb-organizer-brand-copy">
                   <strong>Bionic Lorebook Organizer</strong>
                   <small>
