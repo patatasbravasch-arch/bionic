@@ -242,6 +242,7 @@ export function installLorebookOrganizer(
   let linkTargetKind =
     'character'
   let linkTargetId = ''
+  let linkTargetSearch = ''
   let lastScanAt: number | null = null
   let busy = false
 
@@ -2191,6 +2192,50 @@ export function installLorebookOrganizer(
     return parts.join('')
   }
 
+  function referenceLocationText(
+    book: LoreBookSnapshot
+  ) {
+    if (!book.references.length) {
+      return `
+        <strong>Unlinked</strong>
+        — no character, chat, persona or global reference
+      `
+    }
+
+    const kindLabel = (
+      kind: string
+    ) => {
+      if (kind === 'character') {
+        return 'Character'
+      }
+
+      if (kind === 'chat') {
+        return 'Chat'
+      }
+
+      if (kind === 'persona') {
+        return 'Persona'
+      }
+
+      if (kind === 'global') {
+        return 'Global'
+      }
+
+      return kind
+    }
+
+    return `
+      <strong>Linked to:</strong>
+      ${
+        book.references
+          .map(ref =>
+            `${escapeHtml(kindLabel(ref.kind))} — ${escapeHtml(ref.name)}`
+          )
+          .join(' · ')
+      }
+    `
+  }
+
   function bookCard(
     book: LoreBookSnapshot,
     actions = ''
@@ -2761,6 +2806,34 @@ export function installLorebookOrganizer(
                           <div class="lb-organizer-badges">
                             ${referenceBadges(book)}
                           </div>
+
+                          <div class="lb-organizer-meta">
+                            ${referenceLocationText(book)}
+                          </div>
+
+                          ${
+                            unlinkedBook
+                              ? `
+                                <div class="lb-organizer-actions">
+                                  <button
+                                    type="button"
+                                    data-organizer-similar-link-book="${escapeHtml(book.id)}"
+                                    ${busy ? 'disabled' : ''}
+                                  >
+                                    Link this copy…
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    data-organizer-similar-delete-book="${escapeHtml(book.id)}"
+                                    ${busy ? 'disabled' : ''}
+                                  >
+                                    Delete this copy
+                                  </button>
+                                </div>
+                              `
+                              : ''
+                          }
                         </div>
                       `
                     }).join('')}
@@ -3618,6 +3691,7 @@ export function installLorebookOrganizer(
 
       selectedUnlinked.clear()
       linkPanelOpen = false
+      linkTargetSearch = ''
 
       renderAll(
         `Linked ${selected.length} lorebook${selected.length === 1 ? '' : 's'} successfully.`
@@ -3742,8 +3816,25 @@ export function installLorebookOrganizer(
     const selected =
       selectedUnlinkedBooks()
 
-    const targets =
+    const allTargets =
       linkTargets()
+
+    const targetNeedle =
+      linkTargetSearch
+        .trim()
+        .toLocaleLowerCase()
+
+    const targets =
+      targetNeedle
+        ? allTargets.filter(
+            target =>
+              target.name
+                .toLocaleLowerCase()
+                .includes(
+                  targetNeedle
+                )
+          )
+        : allTargets
 
     const folders =
       existingFolderNames()
@@ -3938,6 +4029,17 @@ export function installLorebookOrganizer(
                 ${
                   linkTargetKind !== 'global'
                     ? `
+                      <input
+                        class="lb-organizer-search"
+                        id="lb-organizer-link-target-search"
+                        type="search"
+                        autocomplete="off"
+                        spellcheck="false"
+                        placeholder="Type ${escapeHtml(linkTargetKind)} name…"
+                        value="${escapeHtml(linkTargetSearch)}"
+                        ${busy ? 'disabled' : ''}
+                      >
+
                       <select
                         id="lb-organizer-link-target"
                         ${busy ? 'disabled' : ''}
@@ -4487,6 +4589,92 @@ export function installLorebookOrganizer(
         const target =
           event.target as HTMLElement
 
+        const similarLinkButton =
+          target.closest(
+            '[data-organizer-similar-link-book]'
+          ) as HTMLElement | null
+
+        if (similarLinkButton) {
+          const id =
+            similarLinkButton.dataset
+              .organizerSimilarLinkBook ||
+            ''
+
+          const book =
+            books.find(
+              item =>
+                item.id === id
+            )
+
+          if (
+            !book ||
+            !isUnlinked(book)
+          ) {
+            renderAll(
+              'That lorebook is no longer unlinked. Rescan before linking.'
+            )
+            return
+          }
+
+          selectedUnlinked.clear()
+          selectedUnlinked.add(
+            book.id
+          )
+
+          linkTargetKind =
+            'character'
+
+          linkTargetId = ''
+          linkTargetSearch = ''
+          linkPanelOpen = true
+          activeTab = 'unlinked'
+
+          renderAll(
+            `Choose where to link "${book.name}".`
+          )
+          return
+        }
+
+        const similarDeleteButton =
+          target.closest(
+            '[data-organizer-similar-delete-book]'
+          ) as HTMLElement | null
+
+        if (similarDeleteButton) {
+          const id =
+            similarDeleteButton.dataset
+              .organizerSimilarDeleteBook ||
+            ''
+
+          const book =
+            books.find(
+              item =>
+                item.id === id
+            )
+
+          if (
+            !book ||
+            !isUnlinked(book)
+          ) {
+            renderAll(
+              'Deletion stopped because that lorebook is no longer unlinked.'
+            )
+            return
+          }
+
+          selectedUnlinked.clear()
+          selectedUnlinked.add(
+            book.id
+          )
+
+          /*
+            Reuse the normal safe delete path. It refreshes all
+            references immediately before destructive deletion.
+          */
+          void deleteSelectedBooks()
+          return
+        }
+
         const tabButton =
           target.closest(
             '[data-organizer-tab]'
@@ -4929,6 +5117,71 @@ export function installLorebookOrganizer(
 
         if (
           target.id ===
+          'lb-organizer-link-target-search'
+        ) {
+          linkTargetSearch =
+            target.value
+
+          const needle =
+            linkTargetSearch
+              .trim()
+              .toLocaleLowerCase()
+
+          const filteredTargets =
+            linkTargets()
+              .filter(
+                item =>
+                  !needle ||
+                  item.name
+                    .toLocaleLowerCase()
+                    .includes(needle)
+              )
+
+          const select =
+            modalRoot?.querySelector(
+              '#lb-organizer-link-target'
+            ) as HTMLSelectElement | null
+
+          if (select) {
+            const selectedStillVisible =
+              filteredTargets.some(
+                item =>
+                  item.id ===
+                  linkTargetId
+              )
+
+            if (
+              linkTargetId &&
+              !selectedStillVisible
+            ) {
+              linkTargetId = ''
+            }
+
+            select.innerHTML = `
+              <option value="">
+                Choose ${escapeHtml(linkTargetKind)}…
+              </option>
+
+              ${
+                filteredTargets
+                  .map(item => `
+                    <option
+                      value="${escapeHtml(item.id)}"
+                      ${item.id === linkTargetId ? 'selected' : ''}
+                    >
+                      ${escapeHtml(item.name)}
+                    </option>
+                  `)
+                  .join('')
+              }
+            `
+          }
+
+          return
+        }
+
+        if (
+          target.id ===
           'lb-organizer-search'
         ) {
           searchText =
@@ -5035,6 +5288,7 @@ export function installLorebookOrganizer(
             target.value
 
           linkTargetId = ''
+          linkTargetSearch = ''
 
           renderAll()
           return

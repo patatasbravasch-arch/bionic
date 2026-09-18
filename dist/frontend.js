@@ -221,6 +221,7 @@ function installLorebookOrganizer(ctx, settingsRoot, options = {}) {
   let folderTargetName = "";
   let linkTargetKind = "character";
   let linkTargetId = "";
+  let linkTargetSearch = "";
   let lastScanAt = null;
   let busy = false;
   let connections = [];
@@ -1202,6 +1203,33 @@ Bionic will refresh all four reference sources first.`)) {
     }
     return parts.join("");
   }
+  function referenceLocationText(book) {
+    if (!book.references.length) {
+      return `
+        <strong>Unlinked</strong>
+        — no character, chat, persona or global reference
+      `;
+    }
+    const kindLabel = (kind) => {
+      if (kind === "character") {
+        return "Character";
+      }
+      if (kind === "chat") {
+        return "Chat";
+      }
+      if (kind === "persona") {
+        return "Persona";
+      }
+      if (kind === "global") {
+        return "Global";
+      }
+      return kind;
+    };
+    return `
+      <strong>Linked to:</strong>
+      ${book.references.map((ref) => `${escapeHtml(kindLabel(ref.kind))} — ${escapeHtml(ref.name)}`).join(" · ")}
+    `;
+  }
   function bookCard(book, actions = "") {
     const folder = book.folder ? `Folder: ${escapeHtml(book.folder)} · ` : "";
     return `
@@ -1548,6 +1576,30 @@ Bionic will refresh all four reference sources first.`)) {
                           <div class="lb-organizer-badges">
                             ${referenceBadges(book)}
                           </div>
+
+                          <div class="lb-organizer-meta">
+                            ${referenceLocationText(book)}
+                          </div>
+
+                          ${unlinkedBook ? `
+                                <div class="lb-organizer-actions">
+                                  <button
+                                    type="button"
+                                    data-organizer-similar-link-book="${escapeHtml(book.id)}"
+                                    ${busy ? "disabled" : ""}
+                                  >
+                                    Link this copy…
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    data-organizer-similar-delete-book="${escapeHtml(book.id)}"
+                                    ${busy ? "disabled" : ""}
+                                  >
+                                    Delete this copy
+                                  </button>
+                                </div>
+                              ` : ""}
                         </div>
                       `;
     }).join("")}
@@ -1886,6 +1938,7 @@ Bionic will refresh characters, chats, personas and global activation immediatel
       updateLocalRefs(refreshed.snapshot);
       selectedUnlinked.clear();
       linkPanelOpen = false;
+      linkTargetSearch = "";
       renderAll(`Linked ${selected.length} lorebook${selected.length === 1 ? "" : "s"} successfully.`);
     } catch (error) {
       renderAll(`Linking stopped: ${error?.message || String(error)}`);
@@ -1931,7 +1984,9 @@ Bionic will refresh characters, chats, personas and global activation immediatel
   function renderUnlinked() {
     const visible = visibleUnlinkedBooks();
     const selected = selectedUnlinkedBooks();
-    const targets = linkTargets();
+    const allTargets = linkTargets();
+    const targetNeedle = linkTargetSearch.trim().toLocaleLowerCase();
+    const targets = targetNeedle ? allTargets.filter((target) => target.name.toLocaleLowerCase().includes(targetNeedle)) : allTargets;
     const folders = existingFolderNames();
     const allVisibleSelected = visible.length > 0 && visible.every((book) => selectedUnlinked.has(book.id));
     const selectedIgnored = selected.filter((book) => String(book.folder || "").trim() === IGNORED_FOLDER).length;
@@ -2096,6 +2151,17 @@ Bionic will refresh characters, chats, personas and global activation immediatel
                 </select>
 
                 ${linkTargetKind !== "global" ? `
+                      <input
+                        class="lb-organizer-search"
+                        id="lb-organizer-link-target-search"
+                        type="search"
+                        autocomplete="off"
+                        spellcheck="false"
+                        placeholder="Type ${escapeHtml(linkTargetKind)} name…"
+                        value="${escapeHtml(linkTargetSearch)}"
+                        ${busy ? "disabled" : ""}
+                      >
+
                       <select
                         id="lb-organizer-link-target"
                         ${busy ? "disabled" : ""}
@@ -2482,6 +2548,37 @@ Bionic will refresh characters, chats, personas and global activation immediatel
     renderAll();
     modalRoot.addEventListener("click", (event) => {
       const target = event.target;
+      const similarLinkButton = target.closest("[data-organizer-similar-link-book]");
+      if (similarLinkButton) {
+        const id = similarLinkButton.dataset.organizerSimilarLinkBook || "";
+        const book = books.find((item) => item.id === id);
+        if (!book || !isUnlinked(book)) {
+          renderAll("That lorebook is no longer unlinked. Rescan before linking.");
+          return;
+        }
+        selectedUnlinked.clear();
+        selectedUnlinked.add(book.id);
+        linkTargetKind = "character";
+        linkTargetId = "";
+        linkTargetSearch = "";
+        linkPanelOpen = true;
+        activeTab = "unlinked";
+        renderAll(`Choose where to link "${book.name}".`);
+        return;
+      }
+      const similarDeleteButton = target.closest("[data-organizer-similar-delete-book]");
+      if (similarDeleteButton) {
+        const id = similarDeleteButton.dataset.organizerSimilarDeleteBook || "";
+        const book = books.find((item) => item.id === id);
+        if (!book || !isUnlinked(book)) {
+          renderAll("Deletion stopped because that lorebook is no longer unlinked.");
+          return;
+        }
+        selectedUnlinked.clear();
+        selectedUnlinked.add(book.id);
+        deleteSelectedBooks();
+        return;
+      }
       const tabButton = target.closest("[data-organizer-tab]");
       if (tabButton) {
         activeTab = tabButton.dataset.organizerTab || "overview";
@@ -2656,6 +2753,33 @@ Bionic will refresh characters, chats, personas and global activation immediatel
         folderTargetName = target.value;
         return;
       }
+      if (target.id === "lb-organizer-link-target-search") {
+        linkTargetSearch = target.value;
+        const needle = linkTargetSearch.trim().toLocaleLowerCase();
+        const filteredTargets = linkTargets().filter((item) => !needle || item.name.toLocaleLowerCase().includes(needle));
+        const select = modalRoot?.querySelector("#lb-organizer-link-target");
+        if (select) {
+          const selectedStillVisible = filteredTargets.some((item) => item.id === linkTargetId);
+          if (linkTargetId && !selectedStillVisible) {
+            linkTargetId = "";
+          }
+          select.innerHTML = `
+              <option value="">
+                Choose ${escapeHtml(linkTargetKind)}…
+              </option>
+
+              ${filteredTargets.map((item) => `
+                    <option
+                      value="${escapeHtml(item.id)}"
+                      ${item.id === linkTargetId ? "selected" : ""}
+                    >
+                      ${escapeHtml(item.name)}
+                    </option>
+                  `).join("")}
+            `;
+        }
+        return;
+      }
       if (target.id === "lb-organizer-search") {
         searchText = target.value;
         const content = modalRoot?.querySelector(".lb-organizer-content");
@@ -2698,6 +2822,7 @@ Bionic will refresh characters, chats, personas and global activation immediatel
       if (target.id === "lb-organizer-link-kind") {
         linkTargetKind = target.value;
         linkTargetId = "";
+        linkTargetSearch = "";
         renderAll();
         return;
       }
