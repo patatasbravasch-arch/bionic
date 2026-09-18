@@ -4593,6 +4593,10 @@ export function installLorebookOrganizer(
     const selected =
       selectedUnlinkedBooks()
 
+    const singleBookInlineLink =
+      linkPanelOpen &&
+      selected.length === 1
+
     const allTargets =
       linkTargets()
 
@@ -4844,13 +4848,19 @@ export function installLorebookOrganizer(
                     `
                 }
 
-                <button
-                  type="button"
-                  data-organizer-link-apply
-                  ${busy ? 'disabled' : ''}
-                >
-                  Link selected
-                </button>
+                ${
+                  singleBookInlineLink
+                    ? ''
+                    : `
+                      <button
+                        type="button"
+                        data-organizer-link-apply
+                        ${busy ? 'disabled' : ''}
+                      >
+                        Link selected
+                      </button>
+                    `
+                }
 
                 <button
                   type="button"
@@ -4904,6 +4914,21 @@ export function installLorebookOrganizer(
                             ${busy ? 'disabled' : ''}
                           >
                             Link to ${escapeHtml(suggested.name)}
+                          </button>
+                        `
+                        : ''
+                    }
+
+                    ${
+                      singleBookInlineLink &&
+                      selectedUnlinked.has(book.id)
+                        ? `
+                          <button
+                            type="button"
+                            data-organizer-link-apply
+                            ${busy ? 'disabled' : ''}
+                          >
+                            Link selected
                           </button>
                         `
                         : ''

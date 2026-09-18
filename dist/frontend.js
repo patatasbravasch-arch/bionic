@@ -2209,6 +2209,7 @@ Bionic will refresh characters, chats, personas and global activation immediatel
   function renderUnlinked() {
     const visible = visibleUnlinkedBooks();
     const selected = selectedUnlinkedBooks();
+    const singleBookInlineLink = linkPanelOpen && selected.length === 1;
     const allTargets = linkTargets();
     const targetNeedle = linkTargetSearch.trim().toLocaleLowerCase();
     const targets = targetNeedle ? allTargets.filter((target) => target.name.toLocaleLowerCase().includes(targetNeedle)) : allTargets;
@@ -2410,13 +2411,15 @@ Bionic will refresh characters, chats, personas and global activation immediatel
                       </span>
                     `}
 
-                <button
-                  type="button"
-                  data-organizer-link-apply
-                  ${busy ? "disabled" : ""}
-                >
-                  Link selected
-                </button>
+                ${singleBookInlineLink ? "" : `
+                      <button
+                        type="button"
+                        data-organizer-link-apply
+                        ${busy ? "disabled" : ""}
+                      >
+                        Link selected
+                      </button>
+                    `}
 
                 <button
                   type="button"
@@ -2453,6 +2456,16 @@ Bionic will refresh characters, chats, personas and global activation immediatel
                             ${busy ? "disabled" : ""}
                           >
                             Link to ${escapeHtml(suggested.name)}
+                          </button>
+                        ` : ""}
+
+                    ${singleBookInlineLink && selectedUnlinked.has(book.id) ? `
+                          <button
+                            type="button"
+                            data-organizer-link-apply
+                            ${busy ? "disabled" : ""}
+                          >
+                            Link selected
                           </button>
                         ` : ""}
 
