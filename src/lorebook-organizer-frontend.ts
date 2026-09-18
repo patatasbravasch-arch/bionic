@@ -3362,6 +3362,14 @@ export function installLorebookOrganizer(
       )
     } finally {
       busy = false
+
+      /*
+        The delete flow renders status while busy=true, which
+        means action buttons are rendered disabled. Render once
+        more after clearing busy so the next Similar Names item
+        is immediately actionable.
+      */
+      renderAll()
       syncSummary()
     }
   }

@@ -1830,6 +1830,7 @@ Bionic will refresh characters, chats, personas and global activation immediatel
       renderAll(`Bulk delete stopped: ${error?.message || String(error)}`);
     } finally {
       busy = false;
+      renderAll();
       syncSummary();
     }
   }
