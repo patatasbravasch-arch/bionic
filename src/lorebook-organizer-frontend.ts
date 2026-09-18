@@ -2470,6 +2470,320 @@ export function installLorebookOrganizer(
     `
   }
 
+  function similarNameGroups() {
+    const byName =
+      new Map<
+        string,
+        LoreBookSnapshot[]
+      >()
+
+    /*
+      This deliberately compares names only.
+
+      characterMatchKey() already removes common export/copy
+      noise such as:
+      - (1), copy, duplicate
+      - lorebook / worldbook / world info
+      - sillytavern
+      - NSFW / SFW
+      - version suffixes
+      - separator/punctuation differences
+
+      Contents are NOT compared here.
+    */
+    for (const book of books) {
+      const key =
+        characterMatchKey(
+          book.name
+        )
+
+      if (
+        !key ||
+        key.length < 2
+      ) {
+        continue
+      }
+
+      const current =
+        byName.get(key) || []
+
+      current.push(book)
+
+      byName.set(
+        key,
+        current
+      )
+    }
+
+    const result:
+      {
+        key: string
+        name: string
+        books: LoreBookSnapshot[]
+        linkedCount: number
+        unlinkedCount: number
+        mixed: boolean
+      }[] = []
+
+    for (
+      const [key, groupedBooks]
+      of byName.entries()
+    ) {
+      if (
+        groupedBooks.length < 2
+      ) {
+        continue
+      }
+
+      const sortedBooks =
+        [...groupedBooks]
+          .sort(
+            (a, b) =>
+              a.name.localeCompare(
+                b.name
+              )
+          )
+
+      const linkedCount =
+        sortedBooks.filter(
+          book =>
+            !isUnlinked(book)
+        ).length
+
+      const unlinkedCount =
+        sortedBooks.length -
+        linkedCount
+
+      /*
+        Use the shortest real name as the group heading.
+        This normally favors the clean/base filename.
+      */
+      const representative =
+        [...sortedBooks]
+          .sort((a, b) => {
+            const lengthDifference =
+              String(a.name || '')
+                .length -
+              String(b.name || '')
+                .length
+
+            if (lengthDifference) {
+              return lengthDifference
+            }
+
+            return a.name.localeCompare(
+              b.name
+            )
+          })[0]
+
+      result.push({
+        key,
+        name:
+          representative?.name ||
+          key,
+        books:
+          sortedBooks,
+        linkedCount,
+        unlinkedCount,
+        mixed:
+          linkedCount > 0 &&
+          unlinkedCount > 0,
+      })
+    }
+
+    /*
+      Most useful case first:
+      one copy is linked while another similarly named copy
+      has no references.
+    */
+    result.sort((a, b) => {
+      if (a.mixed !== b.mixed) {
+        return a.mixed
+          ? -1
+          : 1
+      }
+
+      return a.name.localeCompare(
+        b.name
+      )
+    })
+
+    return result
+  }
+
+  function renderSimilarNames() {
+    const allGroups =
+      similarNameGroups()
+
+    const needle =
+      searchText
+        .trim()
+        .toLocaleLowerCase()
+
+    const visible =
+      allGroups.filter(group => {
+        if (!needle) {
+          return true
+        }
+
+        const haystack = [
+          group.name,
+          group.key,
+          ...group.books.flatMap(
+            book => [
+              book.name,
+              book.id,
+              book.folder || '',
+              summarizeReferences(
+                book.references
+              ),
+            ]
+          ),
+        ]
+          .join(' ')
+          .toLocaleLowerCase()
+
+        return haystack.includes(
+          needle
+        )
+      })
+
+    const mixedCount =
+      allGroups.filter(
+        group => group.mixed
+      ).length
+
+    return `
+      <div
+        class="lb-organizer-card"
+        style="margin-bottom:10px"
+      >
+        <div class="lb-organizer-card-head">
+          <div>
+            <div class="lb-organizer-card-title">
+              Similar-name review
+            </div>
+
+            <div class="lb-organizer-meta">
+              ${allGroups.length}
+              group${allGroups.length === 1 ? '' : 's'} ·
+              ${mixedCount}
+              with both linked and unlinked copies
+            </div>
+          </div>
+
+          <span class="lb-organizer-badge">
+            review only
+          </span>
+        </div>
+
+        <div class="lb-organizer-meta">
+          This compares names independently from contents.
+          Similar names do not mean exact duplicates.
+          Nothing here is automatically linked, merged or deleted.
+        </div>
+      </div>
+
+      ${
+        visible.length
+          ? `
+            <div class="lb-organizer-list">
+              ${visible.map(group => `
+                <div class="lb-organizer-card">
+                  <div class="lb-organizer-card-head">
+                    <div class="lb-organizer-card-title">
+                      ${escapeHtml(group.name)}
+                    </div>
+
+                    <div class="lb-organizer-badges">
+                      <span class="lb-organizer-badge">
+                        ${group.books.length}
+                        similar names
+                      </span>
+
+                      ${
+                        group.mixed
+                          ? `
+                            <span class="lb-organizer-badge">
+                              linked + unlinked
+                            </span>
+                          `
+                          : ''
+                      }
+                    </div>
+                  </div>
+
+                  <div class="lb-organizer-meta">
+                    ${group.linkedCount} linked ·
+                    ${group.unlinkedCount} unlinked
+                  </div>
+
+                  <div class="lb-organizer-books">
+                    ${group.books.map(book => {
+                      const unlinkedBook =
+                        isUnlinked(book)
+
+                      const folder =
+                        String(
+                          book.folder || ''
+                        ).trim()
+
+                      return `
+                        <div class="lb-organizer-book">
+                          <div class="lb-organizer-card-head">
+                            <span class="lb-organizer-book-role">
+                              ${
+                                unlinkedBook
+                                  ? 'UNLINKED'
+                                  : 'LINKED'
+                              }
+                            </span>
+
+                            <code
+                              class="lb-organizer-id"
+                              title="${escapeHtml(book.id)}"
+                            >${escapeHtml(shortLoreId(book.id))}</code>
+                          </div>
+
+                          <strong>
+                            ${escapeHtml(book.name)}
+                          </strong>
+
+                          <div class="lb-organizer-meta">
+                            ${
+                              folder
+                                ? `Folder: ${escapeHtml(folder)} · `
+                                : ''
+                            }
+                            ${book.entryCount} entries
+                          </div>
+
+                          <div class="lb-organizer-badges">
+                            ${referenceBadges(book)}
+                          </div>
+                        </div>
+                      `
+                    }).join('')}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          `
+          : `
+            <div class="lb-organizer-empty">
+              ${
+                allGroups.length
+                  ? 'No similar-name groups match this search.'
+                  : books.length
+                    ? 'No similar lorebook names found.'
+                    : 'Scan the library to begin.'
+              }
+            </div>
+          `
+      }
+    `
+  }
+
   function renderDuplicates() {
     const needle =
       searchText
@@ -3931,28 +4245,23 @@ export function installLorebookOrganizer(
   }
 
   function activeContent() {
-    if (
-      activeTab ===
-      'duplicates'
-    ) {
-      return renderDuplicates()
-    }
+    switch (activeTab) {
+      case 'duplicates':
+        return renderDuplicates()
 
-    if (
-      activeTab ===
-      'unlinked'
-    ) {
-      return renderUnlinked()
-    }
+      case 'similar':
+        return renderSimilarNames()
 
-    if (
-      activeTab ===
-      'ai'
-    ) {
-      return renderAi()
-    }
+      case 'unlinked':
+        return renderUnlinked()
 
-    return renderOverview()
+      case 'ai':
+        return renderAi()
+
+      case 'overview':
+      default:
+        return renderOverview()
+    }
   }
 
   function renderModal() {
@@ -4030,6 +4339,7 @@ export function installLorebookOrganizer(
             ${[
               ['overview', 'Overview'],
               ['duplicates', 'Exact Duplicates'],
+              ['similar', 'Similar Names'],
               ['unlinked', 'Unlinked'],
               ['ai', 'AI Organize'],
             ].map(([key, label]) => `
@@ -4044,9 +4354,11 @@ export function installLorebookOrganizer(
                 ${
                   key === 'duplicates' && groups.length
                     ? ` (${groups.length})`
-                    : key === 'unlinked' && unlinked.length
-                      ? ` (${unlinked.length})`
-                      : ''
+                    : key === 'similar' && similarNameGroups().length
+                      ? ` (${similarNameGroups().length})`
+                      : key === 'unlinked' && unlinked.length
+                        ? ` (${unlinked.length})`
+                        : ''
                 }
               </button>
             `).join('')}
