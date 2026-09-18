@@ -828,11 +828,97 @@ export function setup(ctx) {
       padding: 0 12px 12px;
     }
 
-    .lumibionic-lorebook-list { display:grid; gap:10px; margin-top:10px; }
-    .lumibionic-lorebook-card { border:1px solid var(--lumi-border, rgba(127,127,127,.24)); border-radius:10px; padding:10px; }
-    .lumibionic-lorebook-card-title { font-weight:700; margin-bottom:6px; }
-    .lumibionic-lorebook-book { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:baseline; padding:4px 0; font-size:12px; }
-    .lumibionic-lorebook-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+    .lumibionic-lorebook-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .lumibionic-lorebook-card {
+      min-width: 0;
+      overflow: hidden;
+      border: 1px solid var(--lumi-border, rgba(127,127,127,.24));
+      border-radius: 10px;
+      padding: 11px;
+    }
+
+    .lumibionic-lorebook-card-title {
+      font-weight: 800;
+      margin-bottom: 8px;
+      overflow-wrap: anywhere;
+    }
+
+    .lumibionic-lorebook-book {
+      min-width: 0;
+      padding: 8px 0;
+      border-top: 1px solid var(--lumi-border, rgba(127,127,127,.16));
+      font-size: 12px;
+    }
+
+    .lumibionic-lorebook-book:first-of-type {
+      border-top: 0;
+    }
+
+    .lumibionic-lorebook-book-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .lumibionic-lorebook-role {
+      display: inline-flex;
+      align-items: center;
+      flex: 0 0 auto;
+      padding: 1px 7px;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .04em;
+      opacity: .86;
+    }
+
+    .lumibionic-lorebook-book.is-duplicate .lumibionic-lorebook-role {
+      opacity: .62;
+    }
+
+    .lumibionic-lorebook-id {
+      min-width: 0;
+      max-width: 55%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 10px;
+      opacity: .58;
+    }
+
+    .lumibionic-lorebook-name {
+      margin-top: 4px;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+
+    .lumibionic-lorebook-meta,
+    .lumibionic-lorebook-summary {
+      margin-top: 3px;
+      font-size: 12px;
+      line-height: 1.4;
+      opacity: .7;
+      overflow-wrap: anywhere;
+    }
+
+    .lumibionic-lorebook-summary {
+      margin-top: 9px;
+    }
+
+    .lumibionic-lorebook-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 9px;
+    }
 
     .lumibionic-status-pill {
       display: inline-flex;
@@ -2980,7 +3066,7 @@ export function setup(ctx) {
             <label for="lb-size">Message text size</label>
             <span class="lumibionic-value" id="lb-size-value"></span>
           </div>
-          <input id="lb-size" type="range" min="80" max="140" step="5">
+          <input id="lb-size" type="range" min="80" max="140" step="1">
         </div>
 
         <div class="lumibionic-control">
@@ -4763,6 +4849,97 @@ export function setup(ctx) {
     return refs
   }
 
+  function shortLoreId(id) {
+    const text = String(id || '')
+
+    if (text.length <= 18) return text
+
+    return `${text.slice(0, 8)}…${text.slice(-6)}`
+  }
+
+  function removeLorebookFromSnapshot(bookId) {
+    loreCleanupUnlinked =
+      loreCleanupUnlinked.filter(
+        book => book.id !== bookId
+      )
+
+    loreCleanupGroups =
+      loreCleanupGroups.flatMap(group => {
+        const nextBooks =
+          group.books.filter(
+            book => book.id !== bookId
+          )
+
+        if (nextBooks.length < 2) {
+          return []
+        }
+
+        const keepStillExists =
+          nextBooks.some(
+            book =>
+              book.id ===
+              group.recommendedKeepId
+          )
+
+        let recommendedKeepId =
+          group.recommendedKeepId
+
+        if (!keepStillExists) {
+          recommendedKeepId =
+            [...nextBooks]
+              .sort((a, b) => {
+                if (
+                  a.cardRefs.length !==
+                  b.cardRefs.length
+                ) {
+                  return (
+                    b.cardRefs.length -
+                    a.cardRefs.length
+                  )
+                }
+
+                return a.id.localeCompare(b.id)
+              })[0].id
+        }
+
+        return [{
+          ...group,
+          books: nextBooks,
+          recommendedKeepId,
+        }]
+      })
+  }
+
+  function refreshLoreSnapshotRefs() {
+    const refs =
+      cardRefsByBook(
+        loreCleanupCharacters
+      )
+
+    loreCleanupGroups =
+      loreCleanupGroups.map(group => ({
+        ...group,
+        books:
+          group.books.map(book => ({
+            ...book,
+            cardRefs:
+              refs.get(book.id) || [],
+          })),
+      }))
+
+    loreCleanupUnlinked =
+      loreCleanupUnlinked
+        .map(book => ({
+          ...book,
+          cardRefs:
+            refs.get(book.id) || [],
+        }))
+        .filter(
+          book =>
+            book.cardRefs.length === 0
+        )
+  }
+
   function renderLoreCleanup() {
     if (loreUnlinked) {
       loreUnlinked.innerHTML =
@@ -4772,15 +4949,28 @@ export function setup(ctx) {
                 <div class="lumibionic-lorebook-card-title">
                   ${escapeLoreHtml(book.name)}
                 </div>
-                <div class="lumibionic-muted">
-                  ${book.entryCount} entries · no character-card links detected
+
+                <div class="lumibionic-lorebook-book">
+                  <div class="lumibionic-lorebook-book-head">
+                    <span class="lumibionic-lorebook-role">UNLINKED</span>
+
+                    <code
+                      class="lumibionic-lorebook-id"
+                      title="${escapeLoreHtml(book.id)}"
+                    >${escapeLoreHtml(shortLoreId(book.id))}</code>
+                  </div>
+
+                  <div class="lumibionic-lorebook-meta">
+                    ${book.entryCount} entries · no character-card links
+                  </div>
                 </div>
+
                 <div class="lumibionic-lorebook-actions">
                   <button
                     type="button"
                     data-lore-delete-unlinked="${escapeLoreHtml(book.id)}"
                   >
-                    Delete this unlinked lorebook
+                    Delete unlinked lorebook
                   </button>
                 </div>
               </div>
@@ -4793,45 +4983,104 @@ export function setup(ctx) {
     loreResults.innerHTML =
       loreCleanupGroups.length
         ? loreCleanupGroups.map(group => {
+            const duplicateBooks =
+              group.books.filter(
+                book =>
+                  book.id !==
+                  group.recommendedKeepId
+              )
+
+            const affectedCards =
+              new Map()
+
+            for (const book of duplicateBooks) {
+              for (const ref of book.cardRefs) {
+                affectedCards.set(
+                  ref.id,
+                  ref
+                )
+              }
+            }
+
             const books =
               group.books
                 .map(book => {
                   const keep =
-                    book.id === group.recommendedKeepId
+                    book.id ===
+                    group.recommendedKeepId
 
-                  const refs =
-                    book.cardRefs.length
-                      ? book.cardRefs
-                          .map(ref => ref.name)
-                          .join(', ')
-                      : 'no cards'
+                  const refNames =
+                    book.cardRefs
+                      .map(ref => ref.name)
+
+                  let refSummary =
+                    'no card links'
+
+                  if (refNames.length) {
+                    const shown =
+                      refNames
+                        .slice(0, 2)
+                        .join(', ')
+
+                    const more =
+                      refNames.length > 2
+                        ? ` +${refNames.length - 2} more`
+                        : ''
+
+                    refSummary =
+                      `${refNames.length} card${refNames.length === 1 ? '' : 's'} · ${shown}${more}`
+                  }
 
                   return `
-                    <div class="lumibionic-lorebook-book">
-                      <div>
-                        ${keep ? '★ ' : ''}${escapeLoreHtml(book.name)}
-                        <span class="lumibionic-muted">
-                          — ${book.entryCount} entries · ${escapeLoreHtml(refs)}
+                    <div class="lumibionic-lorebook-book ${keep ? 'is-keep' : 'is-duplicate'}">
+                      <div class="lumibionic-lorebook-book-head">
+                        <span class="lumibionic-lorebook-role">
+                          ${keep ? 'KEEP' : 'DUPLICATE'}
                         </span>
+
+                        <code
+                          class="lumibionic-lorebook-id"
+                          title="${escapeLoreHtml(book.id)}"
+                        >${escapeLoreHtml(shortLoreId(book.id))}</code>
                       </div>
-                      <code>${escapeLoreHtml(book.id)}</code>
+
+                      <div class="lumibionic-lorebook-name">
+                        ${escapeLoreHtml(book.name)}
+                      </div>
+
+                      <div class="lumibionic-lorebook-meta">
+                        ${book.entryCount} entries · ${escapeLoreHtml(refSummary)}
+                      </div>
                     </div>
                   `
                 })
                 .join('')
 
+            const affectedCount =
+              affectedCards.size
+
+            const duplicateCount =
+              duplicateBooks.length
+
             return `
               <div class="lumibionic-lorebook-card">
                 <div class="lumibionic-lorebook-card-title">
-                  ${escapeLoreHtml(group.name)} — exact duplicate
+                  Exact duplicate · ${escapeLoreHtml(group.name)}
                 </div>
+
                 ${books}
+
+                <div class="lumibionic-lorebook-summary">
+                  ${affectedCount} card${affectedCount === 1 ? '' : 's'} will be relinked ·
+                  ${duplicateCount} duplicate${duplicateCount === 1 ? '' : 's'} will be deleted
+                </div>
+
                 <div class="lumibionic-lorebook-actions">
                   <button
                     type="button"
                     data-lore-clean-group="${escapeLoreHtml(group.groupId)}"
                   >
-                    Keep ★, relink cards, delete copies
+                    Relink &amp; delete ${duplicateCount} duplicate${duplicateCount === 1 ? '' : 's'}
                   </button>
                 </div>
               </div>
@@ -4955,6 +5204,11 @@ export function setup(ctx) {
 
     renderLoreCleanup()
 
+    if (loreScan) {
+      loreScan.textContent =
+        'Rescan lorebooks'
+    }
+
     setLoreCleanupBusy(
       false,
       `Scan complete: ${books.length} lorebooks · ${loreCleanupUnlinked.length} not linked to any card · ${loreCleanupGroups.length} exact duplicate group${loreCleanupGroups.length === 1 ? '' : 's'}.`
@@ -4988,9 +5242,14 @@ export function setup(ctx) {
     const duplicateSet =
       new Set(duplicateIds)
 
+    let relinkedCardCount = 0
+    let deletedCount = 0
+
     /*
-      Rewire every card before deleting any book.
-      A failed card update aborts cleanup before deletion begins.
+      Rewire every affected card before deleting any book.
+
+      If a card update fails, the error aborts the operation before
+      lorebook deletion begins.
     */
     for (const character of loreCleanupCharacters) {
       const current =
@@ -5021,8 +5280,23 @@ export function setup(ctx) {
         character,
         next
       )
+
+      /*
+        Keep our scanned working snapshot current so later cleanup
+        actions do not need another full library scan.
+      */
+      character.world_book_ids =
+        [...next]
+
+      relinkedCardCount += 1
     }
 
+    refreshLoreSnapshotRefs()
+
+    /*
+      Only delete duplicate books after every required card relink
+      has succeeded.
+    */
     for (const id of duplicateIds) {
       await loreApi(
         `/api/v1/world-books/${encodeURIComponent(id)}`,
@@ -5030,6 +5304,15 @@ export function setup(ctx) {
           method: 'DELETE',
         }
       )
+
+      removeLorebookFromSnapshot(id)
+      deletedCount += 1
+    }
+
+    return {
+      keepId,
+      relinkedCardCount,
+      deletedCount,
     }
   }
 
@@ -5086,11 +5369,29 @@ export function setup(ctx) {
       )
 
       try {
-        for (const group of loreCleanupGroups) {
-          await cleanExactLoreGroup(group)
+        const groupsToClean =
+          [...loreCleanupGroups]
+
+        let relinkedCardCount = 0
+        let deletedCount = 0
+
+        for (const group of groupsToClean) {
+          const result =
+            await cleanExactLoreGroup(group)
+
+          relinkedCardCount +=
+            result.relinkedCardCount
+
+          deletedCount +=
+            result.deletedCount
         }
 
-        await scanLorebooksDirect()
+        renderLoreCleanup()
+
+        setLoreCleanupBusy(
+          false,
+          `Cleanup complete: ${relinkedCardCount} card${relinkedCardCount === 1 ? '' : 's'} relinked · ${deletedCount} duplicate lorebook${deletedCount === 1 ? '' : 's'} deleted. Results updated locally; rescan only when you want to refresh the library.`
+        )
       } catch (error) {
         setLoreCleanupBusy(
           false,
@@ -5140,8 +5441,15 @@ export function setup(ctx) {
       )
 
       try {
-        await cleanExactLoreGroup(group)
-        await scanLorebooksDirect()
+        const result =
+          await cleanExactLoreGroup(group)
+
+        renderLoreCleanup()
+
+        setLoreCleanupBusy(
+          false,
+          `Cleaned ${group.name}: ${result.relinkedCardCount} card${result.relinkedCardCount === 1 ? '' : 's'} relinked · ${result.deletedCount} duplicate lorebook${result.deletedCount === 1 ? '' : 's'} deleted. Results updated locally.`
+        )
       } catch (error) {
         setLoreCleanupBusy(
           false,
@@ -5198,7 +5506,16 @@ export function setup(ctx) {
           }
         )
 
-        await scanLorebooksDirect()
+        removeLorebookFromSnapshot(
+          book.id
+        )
+
+        renderLoreCleanup()
+
+        setLoreCleanupBusy(
+          false,
+          `Deleted ${book.name}. Results updated locally; rescan only when you want to refresh the library.`
+        )
       } catch (error) {
         setLoreCleanupBusy(
           false,
