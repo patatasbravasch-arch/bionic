@@ -919,9 +919,52 @@ export function installLorebookOrganizer(
       }
 
       /*
-        Nothing is deleted until every affected source above
-        has successfully relinked and verified.
+        Re-read every reference source after relinking and immediately
+        before deletion. Fail closed if any duplicate is still referenced.
       */
+      renderAll(
+        'Verifying duplicate references before deletion…'
+      )
+
+      const verification =
+        await sendBackend(
+          'bionic_lore_reference_snapshot'
+        )
+
+      if (
+        !verification?.snapshot ||
+        typeof verification.snapshot !== 'object'
+      ) {
+        throw new Error(
+          'Final reference verification returned no snapshot.'
+        )
+      }
+
+      applyReferenceSnapshot(
+        verification.snapshot
+      )
+
+      const stillReferenced =
+        books.filter(
+          book =>
+            duplicateSet.has(book.id) &&
+            book.references.length > 0
+        )
+
+      if (stillReferenced.length) {
+        const detail =
+          stillReferenced
+            .map(
+              book =>
+                `${book.name}: ${summarizeReferences(book.references)}`
+            )
+            .join('; ')
+
+        throw new Error(
+          `Duplicate deletion was stopped because references still remain: ${detail}`
+        )
+      }
+
       for (const id of duplicateIds) {
         renderAll(
           `Deleting duplicate ${shortLoreId(id)}…`

@@ -484,6 +484,17 @@ function installLorebookOrganizer(ctx, settingsRoot, options = {}) {
           ids: replaceLoreIds(currentGlobal, duplicateSet, keepId)
         });
       }
+      renderAll("Verifying duplicate references before deletion…");
+      const verification = await sendBackend("bionic_lore_reference_snapshot");
+      if (!verification?.snapshot || typeof verification.snapshot !== "object") {
+        throw new Error("Final reference verification returned no snapshot.");
+      }
+      applyReferenceSnapshot(verification.snapshot);
+      const stillReferenced = books.filter((book) => duplicateSet.has(book.id) && book.references.length > 0);
+      if (stillReferenced.length) {
+        const detail = stillReferenced.map((book) => `${book.name}: ${summarizeReferences(book.references)}`).join("; ");
+        throw new Error(`Duplicate deletion was stopped because references still remain: ${detail}`);
+      }
       for (const id of duplicateIds) {
         renderAll(`Deleting duplicate ${shortLoreId(id)}…`);
         await api(`/api/v1/world-books/${encodeURIComponent(id)}`, {
