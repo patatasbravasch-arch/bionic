@@ -1468,6 +1468,91 @@ Bionic will refresh all four reference sources first.`)) {
     });
     return result;
   }
+  async function unifySimilarCharacters(keeperId) {
+    if (busy)
+      return;
+    let group = similarNameGroups().find((item) => item.books.some((book) => book.id === keeperId));
+    if (!group) {
+      renderAll("That similar-name group no longer exists. Rescan and try again.");
+      return;
+    }
+    const keeper = group.books.find((book) => book.id === keeperId);
+    if (!keeper)
+      return;
+    const initialCharacterIds = new Set(group.books.flatMap((book) => book.references.filter((ref) => ref.kind === "character").map((ref) => ref.id).filter(Boolean)));
+    if (!initialCharacterIds.size) {
+      renderAll("No character links were found in this similar-name group.");
+      return;
+    }
+    if (!window.confirm(`Use "${keeper.name}" for all ${initialCharacterIds.size} character${initialCharacterIds.size === 1 ? "" : "s"} in this similar-name group?
+
+Bionic will refresh references first, remove the other lorebooks in this similar-name group from those characters, and attach this copy instead.
+
+Chats, personas, global activation, unrelated lorebooks, and the other lorebook files themselves will not be changed.`)) {
+      return;
+    }
+    busy = true;
+    renderAll(`Refreshing references before consolidating characters onto "${keeper.name}"…`);
+    let resultMessage = "";
+    try {
+      await freshReferences();
+      group = similarNameGroups().find((item) => item.books.some((book) => book.id === keeperId));
+      if (!group) {
+        throw new Error("The similar-name group changed during verification.");
+      }
+      const refreshedKeeper = group.books.find((book) => book.id === keeperId);
+      if (!refreshedKeeper) {
+        throw new Error("The selected lorebook no longer exists.");
+      }
+      const groupIds = new Set(group.books.map((book) => book.id));
+      const characterIds = Array.from(new Set(group.books.flatMap((book) => book.references.filter((ref) => ref.kind === "character").map((ref) => ref.id).filter(Boolean))));
+      if (!characterIds.length) {
+        throw new Error("No character references remain in this group.");
+      }
+      let updated = 0;
+      for (const characterId of characterIds) {
+        const characterUrl = `/api/v1/characters/${encodeURIComponent(characterId)}`;
+        const freshCharacter = await api(characterUrl);
+        const extensions = freshCharacter?.extensions && typeof freshCharacter.extensions === "object" && !Array.isArray(freshCharacter.extensions) ? {
+          ...freshCharacter.extensions
+        } : {};
+        const currentIds = Array.isArray(freshCharacter?.world_book_ids) ? freshCharacter.world_book_ids.filter((id) => typeof id === "string" && Boolean(id)) : Array.isArray(extensions.world_book_ids) ? extensions.world_book_ids.filter((id) => typeof id === "string" && Boolean(id)) : typeof extensions.world_book_id === "string" && extensions.world_book_id ? [
+          extensions.world_book_id
+        ] : [];
+        const nextIds = Array.from(new Set([
+          ...currentIds.filter((id) => !groupIds.has(id)),
+          keeperId
+        ]));
+        delete extensions.world_book_id;
+        extensions.world_book_ids = nextIds;
+        await api(characterUrl, {
+          method: "PUT",
+          body: JSON.stringify({
+            extensions
+          })
+        });
+        const verified = await api(characterUrl);
+        const verifiedIds = Array.isArray(verified?.world_book_ids) ? verified.world_book_ids : Array.isArray(verified?.extensions?.world_book_ids) ? verified.extensions.world_book_ids : [];
+        if (!verifiedIds.includes(keeperId)) {
+          throw new Error(`Character link verification failed for ${characterId}.`);
+        }
+        const redundantIds = Array.from(groupIds).filter((id) => id !== keeperId);
+        if (redundantIds.some((id) => verifiedIds.includes(id))) {
+          throw new Error(`Character ${characterId} still contains another lorebook from this similar-name group.`);
+        }
+        updated += 1;
+        renderAll(`Linked ${updated}/${characterIds.length} character${characterIds.length === 1 ? "" : "s"} to "${refreshedKeeper.name}"…`);
+      }
+      await freshReferences();
+      resultMessage = `Linked ${characterIds.length} character${characterIds.length === 1 ? "" : "s"} to "${refreshedKeeper.name}". Other similar lorebooks were not deleted; chat, persona and global links were left unchanged.`;
+    } catch (error) {
+      resultMessage = `Character consolidation stopped: ${error?.message || String(error)}`;
+    } finally {
+      busy = false;
+      renderAll(resultMessage);
+      syncSummary();
+    }
+  }
   function renderSimilarNames() {
     const allGroups = similarNameGroups();
     const needle = searchText.trim().toLocaleLowerCase();
@@ -1580,6 +1665,19 @@ Bionic will refresh all four reference sources first.`)) {
                           <div class="lb-organizer-meta">
                             ${referenceLocationText(book)}
                           </div>
+
+
+                          ${group.books.some((otherBook) => otherBook.id !== book.id && otherBook.references.some((ref) => ref.kind === "character")) ? `
+                                <div class="lb-organizer-actions">
+                                  <button
+                                    type="button"
+                                    data-organizer-similar-unify-characters="${escapeHtml(book.id)}"
+                                    ${busy ? "disabled" : ""}
+                                  >
+                                    Link all ${new Set(group.books.flatMap((candidate) => candidate.references.filter((ref) => ref.kind === "character").map((ref) => ref.id).filter(Boolean))).size} characters here
+                                  </button>
+                                </div>
+                              ` : ""}
 
                           ${unlinkedBook ? `
                                 <div class="lb-organizer-actions">
@@ -2549,6 +2647,14 @@ Bionic will refresh characters, chats, personas and global activation immediatel
     renderAll();
     modalRoot.addEventListener("click", (event) => {
       const target = event.target;
+      const unifyCharactersButton = target.closest("[data-organizer-similar-unify-characters]");
+      if (unifyCharactersButton) {
+        const keeperId = unifyCharactersButton.dataset.organizerSimilarUnifyCharacters || "";
+        if (keeperId) {
+          unifySimilarCharacters(keeperId);
+        }
+        return;
+      }
       const similarLinkButton = target.closest("[data-organizer-similar-link-book]");
       if (similarLinkButton) {
         const id = similarLinkButton.dataset.organizerSimilarLinkBook || "";
