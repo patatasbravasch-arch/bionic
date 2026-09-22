@@ -1232,6 +1232,16 @@ Bionic will refresh all four reference sources first.`)) {
     `;
   }
   function bookCard(book, actions = "") {
+    const overviewLinkable = activeTab === "overview" && isUnlinked(book);
+    const overviewLinkAction = overviewLinkable ? `
+          <button
+            type="button"
+            data-organizer-open-link-one="${escapeHtml(book.id)}"
+            ${busy ? "disabled" : ""}
+          >
+            Link…
+          </button>
+        ` : "";
     const folder = book.folder ? `Folder: ${escapeHtml(book.folder)} · ` : "";
     return `
       <div class="lb-organizer-card">
@@ -1254,7 +1264,14 @@ Bionic will refresh all four reference sources first.`)) {
           ${referenceBadges(book)}
         </div>
 
-        ${actions ? `<div class="lb-organizer-actions">${actions}</div>` : ""}
+        ${actions || overviewLinkAction ? `
+              <div class="lb-organizer-actions">
+                ${actions}
+                ${overviewLinkAction}
+              </div>
+            ` : ""}
+
+        ${overviewLinkable && linkPanelOpen && inlineLinkBookId === book.id ? renderInlineLinkControls() : ""}
       </div>
     `;
   }
@@ -1931,7 +1948,7 @@ Chats, personas, global activation, unrelated lorebooks, and the other lorebook 
     return Array.from(new Set(books.map((book) => String(book.folder || "").trim()).filter((folder) => folder && folder !== IGNORED_FOLDER))).sort((a, b) => a.localeCompare(b));
   }
   function characterMatchKey(value) {
-    let name = String(value ?? "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase().replace(/&/g, " and ").replace(/[_\-.]+/g, " ").replace(/[’']/g, "'").replace(/\s+/g, " ").trim();
+    let name = String(value ?? "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase().replace(/&/g, " and ").replace(/[_\-.]+/g, " ").replace(/[’']/g, "'").replace(/\s+/g, " ").replace(/\s+\((?:solo\s+)?(?:v|version)\s*\d+(?:\s+\d+)*\)$/i, "").trim();
     let previous = "";
     while (name !== previous) {
       previous = name;

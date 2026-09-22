@@ -2241,6 +2241,23 @@ export function installLorebookOrganizer(
     book: LoreBookSnapshot,
     actions = ''
   ) {
+    const overviewLinkable =
+      activeTab === 'overview' &&
+      isUnlinked(book)
+
+    const overviewLinkAction =
+      overviewLinkable
+        ? `
+          <button
+            type="button"
+            data-organizer-open-link-one="${escapeHtml(book.id)}"
+            ${busy ? 'disabled' : ''}
+          >
+            Link…
+          </button>
+        `
+        : ''
+
     const folder =
       book.folder
         ? `Folder: ${escapeHtml(book.folder)} · `
@@ -2268,8 +2285,21 @@ export function installLorebookOrganizer(
         </div>
 
         ${
-          actions
-            ? `<div class="lb-organizer-actions">${actions}</div>`
+          actions || overviewLinkAction
+            ? `
+              <div class="lb-organizer-actions">
+                ${actions}
+                ${overviewLinkAction}
+              </div>
+            `
+            : ''
+        }
+
+        ${
+          overviewLinkable &&
+          linkPanelOpen &&
+          inlineLinkBookId === book.id
+            ? renderInlineLinkControls()
             : ''
         }
       </div>
@@ -3803,6 +3833,10 @@ export function installLorebookOrganizer(
         .replace(/[_\-.]+/g, ' ')
         .replace(/[’']/g, "'")
         .replace(/\s+/g, ' ')
+        .replace(
+          /\s+\((?:solo\s+)?(?:v|version)\s*\d+(?:\s+\d+)*\)$/i,
+          ''
+        )
         .trim()
 
     let previous = ''
