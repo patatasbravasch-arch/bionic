@@ -89,23 +89,23 @@ export function setup(ctx) {
   const WORD_RE = /\p{L}[\p{L}\p{M}\p{N}'’\-]*/gu
 
   const TOOLBAR_BUTTONS = [
-    { key: 'backHome', label: 'Back to home', title: 'Back to home', className: 'lb-hide-toolbar-back-home' },
-    { key: 'latestMessageTop', label: 'Top of latest message', title: 'Top of latest message', className: 'lb-hide-toolbar-latest-message-top' },
+    { key: 'backHome', label: 'Home', title: 'Back to home', className: 'lb-hide-toolbar-back-home' },
+    { key: 'latestMessageTop', label: 'Latest message', title: 'Top of latest message', className: 'lb-hide-toolbar-latest-message-top' },
     { key: 'autoRegenerate', label: 'Auto regenerate', title: 'Auto regenerate', className: 'lb-hide-toolbar-auto-regenerate' },
     { key: 'regenerate', label: 'Regenerate', title: 'Regenerate', className: 'lb-hide-toolbar-regenerate' },
     { key: 'continue', label: 'Continue', title: 'Continue', className: 'lb-hide-toolbar-continue' },
-    { key: 'oneLiner', label: 'Impersonate / one-liner nudge', title: 'One-liner: Chat history + impersonation nudge only', titles: ['Impersonate', 'One-liner'], className: 'lb-hide-toolbar-one-liner' },
-    { key: 'persona', label: 'Switch persona', title: 'Switch persona for this chat', className: 'lb-hide-toolbar-persona' },
+    { key: 'oneLiner', label: 'Impersonate', title: 'One-liner: Chat history + impersonation nudge only', titles: ['Impersonate', 'One-liner'], className: 'lb-hide-toolbar-one-liner' },
+    { key: 'persona', label: 'Persona', title: 'Switch persona for this chat', className: 'lb-hide-toolbar-persona' },
     { key: 'connection', label: 'Connection', title: 'Connection:', titles: ['Connection:', 'Switch connection'], className: 'lb-hide-toolbar-connection' },
     { key: 'alternateFields', label: 'Alternate fields', title: 'Alternate fields', className: 'lb-hide-toolbar-alternate-fields' },
     { key: 'guidedGenerations', label: 'Guided generations', title: 'Guided generations', className: 'lb-hide-toolbar-guided' },
     { key: 'quickReplies', label: 'Quick replies', title: 'Quick replies', className: 'lb-hide-toolbar-quick-replies' },
     { key: 'tools', label: 'Tools', title: 'Tools', className: 'lb-hide-toolbar-tools' },
     { key: 'extras', label: 'Extras', title: 'Extras', className: 'lb-hide-toolbar-extras' },
-    { key: 'customizeToolbar', label: 'Customize toolbar / composer', title: 'Customize toolbar', titles: ['Customize toolbar', 'Customize composer'], className: 'lb-hide-toolbar-customize' },
+    { key: 'customizeToolbar', label: 'Customize buttons', title: 'Customize toolbar', titles: ['Customize toolbar', 'Customize composer'], className: 'lb-hide-toolbar-customize' },
     {
       key: 'attachments',
-      label: 'Attachments / paperclip',
+      label: 'Attachments',
       title: 'Attach',
       titles: [
         'attach',
@@ -814,10 +814,56 @@ export function setup(ctx) {
     }
 
     .lumibionic-settings {
-      padding: 14px;
+      padding: 12px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 12px;
+    }
+
+    .lumibionic-settings [hidden] {
+      display: none !important;
+    }
+
+    .lumibionic-panel-nav {
+      position: sticky;
+      top: 0;
+      z-index: 6;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 4px;
+      padding: 4px;
+      border: 1px solid var(--lumi-border, rgba(127,127,127,.22));
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--lumiverse-bg, #171821) 96%, transparent);
+    }
+
+    .lumibionic-panel-nav button {
+      padding: 8px 3px !important;
+      min-height: 38px;
+      border: 0 !important;
+      background: transparent !important;
+      font-size: 12px !important;
+      font-weight: 600 !important;
+    }
+
+    .lumibionic-panel-nav button[aria-selected="true"] {
+      background: color-mix(in srgb, var(--lumiverse-primary, #7c9bc8) 22%, transparent) !important;
+      color: var(--lumiverse-primary, #afc9ec);
+    }
+
+    .lumibionic-settings button:focus-visible,
+    .lumibionic-settings select:focus-visible,
+    .lumibionic-settings input:focus-visible,
+    .lumibionic-settings textarea:focus-visible {
+      outline: 2px solid var(--lumiverse-primary, #7c9bc8);
+      outline-offset: 2px;
+    }
+
+    .lumibionic-reset-footer {
+      border-top: 1px solid var(--lumi-border, rgba(127,127,127,.22));
+      padding-top: 14px;
+      display: grid;
+      gap: 8px;
     }
 
     .lumibionic-settings h2 {
@@ -841,7 +887,7 @@ export function setup(ctx) {
       border: 1px solid var(--lumi-border, rgba(127,127,127,.22));
       border-radius: 12px;
       overflow: clip;
-      margin: 10px 0;
+      margin: 0;
     }
 
     .lumibionic-group > summary {
@@ -852,7 +898,7 @@ export function setup(ctx) {
       justify-content: space-between;
       gap: 12px;
       padding: 12px 14px;
-      font-weight: 800;
+      font-weight: 650;
       list-style: none;
     }
 
@@ -873,6 +919,22 @@ export function setup(ctx) {
 
     .lumibionic-group-body {
       padding: 0 12px 12px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .lumibionic-category-root {
+      border: 0;
+      border-radius: 0;
+      overflow: visible;
+    }
+
+    .lumibionic-category-root > summary {
+      display: none;
+    }
+
+    .lumibionic-category-root > .lumibionic-group-body {
+      padding: 0;
     }
 
     .lumibionic-lorebook-list {
@@ -991,8 +1053,8 @@ export function setup(ctx) {
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      border: 0;
-      background: transparent;
+      border: 0 !important;
+      background: transparent !important;
       text-align: left;
       font-size: 14px;
       font-weight: 700;
@@ -1034,7 +1096,7 @@ export function setup(ctx) {
 
     .lumibionic-preview-section.lumibionic-preview-visible {
       position: sticky;
-      top: 0;
+      top: 60px;
       z-index: 5;
     }
 
@@ -1060,6 +1122,12 @@ export function setup(ctx) {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 8px;
+    }
+
+    .lumibionic-ui-actions button {
+      min-height: 32px !important;
+      padding: 6px 8px !important;
+      font-size: 12px !important;
     }
 
     .lumibionic-ff-grid {
@@ -1091,7 +1159,7 @@ export function setup(ctx) {
     }
 
     .lumibionic-toolbar-toggle {
-      min-height: 48px;
+      min-height: 44px;
       display: flex;
       flex-direction: column;
       align-items: flex-start;
@@ -1107,9 +1175,13 @@ export function setup(ctx) {
       font-size: 11px;
     }
 
+    .lumibionic-toolbar-toggle[data-hidden="false"] {
+      border-color: color-mix(in srgb, var(--lumiverse-primary, #7c9bc8) 55%, transparent);
+      background: color-mix(in srgb, var(--lumiverse-primary, #7c9bc8) 12%, transparent);
+    }
+
     .lumibionic-toolbar-toggle[data-hidden="true"] {
-      border-color: color-mix(in srgb, var(--lumiverse-primary, #7c9bc8) 58%, transparent);
-      background: color-mix(in srgb, var(--lumiverse-primary, #7c9bc8) 13%, transparent);
+      opacity: .65;
     }
 
     .lumibionic-toolbar-actions {
@@ -1120,7 +1192,7 @@ export function setup(ctx) {
 
     @media (max-width: 440px) {
       .lumibionic-toolbar-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
     }
 
@@ -1178,6 +1250,7 @@ export function setup(ctx) {
     .lumibionic-settings select,
     .lumibionic-settings input[type="text"],
     .lumibionic-settings input[type="file"],
+    .lumibionic-settings textarea,
     .lumibionic-settings button {
       width: 100%;
       box-sizing: border-box;
@@ -1185,14 +1258,24 @@ export function setup(ctx) {
 
     .lumibionic-settings select,
     .lumibionic-settings input[type="text"],
+    .lumibionic-settings textarea,
     .lumibionic-settings button {
       padding: 9px 10px;
       border-radius: 8px;
       font: inherit;
+      color: inherit;
+      border: 1px solid var(--lumi-border, rgba(127,127,127,.22));
+      background: rgba(127,127,127,.04);
+      min-width: 0;
+      min-height: 38px;
     }
 
     .lumibionic-settings button {
       cursor: pointer;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      font-size: 13px;
+      font-weight: 600;
     }
 
     .lumibionic-stepper {
@@ -1251,7 +1334,7 @@ export function setup(ctx) {
       -webkit-hyphens: var(--lumibionic-preview-hyphens, manual);
 
       /* Keep live preview useful without taking over the drawer. */
-      max-height: min(170px, 24vh);
+      max-height: min(140px, 20dvh);
       overflow-y: auto;
       overscroll-behavior: contain;
       scrollbar-gutter: stable;
@@ -1259,7 +1342,7 @@ export function setup(ctx) {
 
     @media (max-width: 720px) {
       .lumibionic-preview {
-        max-height: min(150px, 21vh);
+        max-height: min(110px, 16dvh);
         padding: 10px;
       }
     }
@@ -1306,10 +1389,10 @@ export function setup(ctx) {
   const tab = ctx.ui.registerDrawerTab({
     id: 'bionic-reading',
     iconSvg: BIONIC_DRAWER_ICON_SVG,
-    title: 'Reading & Fonts',
-    shortName: 'Reading',
-    headerTitle: 'Reading & Fonts',
-    description: 'Bionic reading, font reach, and long-form typography',
+    title: 'Bionic',
+    shortName: 'Bionic',
+    headerTitle: 'Bionic',
+    description: 'Reading appearance, chat toolbar controls and lorebook organization',
     keywords: [
       'bionic',
       'reading',
@@ -2849,22 +2932,20 @@ export function setup(ctx) {
     <div class="lumibionic-settings">
 
       <div>
-        <h2>Reading & Fonts</h2>
         <div class="lumibionic-muted">
-          Use Bionic emphasis, change typography,
-          and choose exactly how far the font override reaches.
+          Adjust reading, toolbar controls and lorebooks.
         </div>
       </div>
 
       <details class="lumibionic-group" data-lumibionic-group="Settings" open>
-        <summary>Settings</summary>
+        <summary>Preferences</summary>
         <div class="lumibionic-group-body">
           <div class="lumibionic-section">
             <div class="lumibionic-section-title">Saving</div>
             <div class="lumibionic-control">
-              <label for="lb-settings-persistence">Save mode</label>
+              <label for="lb-settings-persistence">Save settings to</label>
               <select id="lb-settings-persistence">
-                <option value="account">Account-saved (recommended)</option>
+                <option value="account">Your account</option>
                 <option value="browser">This browser only</option>
               </select>
               <div class="lumibionic-muted">
@@ -2897,8 +2978,7 @@ export function setup(ctx) {
             <option value="bionicLight">Bionic Light</option>
           </select>
           <div class="lumibionic-muted">
-            Presets change reading controls but leave your font and font reach alone.
-            Any manual adjustment switches back to Custom.
+            Choose a starting point, then adjust. Your font stays unchanged.
           </div>
         </div>
 
@@ -2944,7 +3024,7 @@ export function setup(ctx) {
           <div class="lumibionic-control">
             <div class="lumibionic-row">
               <label for="lb-fixation">
-                Fixation strength
+              Bold portion of each word
               </label>
               <span
                 class="lumibionic-value"
@@ -3054,11 +3134,11 @@ export function setup(ctx) {
             type="button"
             id="lb-clear-font-file"
           >
-            Stop using loaded font file
+            Remove loaded font
           </button>
 
           <div class="lumibionic-control">
-            <label>Font reach</label>
+            <label>Apply font to</label>
 
             <div class="lumibionic-checks">
 
@@ -3188,7 +3268,7 @@ export function setup(ctx) {
       </details>
 
       <details class="lumibionic-group" data-lumibionic-group="FF5 Thinking Fix">
-        <summary>FF5 Thinking Fix</summary>
+        <summary>Reasoning repair</summary>
         <div class="lumibionic-group-body">
       <div class="lumibionic-section">
 
@@ -3198,7 +3278,7 @@ export function setup(ctx) {
 
         <label class="lumibionic-check">
           <input id="lb-ff-think-fix" type="checkbox">
-          <span>Move one side of the RP boundary into native reasoning</span>
+          <span>Repair reasoning automatically</span>
         </label>
 
         <div class="lumibionic-muted">
@@ -3237,7 +3317,7 @@ export function setup(ctx) {
 
         <div class="lumibionic-toolbar-actions">
           <button type="button" id="lb-ff-run-now">
-            ▶ Run FF think fix now
+            Repair latest reply
           </button>
           <button type="button" id="lb-ff-reset-pattern">
             Reset boundary marker
@@ -3265,7 +3345,7 @@ export function setup(ctx) {
       </details>
 
       <details class="lumibionic-group" data-lumibionic-group="Automation">
-        <summary>Automation</summary>
+        <summary>Auto regenerate</summary>
         <div class="lumibionic-group-body">
       <div class="lumibionic-section">
 
@@ -3294,7 +3374,7 @@ export function setup(ctx) {
 
         <div class="lumibionic-control">
           <div class="lumibionic-row">
-            <label for="lb-auto-regen-max">Maximum retries for the same reply</label>
+            <label for="lb-auto-regen-max">Retry limit per reply</label>
             <span class="lumibionic-value" id="lb-auto-regen-max-value"></span>
           </div>
           <input id="lb-auto-regen-max" type="range" min="1" max="10" step="1">
@@ -3369,13 +3449,12 @@ export function setup(ctx) {
         </div>
 
         <div class="lumibionic-muted">
-          Tap an item to hide or show that toolbar control.
-          This includes the extension's Top of latest message button.
+          Tap a button to hide or show it in the chat toolbar.
         </div>
 
         <div class="lumibionic-control">
           <div class="lumibionic-row">
-            <label for="lb-toolbar-spacing">Toolbar button gap</label>
+            <label for="lb-toolbar-spacing">Button spacing</label>
             <span class="lumibionic-value" id="lb-toolbar-spacing-value"></span>
           </div>
           <input
@@ -3393,8 +3472,8 @@ export function setup(ctx) {
 <div class="lumibionic-toolbar-grid" id="lb-toolbar-grid"></div>
 
         <div class="lumibionic-toolbar-actions">
-          <button type="button" id="lb-toolbar-hide-all">Hide all listed</button>
-          <button type="button" id="lb-toolbar-show-all">Show all listed</button>
+          <button type="button" id="lb-toolbar-hide-all">Hide all</button>
+          <button type="button" id="lb-toolbar-show-all">Show all</button>
         </div>
 
         <div class="lumibionic-muted" id="lb-toolbar-match-status">
@@ -3402,8 +3481,7 @@ export function setup(ctx) {
         </div>
 
         <div class="lumibionic-muted">
-          If the old custom CSS block is still active elsewhere, remove it first;
-          otherwise it will keep these buttons hidden regardless of this setting.
+          If a shown button is missing, check Lumiverse's own toolbar settings.
         </div>
 
       </div>
@@ -3422,12 +3500,15 @@ export function setup(ctx) {
         </div>
       </div>
 
+      <div class="lumibionic-reset-footer" data-lumibionic-category="tools">
+        <div class="lumibionic-muted">Restore reading, font, toolbar and automation settings.</div>
       <button
         type="button"
         id="lb-reset"
       >
-        Reset defaults
+        Restore defaults
       </button>
+      </div>
 
     </div>
   `
@@ -3553,6 +3634,8 @@ export function setup(ctx) {
     try {
       const saved = JSON.parse(localStorage.getItem(UI_STATE_KEY) || '{}')
       return {
+        activeCategory: ['reading', 'toolbar', 'lorebooks', 'tools'].includes(saved.activeCategory)
+          ? saved.activeCategory : 'reading',
         previewVisible:
           typeof saved.previewVisible === 'boolean'
             ? saved.previewVisible
@@ -3563,7 +3646,7 @@ export function setup(ctx) {
             : {},
       }
     } catch {
-      return { previewVisible: true, sections: {} }
+      return { activeCategory: 'reading', previewVisible: true, sections: {} }
     }
   }
 
@@ -3613,6 +3696,41 @@ export function setup(ctx) {
 
     const previewSection = preview.closest('.lumibionic-section')
     const headingBlock = settingsRoot.firstElementChild
+    const categories = [
+      ['reading', 'Reading'],
+      ['toolbar', 'Toolbar'],
+      ['lorebooks', 'Lorebooks'],
+      ['tools', 'Tools'],
+    ]
+    const groupCategories = {
+      'Reading & Typography': 'reading',
+      'Chat Toolbar': 'toolbar',
+      'Lorebook Organizer': 'lorebooks',
+      Settings: 'tools',
+      'FF5 Thinking Fix': 'tools',
+      Automation: 'tools',
+    }
+    settingsRoot.querySelectorAll('.lumibionic-group').forEach(group => {
+      const category = groupCategories[group.getAttribute('data-lumibionic-group')]
+      group.dataset.lumibionicCategory = category
+      if (category !== 'tools') {
+        group.classList.add('lumibionic-category-root')
+        group.open = true
+      }
+    })
+    const preferencesGroup = settingsRoot.querySelector('[data-lumibionic-group="Settings"]')
+    const automationGroup = settingsRoot.querySelector('[data-lumibionic-group="Automation"]')
+    if (preferencesGroup && automationGroup) {
+      automationGroup.insertAdjacentElement('afterend', preferencesGroup)
+    }
+    const navigation = document.createElement('div')
+    navigation.className = 'lumibionic-panel-nav'
+    navigation.setAttribute('role', 'tablist')
+    navigation.setAttribute('aria-label', 'Bionic settings')
+    navigation.innerHTML = categories.map(([key, label]) => `
+      <button type="button" role="tab" data-panel-category="${key}">${label}</button>
+    `).join('')
+    let syncPreviewVisibility = () => {}
 
     if (previewSection && headingBlock) {
       previewSection.classList.add('lumibionic-preview-section')
@@ -3632,7 +3750,8 @@ export function setup(ctx) {
 
       const previewToggle = toolbar.querySelector('#lb-toggle-preview')
 
-      const syncPreviewVisibility = () => {
+      syncPreviewVisibility = () => {
+        previewSection.hidden = uiState.activeCategory !== 'reading'
         previewSection.classList.toggle(
           'lumibionic-preview-visible',
           uiState.previewVisible
@@ -3666,11 +3785,13 @@ export function setup(ctx) {
       syncPreviewVisibility()
     }
 
+    if (headingBlock) headingBlock.insertAdjacentElement('afterend', navigation)
+
     const uiActions = document.createElement('div')
     uiActions.className = 'lumibionic-ui-actions'
     uiActions.innerHTML = `
-      <button type="button" id="lb-collapse-all">Collapse settings</button>
-      <button type="button" id="lb-expand-all">Expand settings</button>
+      <button type="button" id="lb-collapse-all">Collapse sections</button>
+      <button type="button" id="lb-expand-all">Expand sections</button>
     `
 
     if (previewSection) {
@@ -3680,6 +3801,12 @@ export function setup(ctx) {
     }
 
     const sectionControllers = []
+    const sectionNames = {
+      'Bionic emphasis': 'Bionic reading',
+      'Font override': 'Font',
+      'Long-form reading': 'Layout',
+      'Message typography': 'Text size & spacing',
+    }
 
     tab.root
       .querySelectorAll('.lumibionic-section')
@@ -3688,6 +3815,12 @@ export function setup(ctx) {
 
         const title = section.querySelector(':scope > .lumibionic-section-title')
         if (!title) return
+
+        if (section.closest('.lumibionic-group')?.dataset.lumibionicCategory !== 'reading'
+          || title.textContent.trim() === 'Preset') {
+          title.remove()
+          return
+        }
 
         const key = sectionKey(title.textContent || 'section')
         const body = document.createElement('div')
@@ -3701,7 +3834,7 @@ export function setup(ctx) {
         const toggle = document.createElement('button')
         toggle.type = 'button'
         toggle.className = 'lumibionic-section-toggle'
-        toggle.textContent = title.textContent.trim()
+        toggle.textContent = sectionNames[title.textContent.trim()] || title.textContent.trim()
 
         title.replaceWith(toggle)
         section.appendChild(body)
@@ -3710,7 +3843,7 @@ export function setup(ctx) {
         const initialExpanded =
           typeof savedExpanded === 'boolean'
             ? savedExpanded
-            : false
+            : ['bionic-emphasis', 'message-typography'].includes(key)
 
         const setExpanded = (expanded, persist = true) => {
           body.classList.toggle(
@@ -3750,6 +3883,48 @@ export function setup(ctx) {
       ?.addEventListener('click', () => {
         for (const setExpanded of sectionControllers) setExpanded(true)
       })
+
+    const selectCategory = (category, persist = true) => {
+      uiState = { ...uiState, activeCategory: category }
+      settingsRoot.querySelectorAll('[data-lumibionic-category]').forEach(group => {
+        group.hidden = group.dataset.lumibionicCategory !== category
+      })
+      navigation.querySelectorAll('[data-panel-category]').forEach(button => {
+        const active = button.dataset.panelCategory === category
+        button.setAttribute('aria-selected', String(active))
+        button.tabIndex = active ? 0 : -1
+      })
+      uiActions.hidden = category !== 'reading'
+      syncPreviewVisibility()
+      if (persist) {
+        saveUiState()
+        // Return to the start of the selected view in the drawer's scroll area.
+        let scroller = settingsRoot.parentElement
+        while (scroller && scroller !== document.body) {
+          if (/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)) {
+            scroller.scrollTop = 0
+            break
+          }
+          scroller = scroller.parentElement
+        }
+      }
+    }
+    navigation.addEventListener('click', event => {
+      const button = event.target.closest('[data-panel-category]')
+      if (button) selectCategory(button.dataset.panelCategory)
+    })
+    navigation.addEventListener('keydown', event => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+      const buttons = Array.from(navigation.querySelectorAll('[data-panel-category]'))
+      const current = buttons.indexOf(document.activeElement)
+      if (current < 0) return
+      event.preventDefault()
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
+        : (current + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length
+      selectCategory(buttons[next].dataset.panelCategory)
+      buttons[next].focus()
+    })
+    selectCategory(uiState.activeCategory, false)
   }
 
   setupCollapsibleUi()
@@ -3848,6 +4023,7 @@ export function setup(ctx) {
       const hidden = Boolean(settings.toolbarHidden?.[key])
       button.dataset.hidden = String(hidden)
       button.setAttribute('aria-pressed', String(hidden))
+      button.setAttribute('aria-label', `${TOOLBAR_BUTTONS.find(item => item.key === key)?.label}: ${hidden ? 'hidden; click to show' : 'shown; click to hide'}`)
 
       const state = button.querySelector('small')
       if (state) state.textContent = hidden ? 'Hidden' : 'Shown'
@@ -5908,6 +6084,10 @@ export function setup(ctx) {
       '.lumibionic-group'
     )
     .forEach(details => {
+      if (details.classList.contains('lumibionic-category-root')) {
+        details.open = true
+        return
+      }
       const key =
         details.getAttribute(
           'data-lumibionic-group'
