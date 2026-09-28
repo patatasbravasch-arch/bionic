@@ -1,4 +1,4 @@
-// src/lorebook-organizer-core.ts
+// ../../tmp/bionic-organizer-build.u50gHn/src/lorebook-organizer-core.ts
 function uniqueStrings(value) {
   if (!Array.isArray(value))
     return [];
@@ -131,7 +131,7 @@ function summarizeReferences(refs) {
   return parts.length ? parts.join(" · ") : "no references";
 }
 
-// src/lorebook-organizer-frontend.ts
+// ../../tmp/bionic-organizer-build.u50gHn/src/lorebook-organizer-frontend.ts
 var CONNECTION_KEY = "lumiverse:bionic-style-reading:lore-organizer-connection";
 var IGNORED_FOLDER = "Bionic — Ignored";
 var AI_BATCH_SIZE = 70;
@@ -240,6 +240,7 @@ function installLorebookOrganizer(ctx, settingsRoot, options = {}) {
         reject(new Error(`${type} timed out.`));
       }, timeoutMs);
       pending.set(id, {
+        resultType: type === "bionic_lore_ai_organize" ? "bionic_lore_ai_result" : `${type}_result`,
         resolve,
         reject,
         timer
@@ -263,6 +264,9 @@ function installLorebookOrganizer(ctx, settingsRoot, options = {}) {
       return false;
     }
     const request = pending.get(id);
+    if (payload?.type !== request.resultType) {
+      return true;
+    }
     pending.delete(id);
     clearTimeout(request.timer);
     if (payload?.error) {
@@ -272,16 +276,16 @@ function installLorebookOrganizer(ctx, settingsRoot, options = {}) {
     }
     return true;
   }
-  async function api(path, options2 = {}) {
+  async function api(path, options = {}) {
     const response = await fetch(path, {
       credentials: "same-origin",
       cache: "no-store",
-      ...options2,
+      ...options,
       headers: {
-        ...options2.body ? {
+        ...options.body ? {
           "Content-Type": "application/json"
         } : {},
-        ...options2.headers || {}
+        ...options.headers || {}
       }
     });
     if (!response.ok) {
@@ -641,6 +645,7 @@ Bionic will refresh all four reference sources first.`)) {
     }
     busy = true;
     suggestions = [];
+    let completionMessage = "";
     try {
       const compactBooks = books.map((book) => ({
         id: book.id,
@@ -651,14 +656,14 @@ Bionic will refresh all four reference sources first.`)) {
         sampleKeys: Array.isArray(book.entries) ? book.entries : []
       }));
       const connectionId = selectedConnectionId();
-      const batchCount = Math.ceil(compactBooks.length / AI_BATCH_SIZE);
       const merged = new Map;
-      for (let offset = 0;offset < compactBooks.length; offset += AI_BATCH_SIZE) {
-        const batch = compactBooks.slice(offset, offset + AI_BATCH_SIZE);
-        const batchNumber = Math.floor(offset / AI_BATCH_SIZE) + 1;
+      for (let offset = 0;offset < compactBooks.length; ) {
+        const batchSize = compactBooks.length - offset === AI_BATCH_SIZE + 1 ? AI_BATCH_SIZE - 1 : AI_BATCH_SIZE;
+        const batch = compactBooks.slice(offset, offset + batchSize);
         const first = offset + 1;
         const last = Math.min(offset + batch.length, compactBooks.length);
-        renderAll(`AI is analyzing folder groups… ${first}–${last} of ${compactBooks.length} · batch ${batchNumber}/${batchCount}`);
+        renderAll(`Suggesting folders… ${first}–${last} of ${compactBooks.length} lorebooks`);
+        offset += batch.length;
         const result = await sendBackend("bionic_lore_ai_organize", {
           connectionId,
           books: batch
@@ -694,11 +699,12 @@ Bionic will refresh all four reference sources first.`)) {
         }
       }
       suggestions = Array.from(merged.values()).filter((suggestion) => suggestion.bookIds.length >= 2).sort((a, b) => a.name.localeCompare(b.name));
-      renderAll(suggestions.length ? `AI suggested ${suggestions.length} folder${suggestions.length === 1 ? "" : "s"} across ${batchCount} batch${batchCount === 1 ? "" : "es"}. Nothing has been changed yet.` : "AI returned no useful multi-book folder suggestions.");
+      completionMessage = suggestions.length ? `AI suggested ${suggestions.length} folder${suggestions.length === 1 ? "" : "s"}. Review your selections, then apply.` : "AI returned no useful multi-book folder suggestions.";
     } catch (error) {
-      renderAll(`AI organize failed: ${error?.message || String(error)}`);
+      completionMessage = `AI organize failed: ${error?.message || String(error)}`;
     } finally {
       busy = false;
+      renderAll(completionMessage);
     }
   }
   async function applyAssignments(assignments) {
@@ -718,9 +724,11 @@ Bionic will refresh all four reference sources first.`)) {
         folder: byId.get(book.id) ?? book.folder
       }));
       rebuildGroups();
+      busy = false;
       renderAll(`Applied ${assignments.length} folder assignment${assignments.length === 1 ? "" : "s"}.`);
       return true;
     } catch (error) {
+      busy = false;
       renderAll(`Folder update failed: ${error?.message || String(error)}`);
       return false;
     } finally {
@@ -771,7 +779,7 @@ Bionic will refresh all four reference sources first.`)) {
         justify-content: center;
         min-height: 36px;
         padding: 8px 13px !important;
-        margin: 2px 4px 2px 0;
+        margin: 0;
         border:
           1px solid
           rgba(255,255,255,.17) !important;
@@ -824,9 +832,10 @@ Bionic will refresh all four reference sources first.`)) {
       }
 
       .lb-organizer-shell {
-        width: min(1050px, 88vw);
-        height: min(76vh, 800px);
-        min-height: 500px;
+        width: min(1050px, calc(100vw - 64px));
+        max-width: 100%;
+        height: min(76dvh, 800px);
+        min-height: 0;
         display: grid;
         grid-template-rows: auto auto auto minmax(0, 1fr);
         gap: 12px;
@@ -847,7 +856,7 @@ Bionic will refresh all four reference sources first.`)) {
       }
 
       .lb-organizer-hero-title {
-        font-size: 1.05rem;
+        font-size: .95rem;
         font-weight: 700;
       }
 
@@ -877,6 +886,17 @@ Bionic will refresh all four reference sources first.`)) {
         flex: 0 1 180px;
       }
 
+      .lb-organizer-shell input:not([type="checkbox"]),
+      .lb-organizer-shell select {
+        min-height: 38px;
+        padding: 8px 10px;
+        border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+        border-radius: 9px;
+        background: var(--lumiverse-bg, #101019);
+        color: inherit;
+        font: inherit;
+      }
+
       .lb-organizer-tabs {
         display: flex;
         flex-wrap: wrap;
@@ -899,6 +919,9 @@ Bionic will refresh all four reference sources first.`)) {
         min-height: 0;
         overflow-y: auto;
         padding-right: 4px;
+        scrollbar-width: thin;
+        scrollbar-color: color-mix(in srgb, currentColor 35%, transparent) transparent;
+        scrollbar-gutter: stable;
       }
 
       .lb-organizer-grid {
@@ -1030,6 +1053,17 @@ Bionic will refresh all four reference sources first.`)) {
         margin-bottom: 12px;
       }
 
+      .lb-organizer-field {
+        display: grid;
+        gap: 5px;
+        min-width: 0;
+        font-size: .82rem;
+      }
+
+      .lb-organizer-ai-controls > button {
+        align-self: end;
+      }
+
       .lb-organizer-suggestion {
         display: grid;
         gap: 10px;
@@ -1046,6 +1080,7 @@ Bionic will refresh all four reference sources first.`)) {
 
 
       .lb-organizer-buttonlike,
+      .lb-organizer-ai-controls button,
       .lb-organizer-actions button,
       .lb-organizer-toolbar button,
       .lb-organizer-card button,
@@ -1071,6 +1106,7 @@ Bionic will refresh all four reference sources first.`)) {
       }
 
       .lb-organizer-buttonlike:hover,
+      .lb-organizer-ai-controls button:hover,
       .lb-organizer-actions button:hover,
       .lb-organizer-toolbar button:hover,
       .lb-organizer-card button:hover,
@@ -1080,6 +1116,7 @@ Bionic will refresh all four reference sources first.`)) {
       }
 
       .lb-organizer-buttonlike:active,
+      .lb-organizer-ai-controls button:active,
       .lb-organizer-actions button:active,
       .lb-organizer-toolbar button:active,
       .lb-organizer-card button:active,
@@ -1089,6 +1126,7 @@ Bionic will refresh all four reference sources first.`)) {
       }
 
       .lb-organizer-buttonlike:focus-visible,
+      .lb-organizer-ai-controls button:focus-visible,
       .lb-organizer-actions button:focus-visible,
       .lb-organizer-toolbar button:focus-visible,
       .lb-organizer-card button:focus-visible,
@@ -1101,6 +1139,7 @@ Bionic will refresh all four reference sources first.`)) {
       }
 
       .lb-organizer-buttonlike[disabled],
+      .lb-organizer-ai-controls button[disabled],
       .lb-organizer-actions button[disabled],
       .lb-organizer-toolbar button[disabled],
       .lb-organizer-card button[disabled],
@@ -1128,14 +1167,13 @@ Bionic will refresh all four reference sources first.`)) {
 
       @media (max-width: 700px) {
         .lb-organizer-shell {
-          width: 86vw;
-          height: 72vh;
-          min-height: 430px;
+          width: calc(100vw - 48px);
+          height: 72dvh;
         }
 
         .lb-organizer-hero {
           align-items: flex-start;
-          flex-direction: column;
+          flex-wrap: wrap;
         }
 
         .lb-organizer-ai-controls {
@@ -2657,27 +2695,28 @@ Bionic will refresh characters, chats, personas and global activation immediatel
     ]));
     return `
       <div class="lb-organizer-ai-controls">
+        <label class="lb-organizer-field" for="lb-organizer-connection">
+          AI connection
         <select
           id="lb-organizer-connection"
           ${busy ? "disabled" : ""}
         >
           ${connectionOptions()}
         </select>
+        </label>
 
         <button
           type="button"
           data-organizer-ai-analyze
           ${busy || books.length < 2 ? "disabled" : ""}
         >
-          Analyze library
+          Suggest folders
         </button>
       </div>
 
       <div class="lb-organizer-meta" style="margin-bottom:12px">
-        The LLM only proposes folder names and membership.
-        It cannot delete, merge, rename or rewrite lorebooks.
-        Nothing moves until you press Apply.
-        Libraries larger than 70 books are analyzed in batches.
+        Review folder suggestions, then apply the books you select.
+        Lorebook content stays unchanged.
       </div>
 
       ${suggestions.length ? `
@@ -2687,7 +2726,7 @@ Bionic will refresh characters, chats, personas and global activation immediatel
                 data-organizer-apply-all
                 ${busy ? "disabled" : ""}
               >
-                Apply all selected suggestions
+                Apply selected folders
               </button>
             </div>
 
@@ -2744,7 +2783,7 @@ Bionic will refresh characters, chats, personas and global activation immediatel
                       data-organizer-apply-suggestion="${index}"
                       ${busy ? "disabled" : ""}
                     >
-                      Apply this folder
+                      Apply folder
                     </button>
                   </div>
                 </div>
@@ -2752,7 +2791,7 @@ Bionic will refresh characters, chats, personas and global activation immediatel
             </div>
           ` : `
             <div class="lb-organizer-empty">
-              ${books.length ? "Choose a connection and analyze the library for folder suggestions." : "Scan the library before using AI Organize."}
+              ${books.length ? "Choose an AI connection, then suggest folders for your library." : "Scan your library to get folder suggestions."}
             </div>
           `}
     `;
@@ -2785,7 +2824,7 @@ Bionic will refresh characters, chats, personas and global activation immediatel
           <div class="lb-organizer-hero-left">
             <div>
               <div class="lb-organizer-hero-title">
-                Bionic Lorebook Organizer
+                Your library
               </div>
 
               <div class="lb-organizer-hero-sub">
@@ -2811,12 +2850,14 @@ Bionic will refresh characters, chats, personas and global activation immediatel
             id="lb-organizer-search"
             type="search"
             placeholder="Search lorebooks, folders, IDs or references"
+            aria-label="Search lorebooks"
             value="${escapeHtml(searchText)}"
           >
 
           <select
             class="lb-organizer-sort"
             id="lb-organizer-sort"
+            aria-label="Sort lorebooks"
           >
             <option value="name" ${sortMode === "name" ? "selected" : ""}>
               Sort: name
@@ -2834,13 +2875,13 @@ Bionic will refresh characters, chats, personas and global activation immediatel
         </div>
 
         <div>
-          <div class="lb-organizer-tabs">
+          <div class="lb-organizer-tabs" role="tablist" aria-label="Lorebook views">
             ${[
-      ["overview", "Overview"],
-      ["duplicates", "Exact Duplicates"],
-      ["similar", "Similar Names"],
+      ["overview", "Library"],
+      ["duplicates", "Duplicates"],
+      ["similar", "Similar names"],
       ["unlinked", "Unlinked"],
-      ["ai", "AI Organize"]
+      ["ai", "AI folders"]
     ].map(([key, label]) => `
               <button
                 type="button"
@@ -2855,7 +2896,7 @@ Bionic will refresh characters, chats, personas and global activation immediatel
             `).join("")}
           </div>
 
-          <div class="lb-organizer-status">
+          <div class="lb-organizer-status" role="status" aria-live="polite">
             ${escapeHtml(statusMessage)}
           </div>
         </div>
@@ -2913,7 +2954,7 @@ Bionic will refresh characters, chats, personas and global activation immediatel
     if (modal)
       return;
     modal = ctx.ui.showModal({
-      title: "Lorebook Organizer",
+      title: "Lorebook organizer",
       width: 1100,
       maxHeight: 900,
       persistent: false
@@ -3296,7 +3337,7 @@ Bionic will refresh characters, chats, personas and global activation immediatel
   };
 }
 
-// src/frontend.ts
+// ../../tmp/bionic-organizer-build.u50gHn/src/frontend.ts
 var BIONIC_DRAWER_ICON_SVG = `
 <svg
   xmlns="http://www.w3.org/2000/svg"
@@ -3389,15 +3430,15 @@ function setup(ctx) {
     { key: "autoRegenerate", label: "Auto regenerate", title: "Auto regenerate", className: "lb-hide-toolbar-auto-regenerate" },
     { key: "regenerate", label: "Regenerate", title: "Regenerate", className: "lb-hide-toolbar-regenerate" },
     { key: "continue", label: "Continue", title: "Continue", className: "lb-hide-toolbar-continue" },
-    { key: "oneLiner", label: "One-liner nudge", title: "One-liner: Chat history + impersonation nudge only", className: "lb-hide-toolbar-one-liner" },
+    { key: "oneLiner", label: "Impersonate / one-liner nudge", title: "One-liner: Chat history + impersonation nudge only", titles: ["Impersonate", "One-liner"], className: "lb-hide-toolbar-one-liner" },
     { key: "persona", label: "Switch persona", title: "Switch persona for this chat", className: "lb-hide-toolbar-persona" },
-    { key: "connection", label: "Connection", title: "Connection:", className: "lb-hide-toolbar-connection" },
+    { key: "connection", label: "Connection", title: "Connection:", titles: ["Connection:", "Switch connection"], className: "lb-hide-toolbar-connection" },
     { key: "alternateFields", label: "Alternate fields", title: "Alternate fields", className: "lb-hide-toolbar-alternate-fields" },
     { key: "guidedGenerations", label: "Guided generations", title: "Guided generations", className: "lb-hide-toolbar-guided" },
     { key: "quickReplies", label: "Quick replies", title: "Quick replies", className: "lb-hide-toolbar-quick-replies" },
     { key: "tools", label: "Tools", title: "Tools", className: "lb-hide-toolbar-tools" },
     { key: "extras", label: "Extras", title: "Extras", className: "lb-hide-toolbar-extras" },
-    { key: "customizeToolbar", label: "Customize toolbar", title: "Customize toolbar", className: "lb-hide-toolbar-customize" },
+    { key: "customizeToolbar", label: "Customize toolbar / composer", title: "Customize toolbar", titles: ["Customize toolbar", "Customize composer"], className: "lb-hide-toolbar-customize" },
     {
       key: "attachments",
       label: "Attachments / paperclip",
@@ -4144,6 +4185,12 @@ function setup(ctx) {
       box-shadow: 0 8px 24px rgba(0,0,0,.28);
     }
 
+    .lumibionic-preview-section.lumibionic-preview-visible {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+    }
+
     .lumibionic-preview-toolbar {
       display: flex;
       align-items: center;
@@ -4530,7 +4577,7 @@ function setup(ctx) {
       return node.nodeType === Node.TEXT_NODE && Boolean(node.textContent?.trim());
     });
   }
-  function applyFontLockToRoot(root, font2, messageSize) {
+  function applyFontLockToRoot(root, font, messageSize) {
     if (!root)
       return;
     const targets = new Set;
@@ -4549,7 +4596,7 @@ function setup(ctx) {
       if (element instanceof Element && isProtectedFontElement(element)) {
         continue;
       }
-      element.style.setProperty("font-family", font2, "important");
+      element.style.setProperty("font-family", font, "important");
       if (messageSize) {
         element.style.setProperty("font-size", messageSize, "important");
       }
@@ -4557,7 +4604,7 @@ function setup(ctx) {
     }
     root.querySelectorAll?.("*").forEach((element) => {
       if (element.shadowRoot) {
-        applyFontLockToRoot(element.shadowRoot, font2, messageSize);
+        applyFontLockToRoot(element.shadowRoot, font, messageSize);
       }
     });
   }
@@ -4886,6 +4933,27 @@ function setup(ctx) {
     return Boolean(button.querySelector('svg.lucide-paperclip, svg[class*="paperclip"]'));
   }
   function toolbarItemForButton(button) {
+    const actionKeys = {
+      home: "backHome",
+      regen: "regenerate",
+      continue: "continue",
+      oneliner: "oneLiner",
+      persona: "persona",
+      connections: "connection",
+      altFields: "alternateFields",
+      guides: "guidedGenerations",
+      quickReplies: "quickReplies",
+      tools: "tools",
+      extras: "extras",
+      "chat.customize-composer": "customizeToolbar"
+    };
+    const composerAction = button.closest("[data-composer-action]");
+    const actionKey = actionKeys[composerAction?.getAttribute("data-composer-action")] || (button.hasAttribute(SCROLL_LATEST_BUTTON_ATTR) ? "latestMessageTop" : null) || (button.hasAttribute(AUTO_REGENERATE_BUTTON_ATTR) ? "autoRegenerate" : null) || (button.getAttribute("data-composer-pinned") === "customize" ? "customizeToolbar" : null);
+    if (actionKey) {
+      return TOOLBAR_BUTTONS.find((item) => item.key === actionKey) || null;
+    }
+    if (composerAction)
+      return null;
     if (isAttachmentButton(button)) {
       return TOOLBAR_BUTTONS.find((item) => item.key === "attachments") || null;
     }
@@ -4899,7 +4967,9 @@ function setup(ctx) {
   }
   function findToolbarButtons() {
     const buttons = new Set;
-    document.querySelectorAll('[data-component="InputArea"] button, ' + '[data-spindle-mount="chat_toolbar"] button').forEach((button) => buttons.add(button));
+    const nativeBar = getNativeComposerActionBar()?.actionBar;
+    nativeBar?.querySelectorAll("button").forEach((button) => buttons.add(button));
+    document.querySelectorAll((nativeBar ? "" : '[data-component="InputArea"] button, ') + '[data-spindle-mount="chat_toolbar"] button, ' + '[data-component="InputArea"] button:has(svg[class*="paperclip"]), ' + '[data-component="InputArea"] [data-spindle-mount="chat_input_tools_left"] + button, ' + '[data-component="QuickToolbar"] button[title="Customize toolbar"], ' + '[data-component="QuickToolbar"] button[aria-label="Customize toolbar"]').forEach((button) => buttons.add(button));
     return Array.from(buttons);
   }
   function findNativeRegenerateButton() {
@@ -4924,8 +4994,13 @@ function setup(ctx) {
       button.style.setProperty("margin-inline", `${halfSpacing}px`, "important");
       button.setAttribute("data-lumibionic-toolbar-spacing", String(spacing));
       const item = toolbarItemForButton(button);
-      if (!item)
+      if (!item) {
+        if (button.hasAttribute("data-lumibionic-toolbar-hidden")) {
+          button.style.removeProperty("display");
+          button.removeAttribute("data-lumibionic-toolbar-hidden");
+        }
         continue;
+      }
       matched += 1;
       const shouldHide = Boolean(settings.toolbarHidden?.[item.key]);
       if (shouldHide) {
@@ -5563,17 +5638,17 @@ function setup(ctx) {
         class="lumibionic-group"
         data-lumibionic-group="Lorebook Organizer"
       >
-        <summary>Lorebook Organizer</summary>
+        <summary>Lorebooks</summary>
 
         <div class="lumibionic-group-body">
           <div class="lumibionic-section">
             <div class="lb-organizer-summary">
               <div class="lb-organizer-brand">
                 <div class="lb-organizer-brand-copy">
-                  <strong>Bionic Lorebook Organizer</strong>
+                  <strong>Clean up and organize</strong>
                   <small>
-                    Reference-aware cleanup and AI-assisted folder organization.
-                    Characters, chats, personas and global activation are all checked.
+                    Review duplicates, check links and organize books into folders.
+                    Checks character, chat, persona and global references.
                   </small>
                 </div>
               </div>
@@ -5590,7 +5665,7 @@ function setup(ctx) {
                   type="button"
                   id="lb-lore-organizer-open"
                 >
-                  Open Lorebook Organizer
+                  Open organizer
                 </button>
 
                 <button
@@ -5822,6 +5897,7 @@ function setup(ctx) {
         previewLabel.remove();
       const previewToggle = toolbar.querySelector("#lb-toggle-preview");
       const syncPreviewVisibility = () => {
+        previewSection.classList.toggle("lumibionic-preview-visible", uiState.previewVisible);
         if (previewControl) {
           previewControl.classList.toggle("lumibionic-hidden", !uiState.previewVisible);
         }
@@ -6506,7 +6582,7 @@ function setup(ctx) {
   async function loreBookEntries(bookId) {
     return lorePaged(`/api/v1/world-books/${encodeURIComponent(bookId)}/entries`);
   }
-  function characterLoreIds2(character) {
+  function characterLoreIds(character) {
     if (Array.isArray(character?.world_book_ids)) {
       return character.world_book_ids.filter((id) => typeof id === "string");
     }
@@ -6561,7 +6637,7 @@ function setup(ctx) {
   function cardRefsByBook(characters) {
     const refs = new Map;
     for (const character of characters) {
-      for (const bookId of characterLoreIds2(character)) {
+      for (const bookId of characterLoreIds(character)) {
         const current = refs.get(bookId) || [];
         current.push({
           id: character.id,
@@ -6572,7 +6648,7 @@ function setup(ctx) {
     }
     return refs;
   }
-  function shortLoreId2(id) {
+  function shortLoreId(id) {
     const text = String(id || "");
     if (text.length <= 18)
       return text;
@@ -6631,7 +6707,7 @@ function setup(ctx) {
                     <code
                       class="lumibionic-lorebook-id"
                       title="${escapeLoreHtml(book.id)}"
-                    >${escapeLoreHtml(shortLoreId2(book.id))}</code>
+                    >${escapeLoreHtml(shortLoreId(book.id))}</code>
                   </div>
 
                   <div class="lumibionic-lorebook-meta">
@@ -6679,7 +6755,7 @@ function setup(ctx) {
                         <code
                           class="lumibionic-lorebook-id"
                           title="${escapeLoreHtml(book.id)}"
-                        >${escapeLoreHtml(shortLoreId2(book.id))}</code>
+                        >${escapeLoreHtml(shortLoreId(book.id))}</code>
                       </div>
 
                       <div class="lumibionic-lorebook-name">
@@ -6792,7 +6868,7 @@ function setup(ctx) {
     let relinkedCardCount = 0;
     let deletedCount = 0;
     for (const character of loreCleanupCharacters) {
-      const current = characterLoreIds2(character);
+      const current = characterLoreIds(character);
       if (!current.some((id) => duplicateSet.has(id))) {
         continue;
       }
@@ -7015,7 +7091,9 @@ The current scan found no character card referencing it. This cannot be undone.`
       "title",
       "aria-label",
       "data-tooltip",
-      "data-title"
+      "data-title",
+      "data-composer-action",
+      "data-composer-pinned"
     ]
   });
   const GROUP_STATE_KEY = `${UI_STATE_KEY}:groups`;

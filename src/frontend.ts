@@ -94,15 +94,15 @@ export function setup(ctx) {
     { key: 'autoRegenerate', label: 'Auto regenerate', title: 'Auto regenerate', className: 'lb-hide-toolbar-auto-regenerate' },
     { key: 'regenerate', label: 'Regenerate', title: 'Regenerate', className: 'lb-hide-toolbar-regenerate' },
     { key: 'continue', label: 'Continue', title: 'Continue', className: 'lb-hide-toolbar-continue' },
-    { key: 'oneLiner', label: 'One-liner nudge', title: 'One-liner: Chat history + impersonation nudge only', className: 'lb-hide-toolbar-one-liner' },
+    { key: 'oneLiner', label: 'Impersonate / one-liner nudge', title: 'One-liner: Chat history + impersonation nudge only', titles: ['Impersonate', 'One-liner'], className: 'lb-hide-toolbar-one-liner' },
     { key: 'persona', label: 'Switch persona', title: 'Switch persona for this chat', className: 'lb-hide-toolbar-persona' },
-    { key: 'connection', label: 'Connection', title: 'Connection:', className: 'lb-hide-toolbar-connection' },
+    { key: 'connection', label: 'Connection', title: 'Connection:', titles: ['Connection:', 'Switch connection'], className: 'lb-hide-toolbar-connection' },
     { key: 'alternateFields', label: 'Alternate fields', title: 'Alternate fields', className: 'lb-hide-toolbar-alternate-fields' },
     { key: 'guidedGenerations', label: 'Guided generations', title: 'Guided generations', className: 'lb-hide-toolbar-guided' },
     { key: 'quickReplies', label: 'Quick replies', title: 'Quick replies', className: 'lb-hide-toolbar-quick-replies' },
     { key: 'tools', label: 'Tools', title: 'Tools', className: 'lb-hide-toolbar-tools' },
     { key: 'extras', label: 'Extras', title: 'Extras', className: 'lb-hide-toolbar-extras' },
-    { key: 'customizeToolbar', label: 'Customize toolbar', title: 'Customize toolbar', className: 'lb-hide-toolbar-customize' },
+    { key: 'customizeToolbar', label: 'Customize toolbar / composer', title: 'Customize toolbar', titles: ['Customize toolbar', 'Customize composer'], className: 'lb-hide-toolbar-customize' },
     {
       key: 'attachments',
       label: 'Attachments / paperclip',
@@ -1030,6 +1030,12 @@ export function setup(ctx) {
       border: 1px solid rgba(255,255,255,.14);
       border-radius: 10px;
       box-shadow: 0 8px 24px rgba(0,0,0,.28);
+    }
+
+    .lumibionic-preview-section.lumibionic-preview-visible {
+      position: sticky;
+      top: 0;
+      z-index: 5;
     }
 
     .lumibionic-preview-toolbar {
@@ -2351,6 +2357,32 @@ export function setup(ctx) {
   }
 
   function toolbarItemForButton(button) {
+    // Composer IDs survive translations, mode changes and active-profile labels.
+    const actionKeys = {
+      home: 'backHome',
+      regen: 'regenerate',
+      continue: 'continue',
+      oneliner: 'oneLiner',
+      persona: 'persona',
+      connections: 'connection',
+      altFields: 'alternateFields',
+      guides: 'guidedGenerations',
+      quickReplies: 'quickReplies',
+      tools: 'tools',
+      extras: 'extras',
+      'chat.customize-composer': 'customizeToolbar',
+    }
+    const composerAction = button.closest('[data-composer-action]')
+    const actionKey = actionKeys[composerAction?.getAttribute('data-composer-action')]
+      || (button.hasAttribute(SCROLL_LATEST_BUTTON_ATTR) ? 'latestMessageTop' : null)
+      || (button.hasAttribute(AUTO_REGENERATE_BUTTON_ATTR) ? 'autoRegenerate' : null)
+      || (button.getAttribute('data-composer-pinned') === 'customize' ? 'customizeToolbar' : null)
+
+    if (actionKey) {
+      return TOOLBAR_BUTTONS.find(item => item.key === actionKey) || null
+    }
+    if (composerAction) return null
+
     if (isAttachmentButton(button)) {
       return TOOLBAR_BUTTONS.find(
         item => item.key === 'attachments'
@@ -2378,11 +2410,19 @@ export function setup(ctx) {
 
   function findToolbarButtons() {
     const buttons = new Set()
+    const nativeBar = getNativeComposerActionBar()?.actionBar
+
+    nativeBar?.querySelectorAll('button')
+      .forEach(button => buttons.add(button))
 
     document
       .querySelectorAll(
-        '[data-component="InputArea"] button, ' +
-        '[data-spindle-mount="chat_toolbar"] button'
+        (nativeBar ? '' : '[data-component="InputArea"] button, ') +
+        '[data-spindle-mount="chat_toolbar"] button, ' +
+        '[data-component="InputArea"] button:has(svg[class*="paperclip"]), ' +
+        '[data-component="InputArea"] [data-spindle-mount="chat_input_tools_left"] + button, ' +
+        '[data-component="QuickToolbar"] button[title="Customize toolbar"], ' +
+        '[data-component="QuickToolbar"] button[aria-label="Customize toolbar"]'
       )
       .forEach(button => buttons.add(button))
 
@@ -2457,7 +2497,14 @@ export function setup(ctx) {
       )
 
       const item = toolbarItemForButton(button)
-      if (!item) continue
+      if (!item) {
+        // React can reuse a previously hidden node for a different action.
+        if (button.hasAttribute('data-lumibionic-toolbar-hidden')) {
+          button.style.removeProperty('display')
+          button.removeAttribute('data-lumibionic-toolbar-hidden')
+        }
+        continue
+      }
 
       matched += 1
 
@@ -3270,17 +3317,17 @@ export function setup(ctx) {
         class="lumibionic-group"
         data-lumibionic-group="Lorebook Organizer"
       >
-        <summary>Lorebook Organizer</summary>
+        <summary>Lorebooks</summary>
 
         <div class="lumibionic-group-body">
           <div class="lumibionic-section">
             <div class="lb-organizer-summary">
               <div class="lb-organizer-brand">
                 <div class="lb-organizer-brand-copy">
-                  <strong>Bionic Lorebook Organizer</strong>
+                  <strong>Clean up and organize</strong>
                   <small>
-                    Reference-aware cleanup and AI-assisted folder organization.
-                    Characters, chats, personas and global activation are all checked.
+                    Review duplicates, check links and organize books into folders.
+                    Checks character, chat, persona and global references.
                   </small>
                 </div>
               </div>
@@ -3297,7 +3344,7 @@ export function setup(ctx) {
                   type="button"
                   id="lb-lore-organizer-open"
                 >
-                  Open Lorebook Organizer
+                  Open organizer
                 </button>
 
                 <button
@@ -3586,6 +3633,10 @@ export function setup(ctx) {
       const previewToggle = toolbar.querySelector('#lb-toggle-preview')
 
       const syncPreviewVisibility = () => {
+        previewSection.classList.toggle(
+          'lumibionic-preview-visible',
+          uiState.previewVisible
+        )
         if (previewControl) {
           previewControl.classList.toggle(
             'lumibionic-hidden',
@@ -5832,7 +5883,9 @@ export function setup(ctx) {
         'title',
         'aria-label',
         'data-tooltip',
-        'data-title'
+        'data-title',
+        'data-composer-action',
+        'data-composer-pinned'
       ],
     }
   )

@@ -993,6 +993,7 @@ export async function handleLorebookOrganizerMessage(
           spindleApi.generate
             .quiet as any
         )({
+          userId,
           prompt,
           messages: [
             {

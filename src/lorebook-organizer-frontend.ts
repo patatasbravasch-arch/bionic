@@ -9,6 +9,7 @@ import {
 } from './lorebook-organizer-core'
 
 type BackendRequest = {
+  resultType: string
   resolve: (value: any) => void
   reject: (error: Error) => void
   timer: ReturnType<typeof setTimeout>
@@ -280,6 +281,9 @@ export function installLorebookOrganizer(
           }, timeoutMs)
 
         pending.set(id, {
+          resultType: type === 'bionic_lore_ai_organize'
+            ? 'bionic_lore_ai_result'
+            : `${type}_result`,
           resolve,
           reject,
           timer,
@@ -319,6 +323,11 @@ export function installLorebookOrganizer(
 
     const request =
       pending.get(id)!
+
+    // Progress acknowledges work; only the matching result completes it.
+    if (payload?.type !== request.resultType) {
+      return true
+    }
 
     pending.delete(id)
     clearTimeout(request.timer)
@@ -1377,6 +1386,7 @@ export function installLorebookOrganizer(
 
     busy = true
     suggestions = []
+    let completionMessage = ''
 
     try {
       const compactBooks =
@@ -1400,12 +1410,6 @@ export function installLorebookOrganizer(
       const connectionId =
         selectedConnectionId()
 
-      const batchCount =
-        Math.ceil(
-          compactBooks.length /
-          AI_BATCH_SIZE
-        )
-
       const merged =
         new Map<
           string,
@@ -1415,20 +1419,18 @@ export function installLorebookOrganizer(
       for (
         let offset = 0;
         offset < compactBooks.length;
-        offset += AI_BATCH_SIZE
+        // Advance by the actual batch size below.
       ) {
+        // Leave two books for the last request instead of an invalid singleton.
+        const batchSize = compactBooks.length - offset === AI_BATCH_SIZE + 1
+          ? AI_BATCH_SIZE - 1
+          : AI_BATCH_SIZE
         const batch =
           compactBooks.slice(
             offset,
             offset +
-              AI_BATCH_SIZE
+              batchSize
           )
-
-        const batchNumber =
-          Math.floor(
-            offset /
-              AI_BATCH_SIZE
-          ) + 1
 
         const first =
           offset + 1
@@ -1441,8 +1443,9 @@ export function installLorebookOrganizer(
           )
 
         renderAll(
-          `AI is analyzing folder groups… ${first}–${last} of ${compactBooks.length} · batch ${batchNumber}/${batchCount}`
+          `Suggesting folders… ${first}–${last} of ${compactBooks.length} lorebooks`
         )
+        offset += batch.length
 
         const result =
           await sendBackend(
@@ -1562,20 +1565,17 @@ export function installLorebookOrganizer(
               )
           )
 
-      renderAll(
-        suggestions.length
-          ? `AI suggested ${suggestions.length} folder${suggestions.length === 1 ? '' : 's'} across ${batchCount} batch${batchCount === 1 ? '' : 'es'}. Nothing has been changed yet.`
+      completionMessage = suggestions.length
+          ? `AI suggested ${suggestions.length} folder${suggestions.length === 1 ? '' : 's'}. Review your selections, then apply.`
           : 'AI returned no useful multi-book folder suggestions.'
-      )
     } catch (error: any) {
-      renderAll(
-        `AI organize failed: ${
+      completionMessage = `AI organize failed: ${
           error?.message ||
           String(error)
         }`
-      )
     } finally {
       busy = false
+      renderAll(completionMessage)
     }
   }
 
@@ -1621,12 +1621,14 @@ export function installLorebookOrganizer(
 
       rebuildGroups()
 
+      busy = false
       renderAll(
         `Applied ${assignments.length} folder assignment${assignments.length === 1 ? '' : 's'}.`
       )
 
       return true
     } catch (error: any) {
+      busy = false
       renderAll(
         `Folder update failed: ${
           error?.message ||
@@ -1691,7 +1693,7 @@ export function installLorebookOrganizer(
         justify-content: center;
         min-height: 36px;
         padding: 8px 13px !important;
-        margin: 2px 4px 2px 0;
+        margin: 0;
         border:
           1px solid
           rgba(255,255,255,.17) !important;
@@ -1744,9 +1746,10 @@ export function installLorebookOrganizer(
       }
 
       .lb-organizer-shell {
-        width: min(1050px, 88vw);
-        height: min(76vh, 800px);
-        min-height: 500px;
+        width: min(1050px, calc(100vw - 64px));
+        max-width: 100%;
+        height: min(76dvh, 800px);
+        min-height: 0;
         display: grid;
         grid-template-rows: auto auto auto minmax(0, 1fr);
         gap: 12px;
@@ -1767,7 +1770,7 @@ export function installLorebookOrganizer(
       }
 
       .lb-organizer-hero-title {
-        font-size: 1.05rem;
+        font-size: .95rem;
         font-weight: 700;
       }
 
@@ -1797,6 +1800,17 @@ export function installLorebookOrganizer(
         flex: 0 1 180px;
       }
 
+      .lb-organizer-shell input:not([type="checkbox"]),
+      .lb-organizer-shell select {
+        min-height: 38px;
+        padding: 8px 10px;
+        border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+        border-radius: 9px;
+        background: var(--lumiverse-bg, #101019);
+        color: inherit;
+        font: inherit;
+      }
+
       .lb-organizer-tabs {
         display: flex;
         flex-wrap: wrap;
@@ -1819,6 +1833,9 @@ export function installLorebookOrganizer(
         min-height: 0;
         overflow-y: auto;
         padding-right: 4px;
+        scrollbar-width: thin;
+        scrollbar-color: color-mix(in srgb, currentColor 35%, transparent) transparent;
+        scrollbar-gutter: stable;
       }
 
       .lb-organizer-grid {
@@ -1950,6 +1967,17 @@ export function installLorebookOrganizer(
         margin-bottom: 12px;
       }
 
+      .lb-organizer-field {
+        display: grid;
+        gap: 5px;
+        min-width: 0;
+        font-size: .82rem;
+      }
+
+      .lb-organizer-ai-controls > button {
+        align-self: end;
+      }
+
       .lb-organizer-suggestion {
         display: grid;
         gap: 10px;
@@ -1966,6 +1994,7 @@ export function installLorebookOrganizer(
 
 
       .lb-organizer-buttonlike,
+      .lb-organizer-ai-controls button,
       .lb-organizer-actions button,
       .lb-organizer-toolbar button,
       .lb-organizer-card button,
@@ -1991,6 +2020,7 @@ export function installLorebookOrganizer(
       }
 
       .lb-organizer-buttonlike:hover,
+      .lb-organizer-ai-controls button:hover,
       .lb-organizer-actions button:hover,
       .lb-organizer-toolbar button:hover,
       .lb-organizer-card button:hover,
@@ -2000,6 +2030,7 @@ export function installLorebookOrganizer(
       }
 
       .lb-organizer-buttonlike:active,
+      .lb-organizer-ai-controls button:active,
       .lb-organizer-actions button:active,
       .lb-organizer-toolbar button:active,
       .lb-organizer-card button:active,
@@ -2009,6 +2040,7 @@ export function installLorebookOrganizer(
       }
 
       .lb-organizer-buttonlike:focus-visible,
+      .lb-organizer-ai-controls button:focus-visible,
       .lb-organizer-actions button:focus-visible,
       .lb-organizer-toolbar button:focus-visible,
       .lb-organizer-card button:focus-visible,
@@ -2021,6 +2053,7 @@ export function installLorebookOrganizer(
       }
 
       .lb-organizer-buttonlike[disabled],
+      .lb-organizer-ai-controls button[disabled],
       .lb-organizer-actions button[disabled],
       .lb-organizer-toolbar button[disabled],
       .lb-organizer-card button[disabled],
@@ -2048,14 +2081,13 @@ export function installLorebookOrganizer(
 
       @media (max-width: 700px) {
         .lb-organizer-shell {
-          width: 86vw;
-          height: 72vh;
-          min-height: 430px;
+          width: calc(100vw - 48px);
+          height: 72dvh;
         }
 
         .lb-organizer-hero {
           align-items: flex-start;
-          flex-direction: column;
+          flex-wrap: wrap;
         }
 
         .lb-organizer-ai-controls {
@@ -5202,27 +5234,28 @@ export function installLorebookOrganizer(
 
     return `
       <div class="lb-organizer-ai-controls">
+        <label class="lb-organizer-field" for="lb-organizer-connection">
+          AI connection
         <select
           id="lb-organizer-connection"
           ${busy ? 'disabled' : ''}
         >
           ${connectionOptions()}
         </select>
+        </label>
 
         <button
           type="button"
           data-organizer-ai-analyze
           ${busy || books.length < 2 ? 'disabled' : ''}
         >
-          Analyze library
+          Suggest folders
         </button>
       </div>
 
       <div class="lb-organizer-meta" style="margin-bottom:12px">
-        The LLM only proposes folder names and membership.
-        It cannot delete, merge, rename or rewrite lorebooks.
-        Nothing moves until you press Apply.
-        Libraries larger than 70 books are analyzed in batches.
+        Review folder suggestions, then apply the books you select.
+        Lorebook content stays unchanged.
       </div>
 
       ${
@@ -5234,7 +5267,7 @@ export function installLorebookOrganizer(
                 data-organizer-apply-all
                 ${busy ? 'disabled' : ''}
               >
-                Apply all selected suggestions
+                Apply selected folders
               </button>
             </div>
 
@@ -5297,7 +5330,7 @@ export function installLorebookOrganizer(
                       data-organizer-apply-suggestion="${index}"
                       ${busy ? 'disabled' : ''}
                     >
-                      Apply this folder
+                      Apply folder
                     </button>
                   </div>
                 </div>
@@ -5308,8 +5341,8 @@ export function installLorebookOrganizer(
             <div class="lb-organizer-empty">
               ${
                 books.length
-                  ? 'Choose a connection and analyze the library for folder suggestions.'
-                  : 'Scan the library before using AI Organize.'
+                  ? 'Choose an AI connection, then suggest folders for your library.'
+                  : 'Scan your library to get folder suggestions.'
               }
             </div>
           `
@@ -5359,7 +5392,7 @@ export function installLorebookOrganizer(
           <div class="lb-organizer-hero-left">
             <div>
               <div class="lb-organizer-hero-title">
-                Bionic Lorebook Organizer
+                Your library
               </div>
 
               <div class="lb-organizer-hero-sub">
@@ -5385,12 +5418,14 @@ export function installLorebookOrganizer(
             id="lb-organizer-search"
             type="search"
             placeholder="Search lorebooks, folders, IDs or references"
+            aria-label="Search lorebooks"
             value="${escapeHtml(searchText)}"
           >
 
           <select
             class="lb-organizer-sort"
             id="lb-organizer-sort"
+            aria-label="Sort lorebooks"
           >
             <option value="name" ${sortMode === 'name' ? 'selected' : ''}>
               Sort: name
@@ -5408,13 +5443,13 @@ export function installLorebookOrganizer(
         </div>
 
         <div>
-          <div class="lb-organizer-tabs">
+          <div class="lb-organizer-tabs" role="tablist" aria-label="Lorebook views">
             ${[
-              ['overview', 'Overview'],
-              ['duplicates', 'Exact Duplicates'],
-              ['similar', 'Similar Names'],
+              ['overview', 'Library'],
+              ['duplicates', 'Duplicates'],
+              ['similar', 'Similar names'],
               ['unlinked', 'Unlinked'],
-              ['ai', 'AI Organize'],
+              ['ai', 'AI folders'],
             ].map(([key, label]) => `
               <button
                 type="button"
@@ -5437,7 +5472,7 @@ export function installLorebookOrganizer(
             `).join('')}
           </div>
 
-          <div class="lb-organizer-status">
+          <div class="lb-organizer-status" role="status" aria-live="polite">
             ${escapeHtml(statusMessage)}
           </div>
         </div>
@@ -5568,7 +5603,7 @@ export function installLorebookOrganizer(
     modal =
       ctx.ui.showModal({
         title:
-          'Lorebook Organizer',
+          'Lorebook organizer',
         width: 1100,
         maxHeight: 900,
         persistent: false,

@@ -1,5 +1,5 @@
 // @bun
-// src/lorebook-organizer-backend.ts
+// ../../tmp/bionic-organizer-build.u50gHn/src/lorebook-organizer-backend.ts
 function organizerSend(spindleApi, userId, payload) {
   spindleApi.sendToFrontend(payload, userId);
 }
@@ -374,6 +374,7 @@ async function handleLorebookOrganizerMessage(spindleApi, payload, userId) {
       });
       const prompt = organizerPrompt(books);
       const result = await spindleApi.generate.quiet({
+        userId,
         prompt,
         messages: [
           {
@@ -439,7 +440,7 @@ async function handleLorebookOrganizerMessage(spindleApi, payload, userId) {
   return false;
 }
 
-// src/backend.ts
+// ../../tmp/bionic-organizer-build.u50gHn/src/backend.ts
 var FF_THINK_FIX_VERSION = "0.48.0";
 var DEFAULT_FF_THINK_CONFIG = {
   boundaryText: "[ \uD83D\uDD70\uFE0F Time",
