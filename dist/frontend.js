@@ -72,17 +72,66 @@ async function pagedCharacters(api, path) {
   }
 }
 
-// src/character-cleaner-frontend.ts
+// src/character-folders-core.ts
+var text = (value) => typeof value === "string" ? value.normalize("NFKC").trim().replace(/\s+/g, " ") : "";
+function characterFolderGroups(cards, mode) {
+  const groups = new Map;
+  for (const card of cards) {
+    if (card.folder === ARCHIVE_FOLDER || card.extensions?.[ARCHIVE_KEY])
+      continue;
+    const values = mode === "author" ? [text(card.creator)] : Array.isArray(card.tags) ? card.tags.map(text) : [];
+    for (const value of new Set(values.filter(Boolean).map((value) => value.toLowerCase()))) {
+      const label = values.find((item) => item.toLowerCase() === value);
+      const group = groups.get(value) || { key: value, label, folder: `${mode === "author" ? "Author" : "Tag"} · ${label}`.slice(0, 120), cards: [] };
+      group.cards.push(card);
+      groups.set(value, group);
+    }
+  }
+  return [...groups.values()].filter((group) => group.cards.length >= 2).sort((a, b) => b.cards.length - a.cards.length || a.key.localeCompare(b.key));
+}
+function characterFolderPlan(groups, selected, onlyUnfiled) {
+  const assigned = new Set, plan = [];
+  for (const group of groups) {
+    if (!selected.has(group.key))
+      continue;
+    const folder = selected.get(group.key).trim();
+    if (!folder || folder.length > 120)
+      throw new Error("Folder names must contain 1–120 characters.");
+    if (folder === ARCHIVE_FOLDER)
+      throw new Error("Choose a name other than the duplicate archive folder.");
+    for (const card of group.cards) {
+      if (assigned.has(card.id) || onlyUnfiled && String(card.folder || "").trim())
+        continue;
+      assigned.add(card.id);
+      if (card.folder === folder)
+        continue;
+      plan.push({ id: card.id, name: card.name, from: card.folder || "", folder, fingerprint: characterFingerprint(card) });
+    }
+  }
+  return plan;
+}
+function assertFolderMove(card, move) {
+  if (!card || card.id !== move.id || (card.folder || "") !== move.from || characterFingerprint(card) !== move.fingerprint) {
+    throw new Error("A character changed since the preview. Scan again before moving it.");
+  }
+  if (card.folder === ARCHIVE_FOLDER || card.extensions?.[ARCHIVE_KEY])
+    throw new Error("Archived duplicates cannot be organized.");
+}
+
+// src/library-characters-frontend.ts
 var escape = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+var path = (id) => `/api/v1/characters/${encodeURIComponent(id)}`;
+var thumbnail = (card) => `<img class="lb-bot-avatar" src="${path(card.id)}/avatar" alt="" loading="lazy">`;
 function installCharacterCleaner(root) {
   const host = root.querySelector("#lb-character-cleaner");
-  let cards = [], groups = [], busy = false, disposed = false;
-  const keepers = new Map;
-  const selected = new Set;
-  const reviewed = new Set;
-  let status = "Scan your library to find duplicate cards.";
-  async function api(path, options = {}) {
-    const response = await fetch(path, {
+  let cards = [], groups = [], busy = false, disposed = false, scanned = false;
+  let view = "folders", mode = "author", onlyUnfiled = true, query = "", page = 0;
+  let status = "Scan your characters to create folders or review duplicate cards.";
+  let preview = null;
+  const chosenFolders = new Map, keepers = new Map;
+  const selected = new Set, reviewed = new Set, expanded = new Set;
+  async function api(url, options = {}) {
+    const response = await fetch(url, {
       credentials: "same-origin",
       cache: "no-store",
       ...options,
@@ -92,50 +141,90 @@ function installCharacterCleaner(root) {
       throw new Error(`Library request failed (${response.status}).`);
     return response.json();
   }
-  const characterPath = (id) => `/api/v1/characters/${encodeURIComponent(id)}`;
   async function scan() {
-    const [library, chats] = await Promise.all([
-      pagedCharacters(api, "/api/v1/characters"),
-      pagedCharacters(api, "/api/v1/chats")
-    ]);
+    const [library, chats] = await Promise.all([pagedCharacters(api, "/api/v1/characters"), pagedCharacters(api, "/api/v1/chats")]);
     if (disposed)
       return;
     cards = library;
     groups = duplicateGroups(library, chats);
+    scanned = true;
     selected.clear();
     reviewed.clear();
     keepers.clear();
+    chosenFolders.clear();
+    preview = null;
+    page = 0;
     groups.forEach((group) => keepers.set(group.cards[0].id, group.keeperId));
   }
-  function eligible(card, keeper) {
-    return card.id !== keeper.id && !card.chatCount && (characterFingerprint(card) === characterFingerprint(keeper) || reviewed.has(card.id));
+  const eligible = (card, keeper) => card.id !== keeper.id && !card.chatCount && (characterFingerprint(card) === characterFingerprint(keeper) || reviewed.has(card.id));
+  const matches = (value) => value.toLowerCase().includes(query.trim().toLowerCase());
+  function differenceView(card, keeper) {
+    const fields = ["description", "personality", "scenario", "first_mes", "mes_example", "creator", "creator_notes", "system_prompt", "post_history_instructions", "alternate_greetings", "tags"].filter((key) => JSON.stringify(card[key]) !== JSON.stringify(keeper[key]));
+    const labels = { first_mes: "Opening message", mes_example: "Example messages", creator_notes: "Author notes", system_prompt: "System prompt", post_history_instructions: "After-history instructions", alternate_greetings: "Other greetings" };
+    return `<details data-difference="${escape(card.id)}" ${expanded.has(card.id) ? "open" : ""}><summary>Compare with the keeper</summary>
+      ${fields.map((key) => `<div class="lb-bot-difference"><strong>${escape(labels[key] || key)}</strong><div><span>Keeper</span><p>${escape(Array.isArray(keeper[key]) ? keeper[key].join(`
+`) : keeper[key] || "Empty")}</p></div><div><span>This copy</span><p>${escape(Array.isArray(card[key]) ? card[key].join(`
+`) : card[key] || "Empty")}</p></div></div>`).join("")}
+      ${card.image_id !== keeper.image_id || card.avatar_path !== keeper.avatar_path ? "<p>These cards have different image records. Both images are preserved when archiving.</p>" : ""}
+      ${JSON.stringify(card.extensions) !== JSON.stringify(keeper.extensions) ? "<p>Extra card settings or lorebook links also differ. Archiving preserves them.</p>" : ""}
+      <label class="lb-bot-check"><input type="checkbox" data-review="${escape(card.id)}" ${reviewed.has(card.id) ? "checked" : ""} ${busy || card.chatCount ? "disabled" : ""}> I reviewed this variant and allow archiving it</label></details>`;
   }
-  function differences(card, keeper) {
-    const fields = Object.keys(card).filter((key) => !["id", "user_id", "name", "folder", "created_at", "updated_at", "chatCount"].includes(key) && JSON.stringify(card[key]) !== JSON.stringify(keeper[key]));
-    return `<details><summary>Review differences (${escape(fields.join(", ") || "name only")})</summary>
-      ${fields.map((key) => `<p><strong>${escape(key)}</strong><br>Keeping: ${escape(String(JSON.stringify(keeper[key]) ?? "").slice(0, 700))}<br>This copy: ${escape(String(JSON.stringify(card[key]) ?? "").slice(0, 700))}</p>`).join("")}
-      <label><input type="checkbox" data-review="${escape(card.id)}" ${reviewed.has(card.id) ? "checked" : ""} ${busy || card.chatCount ? "disabled" : ""}> I reviewed this variant and allow archiving it</label></details>`;
+  function foldersView() {
+    if (preview)
+      return `<section class="lb-bot-plan"><h3>${preview.length} bots will move</h3><div class="lb-bot-actions"><button type="button" data-cleaner="back-folders">Back to groups</button><button type="button" data-cleaner="apply-folders" ${busy || !preview.length ? "disabled" : ""}>Create folders and move ${preview.length} bots</button></div><div class="lb-bot-table-wrap"><table><thead><tr><th>Bot</th><th>Current folder</th><th>New folder</th></tr></thead><tbody>${preview.map((move) => `<tr><td>${escape(move.name)}</td><td>${escape(move.from || "No folder")}</td><td>${escape(move.folder)}</td></tr>`).join("")}</tbody></table></div></section>`;
+    const suggestions = characterFolderGroups(cards, mode).filter((group) => matches(group.label));
+    return `<p>Group bots by the author or tags saved on their cards. Preview the moves before creating folders.</p>
+      <div class="lb-bot-actions"><label>Group by <select data-folder-mode ${busy ? "disabled" : ""}><option value="author" ${mode === "author" ? "selected" : ""}>Author</option><option value="tag" ${mode === "tag" ? "selected" : ""}>Tag</option></select></label>
+      <label class="lb-bot-check"><input type="checkbox" data-unfiled ${onlyUnfiled ? "checked" : ""} ${busy ? "disabled" : ""}> Only bots without a folder</label></div>
+      ${mode === "tag" ? '<p class="lumibionic-muted">For bots with several selected tags, the most common selected tag wins. Check the preview to see each bot’s folder.</p>' : ""}
+      <div class="lb-bot-actions"><button type="button" data-cleaner="select-folders" ${busy || !suggestions.length ? "disabled" : ""}>Select visible groups</button><button type="button" data-cleaner="clear-folders" ${busy ? "disabled" : ""}>Clear selection</button></div>
+      <div class="lb-bot-folder-grid">${suggestions.map((group) => {
+      const count = group.cards.filter((card) => !onlyUnfiled || !String(card.folder || "").trim()).length;
+      return `<article class="lb-bot-folder"><label class="lb-bot-check"><input type="checkbox" data-folder-group="${escape(group.key)}" ${chosenFolders.has(group.key) ? "checked" : ""} ${busy || !count ? "disabled" : ""}><strong>${escape(group.label)}</strong><span>${count} eligible · ${group.cards.length} total</span></label>
+        <input type="text" maxlength="120" data-folder-name="${escape(group.key)}" aria-label="Folder for ${escape(group.label)}" value="${escape(chosenFolders.get(group.key) ?? group.folder)}" ${busy ? "disabled" : ""}>
+        <p>${group.cards.slice(0, 5).map((card) => escape(card.name)).join(" · ")}${group.cards.length > 5 ? ` · +${group.cards.length - 5} more` : ""}</p></article>`;
+    }).join("")}</div>
+      ${scanned && !suggestions.length ? "<p>No shared authors or tags found for this search. Cards need a saved author or tag shared by at least two bots.</p>" : ""}
+      <button type="button" data-cleaner="preview-folders" ${busy || !chosenFolders.size ? "disabled" : ""}>Preview folder moves</button>
+      `;
+  }
+  function duplicatesView() {
+    const visible = groups.filter((group) => matches(group.name + " " + group.cards.map((card) => `${card.creator || ""} ${card.folder || ""}`).join(" ")));
+    const maxPage = Math.max(0, Math.ceil(visible.length / 6) - 1);
+    page = Math.min(page, maxPage);
+    return `<p>Choose a keeper, then select unused copies to archive. Chat-linked cards are protected. Compare differing versions before selecting them.</p>
+      <div class="lb-bot-actions"><button type="button" data-cleaner="select" ${busy || !visible.length ? "disabled" : ""}>Select identical unused copies</button><button type="button" data-cleaner="archive" ${busy || !selected.size ? "disabled" : ""}>Archive selected (${selected.size})</button></div>
+      ${visible.slice(page * 6, page * 6 + 6).map((group) => {
+      const keeper = group.cards.find((card) => card.id === keepers.get(group.cards[0].id));
+      return `<section class="lb-bot-group"><header><h3>${escape(group.name)}</h3><label>Keep <select aria-label="Keep a copy of ${escape(group.name)}" data-keeper="${escape(group.cards[0].id)}" ${busy ? "disabled" : ""}>${group.cards.map((card) => `<option value="${escape(card.id)}" ${card.id === keeper.id ? "selected" : ""}>${escape(card.name)} · ${card.chatCount} chats · ${escape(card.creator || "No author")} · ${escape(card.id.slice(0, 8))}</option>`).join("")}</select></label></header>
+          <div class="lb-bot-copy-grid">${group.cards.map((card) => `<article class="lb-bot-copy"><div class="lb-bot-card-heading">${thumbnail(card)}<div><strong>${escape(card.name)}</strong><small>${escape(card.creator || "No author")}<br>${escape(card.folder || "No folder")} · ${card.chatCount} chats</small></div></div>
+          <p>${card.id === keeper.id ? "Keeping this copy" : card.chatCount ? "Protected: used in chats" : characterFingerprint(card) === characterFingerprint(keeper) ? "Identical card content" : "Different version"}</p>
+          ${card.id !== keeper.id && characterFingerprint(card) !== characterFingerprint(keeper) ? differenceView(card, keeper) : ""}
+          ${card.id !== keeper.id ? `<label class="lb-bot-check"><input type="checkbox" data-card="${escape(card.id)}" ${selected.has(card.id) ? "checked" : ""} ${busy || !eligible(card, keeper) ? "disabled" : ""}> Archive this copy</label>` : ""}</article>`).join("")}</div></section>`;
+    }).join("")}
+      ${scanned && !visible.length ? "<p>No duplicate-name groups found for this search.</p>" : ""}
+      ${visible.length > 6 ? `<div class="lb-bot-actions"><button type="button" data-cleaner="previous" ${page === 0 ? "disabled" : ""}>Previous</button><span>Page ${page + 1} of ${maxPage + 1}</span><button type="button" data-cleaner="next" ${page === maxPage ? "disabled" : ""}>Next</button></div>` : ""}`;
+  }
+  function archivedView() {
+    const archived = cards.filter((card) => card.extensions?.[ARCHIVE_KEY] && matches(card.name));
+    return `<p>Archived copies remain in “${escape(ARCHIVE_FOLDER)}”. Restore returns each card to its original folder.</p><div class="lb-bot-copy-grid">${archived.map((card) => `<article class="lb-bot-copy"><div class="lb-bot-card-heading">${thumbnail(card)}<strong>${escape(card.name)}</strong></div><button type="button" data-restore="${escape(card.id)}" ${busy ? "disabled" : ""}>Restore</button></article>`).join("")}</div>${scanned && !archived.length ? "<p>No archived copies found.</p>" : ""}`;
   }
   function render() {
     if (disposed)
       return;
-    host.innerHTML = `<div class="lumibionic-muted">Copies can be archived into “${escape(ARCHIVE_FOLDER)}” and restored here. Cards used in chats are protected. Review differences before archiving a variant.</div>
-      <div class="lumibionic-toolbar-actions"><button type="button" data-cleaner="scan" ${busy ? "disabled" : ""}>Scan duplicates</button>
-      <button type="button" data-cleaner="select" ${busy || !groups.length ? "disabled" : ""}>Select matching copies</button></div>
-      <p role="status" aria-live="polite">${escape(status)}</p>
-      ${groups.map((group) => {
-      const keeper = group.cards.find((card) => card.id === keepers.get(group.cards[0].id));
-      return `<details class="lumibionic-subsection" open><summary>${escape(group.name)} · ${group.cards.length} cards</summary>
-          <div class="lumibionic-muted">Keep one copy:</div>
-          <select aria-label="Keep a copy of ${escape(group.name)}" data-keeper="${escape(group.cards[0].id)}" ${busy ? "disabled" : ""}>
-            ${group.cards.map((card) => `<option value="${escape(card.id)}" ${card.id === keeper.id ? "selected" : ""}>${escape(card.name)} · ${card.chatCount} chats · ${escape(card.id.slice(0, 8))}</option>`).join("")}</select>
-          ${group.cards.map((card) => `<label class="lb-character-row"><input type="checkbox" data-card="${escape(card.id)}" ${selected.has(card.id) ? "checked" : ""} ${busy || !eligible(card, keeper) ? "disabled" : ""}>
-            <span><strong>${escape(card.name)}</strong><small>${escape(card.folder || "No folder")} · ${escape(card.id.slice(0, 8))}<br>${card.id === keeper.id ? "Keeping this copy" : card.chatCount ? `Protected · ${card.chatCount} chats` : characterFingerprint(card) === characterFingerprint(keeper) ? "Matching content · can archive" : reviewed.has(card.id) ? "Reviewed variant · can archive" : "Different content · review below"}</small></span></label>${card.id !== keeper.id && characterFingerprint(card) !== characterFingerprint(keeper) ? differences(card, keeper) : ""}`).join("")}
-          </details>`;
-    }).join("")}
-      <button type="button" data-cleaner="archive" ${busy || !selected.size ? "disabled" : ""}>Archive selected copies (${selected.size})</button>
-      ${cards.filter((card) => card.extensions?.[ARCHIVE_KEY]).length ? `<details class="lumibionic-subsection"><summary>Archived by Bionic (${cards.filter((card) => card.extensions?.[ARCHIVE_KEY]).length})</summary>
-        ${cards.filter((card) => card.extensions?.[ARCHIVE_KEY]).map((card) => `<div class="lb-character-row"><span>${escape(card.name)}</span><button type="button" data-restore="${escape(card.id)}" ${busy ? "disabled" : ""}>Restore</button></div>`).join("")}</details>` : ""}`;
+    const searchFocused = host.ownerDocument.activeElement?.getAttribute("data-bot-search") !== null && host.contains(host.ownerDocument.activeElement);
+    const position = host.ownerDocument.activeElement?.selectionStart;
+    host.innerHTML = `<style>
+      .lb-bot-actions,.lb-bot-check,.lb-bot-card-heading{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.lb-bot-actions{margin:12px 0}.lb-bot-check input{flex:0 0 auto}.lb-bot-avatar{width:54px;height:68px;object-fit:cover;border-radius:8px;background:#292b37}.lb-bot-card-heading{flex-wrap:nowrap}.lb-bot-card-heading small{display:block;opacity:.7}.lb-bot-copy-grid,.lb-bot-folder-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));gap:12px}.lb-bot-folder-grid{max-height:44dvh;overflow:auto}.lb-bot-copy,.lb-bot-folder,.lb-bot-group,.lb-bot-plan{padding:14px;border:1px solid rgba(127,127,127,.24);border-radius:10px;min-width:0;margin:12px 0}.lb-bot-group header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.lb-bot-group h3{margin:0}.lb-bot-group select{max-width:100%}.lb-bot-copy details{margin:10px 0}.lb-bot-copy summary{cursor:pointer}.lb-bot-difference{display:grid;grid-template-columns:1fr 1fr;gap:8px;border-top:1px solid rgba(127,127,127,.2);margin-top:12px;padding-top:10px}.lb-bot-difference>strong{grid-column:1/-1}.lb-bot-difference p{max-height:160px;overflow:auto;white-space:pre-wrap;font-size:12px;overflow-wrap:anywhere}.lb-bot-folder input[type=text]{width:100%;margin-top:10px}.lb-bot-folder p{font-size:12px;opacity:.75}.lb-bot-table-wrap{max-height:340px;overflow:auto}.lb-bot-plan table{width:100%;border-collapse:collapse}.lb-bot-plan td,.lb-bot-plan th{text-align:left;padding:8px;border-bottom:1px solid rgba(127,127,127,.2)}#lb-character-cleaner button,#lb-character-cleaner input,#lb-character-cleaner select{font:inherit;color:inherit;background:rgba(127,127,127,.08);border:1px solid rgba(127,127,127,.25);border-radius:7px;padding:8px}#lb-character-cleaner input[type=checkbox]{padding:0}#lb-character-cleaner button{cursor:pointer}#lb-character-cleaner button:disabled{opacity:.45;cursor:default}#lb-character-cleaner [aria-selected=true]{background:rgba(124,155,200,.24)}#lb-character-cleaner input[type=search]{flex:1;min-width:160px}#lb-character-cleaner{overflow-wrap:anywhere}#lb-character-cleaner select option{background:#20212b}
+      </style><div class="lb-bot-actions"><div role="tablist" aria-label="Character tools">${[["folders", "Folders"], ["duplicates", `Duplicates (${groups.length})`], ["archived", "Archived"]].map(([key, label]) => `<button type="button" role="tab" data-bot-view="${key}" aria-selected="${view === key}">${label}</button>`).join("")}</div>
+      <button type="button" data-cleaner="scan" ${busy ? "disabled" : ""}>${scanned ? "Rescan characters" : "Scan characters"}</button><input type="search" data-bot-search aria-label="Search character groups" placeholder="Search ${view === "folders" ? "authors or tags" : "characters"}" value="${escape(query)}"></div>
+      <p role="status" aria-live="polite">${escape(status)}</p>${view === "folders" ? foldersView() : view === "duplicates" ? duplicatesView() : archivedView()}`;
+    if (searchFocused) {
+      const input = host.querySelector("[data-bot-search]");
+      input.focus();
+      if (position !== null)
+        input.setSelectionRange(position, position);
+    }
   }
   async function run(action) {
     if (busy)
@@ -145,7 +234,7 @@ function installCharacterCleaner(root) {
     try {
       await action();
     } catch (error) {
-      status = error.message || "Cleaner failed.";
+      status = error.message || "Library update failed.";
     } finally {
       busy = false;
       render();
@@ -156,67 +245,125 @@ function installCharacterCleaner(root) {
       const keeper = group.cards.find((card) => card.id === keepers.get(group.cards[0].id));
       return group.cards.filter((card) => selected.has(card.id) && eligible(card, keeper)).map((card) => ({ id: card.id, keeperId: keeper.id, expected: characterFingerprint(card), keeperExpected: characterFingerprint(keeper), reviewed: reviewed.has(card.id) }));
     });
-    if (!plan.length || !window.confirm(`Archive ${plan.length} duplicate card(s), including any explicitly reviewed variants?
-
-They will move to “${ARCHIVE_FOLDER}”. No cards or chats will be deleted. You can restore them here.`))
+    if (!plan.length || !window.confirm(`Archive ${plan.length} selected copies? They can be restored. No cards or chats will be deleted.`))
       return;
     let count = 0;
     try {
       for (const item of plan) {
-        const [candidate, keeper, chats] = await Promise.all([
-          api(characterPath(item.id)),
-          api(characterPath(item.keeperId)),
-          pagedCharacters(api, "/api/v1/chats")
-        ]);
+        const [candidate, keeper, chats] = await Promise.all([api(path(item.id)), api(path(item.keeperId)), pagedCharacters(api, "/api/v1/chats")]);
         assertArchiveSafe(candidate, keeper, chats, item.expected, item.keeperExpected, item.reviewed);
-        await api(characterPath(item.id), { method: "PUT", body: JSON.stringify({
-          folder: ARCHIVE_FOLDER,
-          extensions: { ...candidate.extensions, [ARCHIVE_KEY]: { originalFolder: candidate.folder || "", keeperId: keeper.id, archivedAt: new Date().toISOString() } }
-        }) });
+        if (disposed)
+          throw new Error("Library closed. Remaining cards were not changed.");
+        await api(path(item.id), { method: "PUT", body: JSON.stringify({ folder: ARCHIVE_FOLDER, extensions: { ...candidate.extensions, [ARCHIVE_KEY]: { originalFolder: candidate.folder || "", keeperId: keeper.id, archivedAt: new Date().toISOString() } } }) });
         count++;
       }
-      status = `Archived ${count} duplicate card(s). Choose the archive folder in Characters to see them.`;
+      status = `Archived ${count} copies. Restore them from Archived.`;
     } catch (error) {
-      status = `Archived ${count} card(s); stopped: ${error.message}`;
+      status = `Archived ${count} copies; stopped: ${error.message}`;
     }
     await scan();
   }
-  const click = (event) => {
+  async function applyFolders() {
+    const plan = preview;
+    if (!plan?.length || !window.confirm(`Create folders and move ${plan.length} bots as shown in the preview? Cards, lorebooks and chats are preserved.`))
+      return;
+    let count = 0;
+    try {
+      for (const move of plan) {
+        const card = await api(path(move.id));
+        assertFolderMove(card, move);
+        if (disposed)
+          throw new Error("Library closed. Remaining bots were not moved.");
+        await api(path(move.id), { method: "PUT", body: JSON.stringify({ folder: move.folder }) });
+        count++;
+      }
+      status = `Moved ${count} bots into folders.`;
+    } catch (error) {
+      status = `Moved ${count} bots; stopped: ${error.message}`;
+    }
+    await scan();
+  }
+  function click(event) {
     const button = event.target.closest("button");
     if (!button || busy)
       return;
-    if (button.dataset.cleaner === "scan")
-      run(async () => {
-        status = "Scanning…";
-        render();
-        await scan();
-        status = `${cards.length} cards scanned · ${groups.length} duplicate-name groups.`;
-      });
-    if (button.dataset.cleaner === "select") {
-      groups.forEach((group) => {
-        const keeper = group.cards.find((card) => card.id === keepers.get(group.cards[0].id));
-        group.cards.filter((card) => eligible(card, keeper) && characterFingerprint(card) === characterFingerprint(keeper)).forEach((card) => selected.add(card.id));
-      });
+    if (button.dataset.botView) {
+      view = button.dataset.botView;
+      query = "";
+      page = 0;
+      if (scanned)
+        status = `${cards.length} characters · ${groups.length} duplicate-name groups.`;
       render();
+      return;
     }
-    if (button.dataset.cleaner === "archive")
-      run(archive);
+    switch (button.dataset.cleaner) {
+      case "scan":
+        run(async () => {
+          status = "Scanning characters…";
+          render();
+          await scan();
+          status = `${cards.length} characters · ${groups.length} duplicate-name groups.`;
+        });
+        break;
+      case "select":
+        groups.filter((group) => matches(group.name)).forEach((group) => {
+          const keeper = group.cards.find((card) => card.id === keepers.get(group.cards[0].id));
+          group.cards.filter((card) => eligible(card, keeper) && characterFingerprint(card) === characterFingerprint(keeper)).forEach((card) => selected.add(card.id));
+        });
+        render();
+        break;
+      case "archive":
+        run(archive);
+        break;
+      case "previous":
+        page--;
+        render();
+        break;
+      case "next":
+        page++;
+        render();
+        break;
+      case "select-folders":
+        characterFolderGroups(cards, mode).filter((group) => matches(group.label) && group.cards.some((card) => !onlyUnfiled || !String(card.folder || "").trim())).forEach((group) => chosenFolders.set(group.key, chosenFolders.get(group.key) ?? group.folder));
+        preview = null;
+        render();
+        break;
+      case "clear-folders":
+        chosenFolders.clear();
+        preview = null;
+        render();
+        break;
+      case "preview-folders":
+        try {
+          preview = characterFolderPlan(characterFolderGroups(cards, mode), chosenFolders, onlyUnfiled);
+          status = `${preview.length} folder moves ready to review.`;
+        } catch (error) {
+          status = error.message;
+        }
+        ;
+        render();
+        break;
+      case "back-folders":
+        preview = null;
+        render();
+        break;
+      case "apply-folders":
+        run(applyFolders);
+        break;
+    }
     if (button.dataset.restore)
       run(async () => {
-        const card = await api(characterPath(button.dataset.restore));
-        const record = card.extensions?.[ARCHIVE_KEY];
-        if (!record)
-          throw new Error("This card is no longer archived. Scan again.");
-        if (card.folder !== ARCHIVE_FOLDER)
-          throw new Error("This card was moved elsewhere. Restore its folder manually.");
+        const card = await api(path(button.dataset.restore)), record = card.extensions?.[ARCHIVE_KEY];
+        if (!record || card.folder !== ARCHIVE_FOLDER)
+          throw new Error("This card was moved or restored elsewhere. Rescan characters.");
         const extensions = { ...card.extensions };
         delete extensions[ARCHIVE_KEY];
-        await api(characterPath(card.id), { method: "PUT", body: JSON.stringify({ folder: record.originalFolder || "", extensions }) });
+        await api(path(card.id), { method: "PUT", body: JSON.stringify({ folder: record.originalFolder || "", extensions }) });
         await scan();
         status = `Restored ${card.name}.`;
       });
-  };
-  const change = (event) => {
+  }
+  function change(event) {
     if (busy)
       return;
     const target = event.target;
@@ -224,25 +371,60 @@ They will move to “${ARCHIVE_FOLDER}”. No cards or chats will be deleted. Yo
       keepers.set(target.dataset.keeper, target.value);
       selected.clear();
       reviewed.clear();
-      render();
     }
     if (target.dataset.review) {
       target.checked ? reviewed.add(target.dataset.review) : reviewed.delete(target.dataset.review);
       selected.delete(target.dataset.review);
-      render();
     }
-    if (target.dataset.card) {
+    if (target.dataset.card)
       target.checked ? selected.add(target.dataset.card) : selected.delete(target.dataset.card);
+    if (target.hasAttribute("data-folder-mode")) {
+      mode = target.value;
+      chosenFolders.clear();
+      preview = null;
+      query = "";
+    }
+    if (target.hasAttribute("data-unfiled")) {
+      onlyUnfiled = target.checked;
+      preview = null;
+    }
+    if (target.dataset.folderGroup) {
+      const group = characterFolderGroups(cards, mode).find((group) => group.key === target.dataset.folderGroup);
+      target.checked ? chosenFolders.set(group.key, Array.from(host.querySelectorAll("[data-folder-name]")).find((input) => input.dataset.folderName === group.key).value) : chosenFolders.delete(group.key);
+      preview = null;
+    }
+    render();
+  }
+  function input(event) {
+    const target = event.target;
+    if (target.hasAttribute("data-bot-search")) {
+      query = target.value;
+      page = 0;
       render();
     }
-  };
+    if (target.dataset.folderName) {
+      if (chosenFolders.has(target.dataset.folderName))
+        chosenFolders.set(target.dataset.folderName, target.value);
+      preview = null;
+      host.querySelector(".lb-bot-plan")?.remove();
+    }
+  }
+  function toggle(event) {
+    const target = event.target;
+    if (target.dataset.difference)
+      target.open ? expanded.add(target.dataset.difference) : expanded.delete(target.dataset.difference);
+  }
   host.addEventListener("click", click);
   host.addEventListener("change", change);
+  host.addEventListener("input", input);
+  host.addEventListener("toggle", toggle, true);
   render();
   return () => {
     disposed = true;
     host.removeEventListener("click", click);
     host.removeEventListener("change", change);
+    host.removeEventListener("input", input);
+    host.removeEventListener("toggle", toggle, true);
   };
 }
 
@@ -380,9 +562,7 @@ function summarizeReferences(refs) {
 }
 
 // src/lorebook-organizer-frontend.ts
-var CONNECTION_KEY = "lumiverse:bionic-style-reading:lore-organizer-connection";
 var IGNORED_FOLDER = "Bionic — Ignored";
-var AI_BATCH_SIZE = 70;
 function escapeHtml(value) {
   return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
 }
@@ -449,11 +629,13 @@ function representativeKeys(entries) {
   }
   return Array.from(new Set(values)).slice(0, 12);
 }
-function installLorebookOrganizer(ctx, settingsRoot, options = {}) {
+function installLorebookOrganizer(ctx, settingsRoot) {
   const pending = new Map;
   let modal = null;
   let modalRoot = null;
-  let activeTab = "overview";
+  let activeTab = "characters";
+  let characterPanel = null;
+  let characterCleanup = null;
   let books = [];
   let groups = [];
   let unlinked = [];
@@ -473,8 +655,6 @@ function installLorebookOrganizer(ctx, settingsRoot, options = {}) {
   let inlineLinkBookId = "";
   let lastScanAt = null;
   let busy = false;
-  let connections = [];
-  let suggestions = [];
   let searchText = "";
   let sortMode = "name";
   function requestId(prefix) {
@@ -850,111 +1030,6 @@ Bionic will refresh all four reference sources first.`)) {
       syncSummary();
     }
   }
-  let connectionsLoaded = false;
-  function rawSelectedConnectionId() {
-    const external = options.getConnectionId?.();
-    if (typeof external === "string") {
-      return external;
-    }
-    try {
-      return localStorage.getItem(CONNECTION_KEY) || "";
-    } catch {
-      return "";
-    }
-  }
-  function selectedConnectionId() {
-    const selected = rawSelectedConnectionId();
-    if (!selected || !connectionsLoaded) {
-      return selected;
-    }
-    const available = connections.some((connection) => connection?.id === selected);
-    if (available) {
-      return selected;
-    }
-    saveConnectionId("");
-    return "";
-  }
-  function saveConnectionId(id) {
-    options.setConnectionId?.(id);
-    try {
-      localStorage.setItem(CONNECTION_KEY, id);
-    } catch {}
-  }
-  async function loadConnections() {
-    const result = await sendBackend("bionic_lore_connections");
-    connections = Array.isArray(result?.connections) ? result.connections : [];
-    connectionsLoaded = true;
-    selectedConnectionId();
-    renderAll();
-  }
-  async function analyzeFolders() {
-    if (busy || books.length < 2) {
-      return;
-    }
-    busy = true;
-    suggestions = [];
-    let completionMessage = "";
-    try {
-      const compactBooks = books.map((book) => ({
-        id: book.id,
-        name: book.name,
-        folder: book.folder || "",
-        description: book.description || "",
-        entryCount: book.entryCount,
-        sampleKeys: Array.isArray(book.entries) ? book.entries : []
-      }));
-      const connectionId = selectedConnectionId();
-      const merged = new Map;
-      for (let offset = 0;offset < compactBooks.length; ) {
-        const batchSize = compactBooks.length - offset === AI_BATCH_SIZE + 1 ? AI_BATCH_SIZE - 1 : AI_BATCH_SIZE;
-        const batch = compactBooks.slice(offset, offset + batchSize);
-        const first = offset + 1;
-        const last = Math.min(offset + batch.length, compactBooks.length);
-        renderAll(`Suggesting folders… ${first}–${last} of ${compactBooks.length} lorebooks`);
-        offset += batch.length;
-        const result = await sendBackend("bionic_lore_ai_organize", {
-          connectionId,
-          books: batch
-        }, 120000);
-        const batchFolders = Array.isArray(result?.folders) ? result.folders : [];
-        const batchIds = new Set(batch.map((book) => book.id));
-        for (const folder of batchFolders) {
-          const name = String(folder?.name || "").trim();
-          if (!name)
-            continue;
-          const bookIds = Array.from(new Set(Array.isArray(folder?.bookIds) ? folder.bookIds.filter((id) => typeof id === "string" && batchIds.has(id)) : []));
-          if (bookIds.length < 2) {
-            continue;
-          }
-          const reason = String(folder?.reason || "").trim();
-          const key = name.normalize("NFKC").toLocaleLowerCase();
-          const existing = merged.get(key);
-          if (existing) {
-            existing.bookIds = Array.from(new Set([
-              ...existing.bookIds,
-              ...bookIds
-            ]));
-            if (!existing.reason && reason) {
-              existing.reason = reason;
-            }
-            continue;
-          }
-          merged.set(key, {
-            name,
-            bookIds,
-            reason
-          });
-        }
-      }
-      suggestions = Array.from(merged.values()).filter((suggestion) => suggestion.bookIds.length >= 2).sort((a, b) => a.name.localeCompare(b.name));
-      completionMessage = suggestions.length ? `AI suggested ${suggestions.length} folder${suggestions.length === 1 ? "" : "s"}. Review your selections, then apply.` : "AI returned no useful multi-book folder suggestions.";
-    } catch (error) {
-      completionMessage = `AI organize failed: ${error?.message || String(error)}`;
-    } finally {
-      busy = false;
-      renderAll(completionMessage);
-    }
-  }
   async function applyAssignments(assignments) {
     if (busy || assignments.length === 0) {
       return false;
@@ -1079,13 +1154,14 @@ Bionic will refresh all four reference sources first.`)) {
         outline-offset: 2px;
       }
 
+      .lb-organizer-shell [hidden] { display: none !important; }
       .lb-organizer-shell {
         width: min(1050px, calc(100vw - 64px));
         max-width: 100%;
         height: min(76dvh, 800px);
         min-height: 0;
-        display: grid;
-        grid-template-rows: auto auto auto minmax(0, 1fr);
+        display: flex;
+        flex-direction: column;
         gap: 12px;
       }
 
@@ -1164,6 +1240,7 @@ Bionic will refresh all four reference sources first.`)) {
       }
 
       .lb-organizer-content {
+        flex: 1;
         min-height: 0;
         overflow-y: auto;
         padding-right: 4px;
@@ -1293,13 +1370,6 @@ Bionic will refresh all four reference sources first.`)) {
         opacity: .68;
       }
 
-      .lb-organizer-ai-controls {
-        display: grid;
-        grid-template-columns:
-          minmax(180px, 1fr) auto;
-        gap: 8px;
-        margin-bottom: 12px;
-      }
 
       .lb-organizer-field {
         display: grid;
@@ -1308,18 +1378,8 @@ Bionic will refresh all four reference sources first.`)) {
         font-size: .82rem;
       }
 
-      .lb-organizer-ai-controls > button {
-        align-self: end;
-      }
 
-      .lb-organizer-suggestion {
-        display: grid;
-        gap: 10px;
-      }
 
-      .lb-organizer-suggestion-name {
-        width: 100%;
-      }
 
       .lb-organizer-checks {
         display: grid;
@@ -1328,7 +1388,6 @@ Bionic will refresh all four reference sources first.`)) {
 
 
       .lb-organizer-buttonlike,
-      .lb-organizer-ai-controls button,
       .lb-organizer-actions button,
       .lb-organizer-toolbar button,
       .lb-organizer-card button,
@@ -1354,7 +1413,6 @@ Bionic will refresh all four reference sources first.`)) {
       }
 
       .lb-organizer-buttonlike:hover,
-      .lb-organizer-ai-controls button:hover,
       .lb-organizer-actions button:hover,
       .lb-organizer-toolbar button:hover,
       .lb-organizer-card button:hover,
@@ -1364,7 +1422,6 @@ Bionic will refresh all four reference sources first.`)) {
       }
 
       .lb-organizer-buttonlike:active,
-      .lb-organizer-ai-controls button:active,
       .lb-organizer-actions button:active,
       .lb-organizer-toolbar button:active,
       .lb-organizer-card button:active,
@@ -1374,7 +1431,6 @@ Bionic will refresh all four reference sources first.`)) {
       }
 
       .lb-organizer-buttonlike:focus-visible,
-      .lb-organizer-ai-controls button:focus-visible,
       .lb-organizer-actions button:focus-visible,
       .lb-organizer-toolbar button:focus-visible,
       .lb-organizer-card button:focus-visible,
@@ -1387,7 +1443,6 @@ Bionic will refresh all four reference sources first.`)) {
       }
 
       .lb-organizer-buttonlike[disabled],
-      .lb-organizer-ai-controls button[disabled],
       .lb-organizer-actions button[disabled],
       .lb-organizer-toolbar button[disabled],
       .lb-organizer-card button[disabled],
@@ -1424,9 +1479,6 @@ Bionic will refresh all four reference sources first.`)) {
           flex-wrap: wrap;
         }
 
-        .lb-organizer-ai-controls {
-          grid-template-columns: 1fr;
-        }
       }
     `);
   function filteredBooks(source = books) {
@@ -2899,151 +2951,6 @@ Bionic will refresh characters, chats, personas and global activation immediatel
           `}
     `;
   }
-  function connectionOptions() {
-    const selected = selectedConnectionId();
-    const found = !selected || connections.some((connection) => connection.id === selected);
-    const optionsHtml = connections.map((connection) => {
-      const details = [
-        connection.provider,
-        connection.model
-      ].filter(Boolean).join(" · ");
-      return `
-            <option
-              value="${escapeHtml(connection.id)}"
-              ${connection.id === selected ? "selected" : ""}
-            >
-              ${escapeHtml(connection.name)}${details ? ` — ${escapeHtml(details)}` : ""}
-            </option>
-          `;
-    }).join("");
-    return `
-      <option
-        value=""
-        ${!selected ? "selected" : ""}
-      >
-        Active / default connection
-      </option>
-
-      ${selected && !found ? `
-            <option
-              value="${escapeHtml(selected)}"
-              selected
-            >
-              Saved connection unavailable
-            </option>
-          ` : ""}
-
-      ${optionsHtml}
-    `;
-  }
-  function renderAi() {
-    const byId = new Map(books.map((book) => [
-      book.id,
-      book
-    ]));
-    return `
-      <div class="lb-organizer-ai-controls">
-        <label class="lb-organizer-field" for="lb-organizer-connection">
-          AI connection
-        <select
-          id="lb-organizer-connection"
-          ${busy ? "disabled" : ""}
-        >
-          ${connectionOptions()}
-        </select>
-        </label>
-
-        <button
-          type="button"
-          data-organizer-ai-analyze
-          ${busy || books.length < 2 ? "disabled" : ""}
-        >
-          Suggest folders
-        </button>
-      </div>
-
-      <div class="lb-organizer-meta" style="margin-bottom:12px">
-        Review folder suggestions, then apply the books you select.
-        Lorebook content stays unchanged.
-      </div>
-
-      ${suggestions.length ? `
-            <div class="lb-organizer-actions" style="margin-bottom:12px">
-              <button
-                type="button"
-                data-organizer-apply-all
-                ${busy ? "disabled" : ""}
-              >
-                Apply selected folders
-              </button>
-            </div>
-
-            <div class="lb-organizer-list">
-              ${suggestions.map((suggestion, index) => `
-                <div
-                  class="lb-organizer-card lb-organizer-suggestion"
-                  data-organizer-suggestion="${index}"
-                >
-                  <div class="lb-organizer-card-title">
-                    Suggested folder
-                  </div>
-
-                  <input
-                    class="lb-organizer-suggestion-name"
-                    type="text"
-                    value="${escapeHtml(suggestion.name)}"
-                    spellcheck="false"
-                    aria-label="Folder name"
-                  >
-
-                  <div class="lb-organizer-checks">
-                    ${suggestion.bookIds.map((id) => {
-      const book = byId.get(id);
-      if (!book)
-        return "";
-      return `
-                        <label class="lb-organizer-check">
-                          <input
-                            type="checkbox"
-                            data-organizer-book-id="${escapeHtml(book.id)}"
-                            checked
-                          >
-                          <span>
-                            ${escapeHtml(book.name)}
-                            <small>
-                              · ${escapeHtml(shortLoreId(book.id))}
-                            </small>
-                          </span>
-                        </label>
-                      `;
-    }).join("")}
-                  </div>
-
-                  ${suggestion.reason ? `
-                        <div class="lb-organizer-reason">
-                          ${escapeHtml(suggestion.reason)}
-                        </div>
-                      ` : ""}
-
-                  <div class="lb-organizer-actions">
-                    <button
-                      type="button"
-                      data-organizer-apply-suggestion="${index}"
-                      ${busy ? "disabled" : ""}
-                    >
-                      Apply folder
-                    </button>
-                  </div>
-                </div>
-              `).join("")}
-            </div>
-          ` : `
-            <div class="lb-organizer-empty">
-              ${books.length ? "Choose an AI connection, then suggest folders for your library." : "Scan your library to get folder suggestions."}
-            </div>
-          `}
-    `;
-  }
   function activeContent() {
     switch (activeTab) {
       case "duplicates":
@@ -3052,8 +2959,8 @@ Bionic will refresh characters, chats, personas and global activation immediatel
         return renderSimilarNames();
       case "unlinked":
         return renderUnlinked();
-      case "ai":
-        return renderAi();
+      case "characters":
+        return "";
       case "overview":
       default:
         return renderOverview();
@@ -3066,6 +2973,7 @@ Bionic will refresh characters, chats, personas and global activation immediatel
       hour: "2-digit",
       minute: "2-digit"
     }) : "Never";
+    characterPanel?.remove();
     modalRoot.innerHTML = `
       <div class="lb-organizer-shell">
         <div class="lb-organizer-hero">
@@ -3076,12 +2984,12 @@ Bionic will refresh characters, chats, personas and global activation immediatel
               </div>
 
               <div class="lb-organizer-hero-sub">
-                Last scan: ${escapeHtml(lastScan)}
+                ${activeTab === "characters" ? "Organize bots by author or tags" : `Lorebook scan: ${escapeHtml(lastScan)}`}
               </div>
             </div>
           </div>
 
-          <div class="lb-organizer-actions">
+          <div class="lb-organizer-actions" ${activeTab === "characters" ? "hidden" : ""}>
             <button
               type="button"
               data-organizer-scan
@@ -3092,7 +3000,7 @@ Bionic will refresh characters, chats, personas and global activation immediatel
           </div>
         </div>
 
-        <div class="lb-organizer-toolbar">
+        <div class="lb-organizer-toolbar" ${activeTab === "characters" ? "hidden" : ""}>
           <input
             class="lb-organizer-search"
             id="lb-organizer-search"
@@ -3123,13 +3031,13 @@ Bionic will refresh characters, chats, personas and global activation immediatel
         </div>
 
         <div>
-          <div class="lb-organizer-tabs" role="tablist" aria-label="Lorebook views">
+          <div class="lb-organizer-tabs" role="tablist" aria-label="Library tools">
             ${[
-      ["overview", "Library"],
-      ["duplicates", "Duplicates"],
+      ["characters", "Characters"],
+      ["overview", "Lorebooks"],
+      ["duplicates", "Lorebook duplicates"],
       ["similar", "Similar names"],
-      ["unlinked", "Unlinked"],
-      ["ai", "AI folders"]
+      ["unlinked", "Unlinked books"]
     ].map(([key, label]) => `
               <button
                 type="button"
@@ -3144,7 +3052,7 @@ Bionic will refresh characters, chats, personas and global activation immediatel
             `).join("")}
           </div>
 
-          <div class="lb-organizer-status" role="status" aria-live="polite">
+          <div class="lb-organizer-status" role="status" aria-live="polite" ${activeTab === "characters" ? "hidden" : ""}>
             ${escapeHtml(statusMessage)}
           </div>
         </div>
@@ -3154,13 +3062,15 @@ Bionic will refresh characters, chats, personas and global activation immediatel
         </div>
       </div>
     `;
+    if (activeTab === "characters" && characterPanel)
+      modalRoot.querySelector(".lb-organizer-content")?.append(characterPanel);
   }
   function syncSummary() {
     const summary = settingsRoot.querySelector("#lb-lore-organizer-summary");
     const scanButton = settingsRoot.querySelector("#lb-lore-organizer-rescan");
     if (summary) {
       if (!lastScanAt) {
-        summary.textContent = "Not scanned yet.";
+        summary.textContent = "Character folders, duplicate review and lorebook cleanup.";
       } else {
         summary.textContent = `${books.length} lorebooks · ${groups.length} duplicate group${groups.length === 1 ? "" : "s"} · ${unlinked.length} unlinked`;
       }
@@ -3186,31 +3096,26 @@ Bionic will refresh characters, chats, personas and global activation immediatel
       next.scrollTop = scrollTop;
     }
   }
-  function suggestionAssignments(card) {
-    const nameInput = card.querySelector(".lb-organizer-suggestion-name");
-    const folder = nameInput?.value.trim() || "";
-    if (!folder) {
-      throw new Error("Folder name cannot be empty.");
-    }
-    const assignments = Array.from(card.querySelectorAll("[data-organizer-book-id]")).filter((input) => input.checked).map((input) => ({
-      bookId: input.dataset.organizerBookId || "",
-      folder
-    })).filter((item) => item.bookId);
-    return assignments;
-  }
   async function openOrganizer() {
     if (modal)
       return;
     modal = ctx.ui.showModal({
-      title: "Lorebook organizer",
+      title: "Library",
       width: 1100,
       maxHeight: 900,
       persistent: false
     });
     modalRoot = modal.root;
+    characterPanel = document.createElement("div");
+    characterPanel.id = "lb-character-cleaner";
+    const characterWrapper = document.createElement("div");
+    characterWrapper.append(characterPanel);
+    characterCleanup = installCharacterCleaner(characterWrapper);
     renderAll();
     modalRoot.addEventListener("click", (event) => {
       const target = event.target;
+      if (target.closest("#lb-character-cleaner"))
+        return;
       if (target.closest("[data-organizer-inline-link-cancel]")) {
         linkPanelOpen = false;
         inlineLinkBookId = "";
@@ -3422,34 +3327,11 @@ Bionic will refresh characters, chats, personas and global activation immediatel
         deleteSelectedBooks();
         return;
       }
-      if (target.closest("[data-organizer-ai-analyze]")) {
-        analyzeFolders();
-        return;
-      }
-      const applyOne = target.closest("[data-organizer-apply-suggestion]");
-      if (applyOne) {
-        const card = applyOne.closest("[data-organizer-suggestion]");
-        if (!card)
-          return;
-        try {
-          const assignments = suggestionAssignments(card);
-          applyAssignments(assignments);
-        } catch (error) {
-          renderAll(error?.message || String(error));
-        }
-        return;
-      }
-      if (target.closest("[data-organizer-apply-all]")) {
-        try {
-          const assignments = Array.from(modalRoot.querySelectorAll("[data-organizer-suggestion]")).flatMap((card) => suggestionAssignments(card));
-          applyAssignments(assignments);
-        } catch (error) {
-          renderAll(error?.message || String(error));
-        }
-      }
     });
     modalRoot.addEventListener("input", (event) => {
       const target = event.target;
+      if (target.closest("#lb-character-cleaner"))
+        return;
       if (target.id === "lb-organizer-overview-folder-target") {
         overviewFolderTargetName = target.value;
         return;
@@ -3540,21 +3422,14 @@ Bionic will refresh characters, chats, personas and global activation immediatel
         renderAll();
         return;
       }
-      if (target.id === "lb-organizer-connection") {
-        saveConnectionId(target.value);
-      }
     });
     modal.onDismiss(() => {
+      characterCleanup?.();
+      characterCleanup = null;
+      characterPanel = null;
       modal = null;
       modalRoot = null;
     });
-    if (connections.length === 0) {
-      try {
-        await loadConnections();
-      } catch (error) {
-        renderAll(`Could not load LLM connections: ${error?.message || String(error)}`);
-      }
-    }
   }
   const openButton = settingsRoot.querySelector("#lb-lore-organizer-open");
   const rescanButton = settingsRoot.querySelector("#lb-lore-organizer-rescan");
@@ -3571,6 +3446,12 @@ Bionic will refresh characters, chats, personas and global activation immediatel
   });
   syncSummary();
   return () => {
+    characterCleanup?.();
+    characterCleanup = null;
+    characterPanel = null;
+    modal?.dismiss?.();
+    modal = null;
+    modalRoot = null;
     openButton?.removeEventListener("click", openHandler);
     rescanButton?.removeEventListener("click", rescanHandler);
     for (const request of pending.values()) {
@@ -4238,7 +4119,7 @@ function setup(ctx) {
       top: 0;
       z-index: 6;
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 4px;
       padding: 4px;
       border: 1px solid var(--lumi-border, rgba(127,127,127,.22));
@@ -5510,7 +5391,7 @@ function setup(ctx) {
 
       <div>
         <div class="lumibionic-muted">
-          Adjust reading, toolbar controls, lorebooks and characters.
+          Adjust reading, toolbar controls and your library.
         </div>
       </div>
 
@@ -5974,17 +5855,17 @@ function setup(ctx) {
         class="lumibionic-group"
         data-lumibionic-group="Lorebook Organizer"
       >
-        <summary>Lorebooks</summary>
+        <summary>Library</summary>
 
         <div class="lumibionic-group-body">
           <div class="lumibionic-section">
             <div class="lb-organizer-summary">
               <div class="lb-organizer-brand">
                 <div class="lb-organizer-brand-copy">
-                  <strong>Clean up and organize</strong>
+                  <strong>Characters &amp; lorebooks</strong>
                   <small>
-                    Review duplicates, check links and organize books into folders.
-                    Checks character, chat, persona and global references.
+                    Create bot folders by author or tags, review character duplicates,
+                    and clean up lorebooks with reference checks.
                   </small>
                 </div>
               </div>
@@ -6001,12 +5882,12 @@ function setup(ctx) {
                   type="button"
                   id="lb-lore-organizer-open"
                 >
-                  Open organizer
+                  Open library
                 </button>
 
                 <button
                   type="button"
-                  id="lb-lore-organizer-rescan"
+                  id="lb-lore-organizer-rescan" hidden
                 >
                   Scan
                 </button>
@@ -6077,13 +5958,6 @@ function setup(ctx) {
         </div>
       </div>
 
-      <details class="lumibionic-group" data-lumibionic-group="Character Cleaner">
-        <summary>Characters</summary>
-        <div class="lumibionic-group-body"><div class="lumibionic-section">
-          <strong>Duplicate character cleaner</strong>
-          <div id="lb-character-cleaner"></div>
-        </div></div>
-      </details>
       <div class="lumibionic-reset-footer" data-lumibionic-category="tools">
         <div class="lumibionic-muted">Restore reading, font, toolbar and automation settings.</div>
       <button
@@ -6097,7 +5971,6 @@ function setup(ctx) {
     </div>
   `;
   const $ = (selector) => tab.root.querySelector(selector);
-  const characterCleanerCleanup = installCharacterCleaner(tab.root);
   const lorebookOrganizerCleanup = installLorebookOrganizer(ctx, tab.root);
   const preset = $("#lb-preset");
   const bionicEnabled = $("#lb-bionic-enabled");
@@ -6193,7 +6066,7 @@ function setup(ctx) {
     try {
       const saved = JSON.parse(localStorage.getItem(UI_STATE_KEY) || "{}");
       return {
-        activeCategory: ["reading", "toolbar", "lorebooks", "characters", "tools"].includes(saved.activeCategory) ? saved.activeCategory : "reading",
+        activeCategory: ["reading", "toolbar", "library", "tools"].includes(saved.activeCategory) ? saved.activeCategory : ["lorebooks", "characters"].includes(saved.activeCategory) ? "library" : "reading",
         previewVisible: typeof saved.previewVisible === "boolean" ? saved.previewVisible : true,
         sections: saved.sections && typeof saved.sections === "object" ? saved.sections : {}
       };
@@ -6230,15 +6103,13 @@ function setup(ctx) {
     const categories = [
       ["reading", "Reading"],
       ["toolbar", "Toolbar"],
-      ["lorebooks", "Lorebooks"],
-      ["characters", "Characters"],
+      ["library", "Library"],
       ["tools", "Tools"]
     ];
     const groupCategories = {
       "Reading & Typography": "reading",
       "Chat Toolbar": "toolbar",
-      "Lorebook Organizer": "lorebooks",
-      "Character Cleaner": "characters",
+      "Lorebook Organizer": "library",
       Settings: "tools",
       "FF5 Thinking Fix": "tools",
       Automation: "tools"
@@ -7625,7 +7496,6 @@ The current scan found no character card referencing it. This cannot be undone.`
     }
     tab.destroy();
     removeStyle();
-    characterCleanerCleanup?.();
     lorebookOrganizerCleanup?.();
     ctx.dom.cleanup();
   };

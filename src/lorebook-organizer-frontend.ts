@@ -1,3 +1,4 @@
+import { installCharacterCleaner } from './library-characters-frontend'
 import {
   buildLoreReferences,
   chooseKeeper,
@@ -22,24 +23,8 @@ type OrganizerGroup = {
   books: LoreBookSnapshot[]
 }
 
-type FolderSuggestion = {
-  name: string
-  bookIds: string[]
-  reason: string
-}
-
-type OrganizerOptions = {
-  getConnectionId?: () => string
-  setConnectionId?: (id: string) => void
-}
-
-const CONNECTION_KEY =
-  'lumiverse:bionic-style-reading:lore-organizer-connection'
-
 const IGNORED_FOLDER =
   'Bionic — Ignored'
-
-const AI_BATCH_SIZE = 70
 
 function escapeHtml(value: unknown): string {
   return String(value ?? '')
@@ -199,8 +184,7 @@ function representativeKeys(
 
 export function installLorebookOrganizer(
   ctx: any,
-  settingsRoot: HTMLElement,
-  options: OrganizerOptions = {}
+  settingsRoot: HTMLElement
 ) {
   const pending =
     new Map<string, BackendRequest>()
@@ -208,7 +192,9 @@ export function installLorebookOrganizer(
   let modal: any = null
   let modalRoot: HTMLElement | null = null
   let activeTab =
-    'overview'
+    'characters'
+  let characterPanel: HTMLElement | null = null
+  let characterCleanup: (() => void) | null = null
 
   let books: LoreBookSnapshot[] = []
   let groups: OrganizerGroup[] = []
@@ -248,8 +234,6 @@ export function installLorebookOrganizer(
   let lastScanAt: number | null = null
   let busy = false
 
-  let connections: any[] = []
-  let suggestions: FolderSuggestion[] = []
 
   let searchText = ''
   let sortMode = 'name'
@@ -1287,298 +1271,6 @@ export function installLorebookOrganizer(
     }
   }
 
-  let connectionsLoaded = false
-
-  function rawSelectedConnectionId() {
-    const external =
-      options.getConnectionId?.()
-
-    if (
-      typeof external === 'string'
-    ) {
-      return external
-    }
-
-    try {
-      return (
-        localStorage.getItem(
-          CONNECTION_KEY
-        ) || ''
-      )
-    } catch {
-      return ''
-    }
-  }
-
-  function selectedConnectionId() {
-    const selected =
-      rawSelectedConnectionId()
-
-    if (
-      !selected ||
-      !connectionsLoaded
-    ) {
-      return selected
-    }
-
-    const available =
-      connections.some(
-        connection =>
-          connection?.id === selected
-      )
-
-    if (available) {
-      return selected
-    }
-
-    /*
-      Saved connection disappeared.
-      Fall back to Lumiverse's active/default connection.
-    */
-    saveConnectionId('')
-
-    return ''
-  }
-
-  function saveConnectionId(
-    id: string
-  ) {
-    options.setConnectionId?.(id)
-
-    try {
-      localStorage.setItem(
-        CONNECTION_KEY,
-        id
-      )
-    } catch {}
-  }
-
-  async function loadConnections() {
-    const result =
-      await sendBackend(
-        'bionic_lore_connections'
-      )
-
-    connections =
-      Array.isArray(
-        result?.connections
-      )
-        ? result.connections
-        : []
-
-    connectionsLoaded = true
-
-    /*
-      Normalize a persisted connection that no longer exists.
-    */
-    selectedConnectionId()
-
-    renderAll()
-  }
-
-  async function analyzeFolders() {
-    if (
-      busy ||
-      books.length < 2
-    ) {
-      return
-    }
-
-    busy = true
-    suggestions = []
-    let completionMessage = ''
-
-    try {
-      const compactBooks =
-        books.map(book => ({
-          id: book.id,
-          name: book.name,
-          folder:
-            book.folder || '',
-          description:
-            book.description || '',
-          entryCount:
-            book.entryCount,
-          sampleKeys:
-            Array.isArray(
-              book.entries
-            )
-              ? book.entries
-              : [],
-        }))
-
-      const connectionId =
-        selectedConnectionId()
-
-      const merged =
-        new Map<
-          string,
-          FolderSuggestion
-        >()
-
-      for (
-        let offset = 0;
-        offset < compactBooks.length;
-        // Advance by the actual batch size below.
-      ) {
-        // Leave two books for the last request instead of an invalid singleton.
-        const batchSize = compactBooks.length - offset === AI_BATCH_SIZE + 1
-          ? AI_BATCH_SIZE - 1
-          : AI_BATCH_SIZE
-        const batch =
-          compactBooks.slice(
-            offset,
-            offset +
-              batchSize
-          )
-
-        const first =
-          offset + 1
-
-        const last =
-          Math.min(
-            offset +
-              batch.length,
-            compactBooks.length
-          )
-
-        renderAll(
-          `Suggesting folders… ${first}–${last} of ${compactBooks.length} lorebooks`
-        )
-        offset += batch.length
-
-        const result =
-          await sendBackend(
-            'bionic_lore_ai_organize',
-            {
-              connectionId,
-              books: batch,
-            },
-            120000
-          )
-
-        const batchFolders =
-          Array.isArray(
-            result?.folders
-          )
-            ? result.folders
-            : []
-
-        const batchIds =
-          new Set(
-            batch.map(
-              book => book.id
-            )
-          )
-
-        for (
-          const folder of
-            batchFolders
-        ) {
-          const name =
-            String(
-              folder?.name || ''
-            ).trim()
-
-          if (!name) continue
-
-          const bookIds =
-            Array.from(
-              new Set(
-                Array.isArray(
-                  folder?.bookIds
-                )
-                  ? folder.bookIds
-                      .filter(
-                        (id: unknown):
-                          id is string =>
-                            typeof id ===
-                              'string' &&
-                            batchIds.has(id)
-                      )
-                  : []
-              )
-            )
-
-          if (
-            bookIds.length < 2
-          ) {
-            continue
-          }
-
-          const reason =
-            String(
-              folder?.reason || ''
-            ).trim()
-
-          const key =
-            name
-              .normalize('NFKC')
-              .toLocaleLowerCase()
-
-          const existing =
-            merged.get(key)
-
-          if (existing) {
-            existing.bookIds =
-              Array.from(
-                new Set([
-                  ...existing.bookIds,
-                  ...bookIds,
-                ])
-              )
-
-            if (
-              !existing.reason &&
-              reason
-            ) {
-              existing.reason =
-                reason
-            }
-
-            continue
-          }
-
-          merged.set(
-            key,
-            {
-              name,
-              bookIds,
-              reason,
-            }
-          )
-        }
-      }
-
-      suggestions =
-        Array.from(
-          merged.values()
-        )
-          .filter(
-            suggestion =>
-              suggestion.bookIds.length >= 2
-          )
-          .sort(
-            (a, b) =>
-              a.name.localeCompare(
-                b.name
-              )
-          )
-
-      completionMessage = suggestions.length
-          ? `AI suggested ${suggestions.length} folder${suggestions.length === 1 ? '' : 's'}. Review your selections, then apply.`
-          : 'AI returned no useful multi-book folder suggestions.'
-    } catch (error: any) {
-      completionMessage = `AI organize failed: ${
-          error?.message ||
-          String(error)
-        }`
-    } finally {
-      busy = false
-      renderAll(completionMessage)
-    }
-  }
-
   async function applyAssignments(
     assignments: {
       bookId: string
@@ -1745,13 +1437,14 @@ export function installLorebookOrganizer(
         outline-offset: 2px;
       }
 
+      .lb-organizer-shell [hidden] { display: none !important; }
       .lb-organizer-shell {
         width: min(1050px, calc(100vw - 64px));
         max-width: 100%;
         height: min(76dvh, 800px);
         min-height: 0;
-        display: grid;
-        grid-template-rows: auto auto auto minmax(0, 1fr);
+        display: flex;
+        flex-direction: column;
         gap: 12px;
       }
 
@@ -1830,6 +1523,7 @@ export function installLorebookOrganizer(
       }
 
       .lb-organizer-content {
+        flex: 1;
         min-height: 0;
         overflow-y: auto;
         padding-right: 4px;
@@ -1959,13 +1653,6 @@ export function installLorebookOrganizer(
         opacity: .68;
       }
 
-      .lb-organizer-ai-controls {
-        display: grid;
-        grid-template-columns:
-          minmax(180px, 1fr) auto;
-        gap: 8px;
-        margin-bottom: 12px;
-      }
 
       .lb-organizer-field {
         display: grid;
@@ -1974,18 +1661,8 @@ export function installLorebookOrganizer(
         font-size: .82rem;
       }
 
-      .lb-organizer-ai-controls > button {
-        align-self: end;
-      }
 
-      .lb-organizer-suggestion {
-        display: grid;
-        gap: 10px;
-      }
 
-      .lb-organizer-suggestion-name {
-        width: 100%;
-      }
 
       .lb-organizer-checks {
         display: grid;
@@ -1994,7 +1671,6 @@ export function installLorebookOrganizer(
 
 
       .lb-organizer-buttonlike,
-      .lb-organizer-ai-controls button,
       .lb-organizer-actions button,
       .lb-organizer-toolbar button,
       .lb-organizer-card button,
@@ -2020,7 +1696,6 @@ export function installLorebookOrganizer(
       }
 
       .lb-organizer-buttonlike:hover,
-      .lb-organizer-ai-controls button:hover,
       .lb-organizer-actions button:hover,
       .lb-organizer-toolbar button:hover,
       .lb-organizer-card button:hover,
@@ -2030,7 +1705,6 @@ export function installLorebookOrganizer(
       }
 
       .lb-organizer-buttonlike:active,
-      .lb-organizer-ai-controls button:active,
       .lb-organizer-actions button:active,
       .lb-organizer-toolbar button:active,
       .lb-organizer-card button:active,
@@ -2040,7 +1714,6 @@ export function installLorebookOrganizer(
       }
 
       .lb-organizer-buttonlike:focus-visible,
-      .lb-organizer-ai-controls button:focus-visible,
       .lb-organizer-actions button:focus-visible,
       .lb-organizer-toolbar button:focus-visible,
       .lb-organizer-card button:focus-visible,
@@ -2053,7 +1726,6 @@ export function installLorebookOrganizer(
       }
 
       .lb-organizer-buttonlike[disabled],
-      .lb-organizer-ai-controls button[disabled],
       .lb-organizer-actions button[disabled],
       .lb-organizer-toolbar button[disabled],
       .lb-organizer-card button[disabled],
@@ -2090,9 +1762,6 @@ export function installLorebookOrganizer(
           flex-wrap: wrap;
         }
 
-        .lb-organizer-ai-controls {
-          grid-template-columns: 1fr;
-        }
       }
     `)
 
@@ -5166,190 +4835,6 @@ export function installLorebookOrganizer(
     `
   }
 
-  function connectionOptions() {
-    const selected =
-      selectedConnectionId()
-
-    const found =
-      !selected ||
-      connections.some(
-        connection =>
-          connection.id === selected
-      )
-
-    const optionsHtml =
-      connections
-        .map(connection => {
-          const details = [
-            connection.provider,
-            connection.model,
-          ]
-            .filter(Boolean)
-            .join(' · ')
-
-          return `
-            <option
-              value="${escapeHtml(connection.id)}"
-              ${connection.id === selected ? 'selected' : ''}
-            >
-              ${escapeHtml(connection.name)}${details ? ` — ${escapeHtml(details)}` : ''}
-            </option>
-          `
-        })
-        .join('')
-
-    return `
-      <option
-        value=""
-        ${!selected ? 'selected' : ''}
-      >
-        Active / default connection
-      </option>
-
-      ${
-        selected && !found
-          ? `
-            <option
-              value="${escapeHtml(selected)}"
-              selected
-            >
-              Saved connection unavailable
-            </option>
-          `
-          : ''
-      }
-
-      ${optionsHtml}
-    `
-  }
-
-  function renderAi() {
-    const byId =
-      new Map(
-        books.map(book => [
-          book.id,
-          book,
-        ])
-      )
-
-    return `
-      <div class="lb-organizer-ai-controls">
-        <label class="lb-organizer-field" for="lb-organizer-connection">
-          AI connection
-        <select
-          id="lb-organizer-connection"
-          ${busy ? 'disabled' : ''}
-        >
-          ${connectionOptions()}
-        </select>
-        </label>
-
-        <button
-          type="button"
-          data-organizer-ai-analyze
-          ${busy || books.length < 2 ? 'disabled' : ''}
-        >
-          Suggest folders
-        </button>
-      </div>
-
-      <div class="lb-organizer-meta" style="margin-bottom:12px">
-        Review folder suggestions, then apply the books you select.
-        Lorebook content stays unchanged.
-      </div>
-
-      ${
-        suggestions.length
-          ? `
-            <div class="lb-organizer-actions" style="margin-bottom:12px">
-              <button
-                type="button"
-                data-organizer-apply-all
-                ${busy ? 'disabled' : ''}
-              >
-                Apply selected folders
-              </button>
-            </div>
-
-            <div class="lb-organizer-list">
-              ${suggestions.map((suggestion, index) => `
-                <div
-                  class="lb-organizer-card lb-organizer-suggestion"
-                  data-organizer-suggestion="${index}"
-                >
-                  <div class="lb-organizer-card-title">
-                    Suggested folder
-                  </div>
-
-                  <input
-                    class="lb-organizer-suggestion-name"
-                    type="text"
-                    value="${escapeHtml(suggestion.name)}"
-                    spellcheck="false"
-                    aria-label="Folder name"
-                  >
-
-                  <div class="lb-organizer-checks">
-                    ${suggestion.bookIds.map(id => {
-                      const book =
-                        byId.get(id)
-
-                      if (!book) return ''
-
-                      return `
-                        <label class="lb-organizer-check">
-                          <input
-                            type="checkbox"
-                            data-organizer-book-id="${escapeHtml(book.id)}"
-                            checked
-                          >
-                          <span>
-                            ${escapeHtml(book.name)}
-                            <small>
-                              · ${escapeHtml(shortLoreId(book.id))}
-                            </small>
-                          </span>
-                        </label>
-                      `
-                    }).join('')}
-                  </div>
-
-                  ${
-                    suggestion.reason
-                      ? `
-                        <div class="lb-organizer-reason">
-                          ${escapeHtml(suggestion.reason)}
-                        </div>
-                      `
-                      : ''
-                  }
-
-                  <div class="lb-organizer-actions">
-                    <button
-                      type="button"
-                      data-organizer-apply-suggestion="${index}"
-                      ${busy ? 'disabled' : ''}
-                    >
-                      Apply folder
-                    </button>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          `
-          : `
-            <div class="lb-organizer-empty">
-              ${
-                books.length
-                  ? 'Choose an AI connection, then suggest folders for your library.'
-                  : 'Scan your library to get folder suggestions.'
-              }
-            </div>
-          `
-      }
-    `
-  }
-
   function activeContent() {
     switch (activeTab) {
       case 'duplicates':
@@ -5361,8 +4846,8 @@ export function installLorebookOrganizer(
       case 'unlinked':
         return renderUnlinked()
 
-      case 'ai':
-        return renderAi()
+      case 'characters':
+        return ''
 
       case 'overview':
       default:
@@ -5386,6 +4871,7 @@ export function installLorebookOrganizer(
           )
         : 'Never'
 
+    characterPanel?.remove()
     modalRoot.innerHTML = `
       <div class="lb-organizer-shell">
         <div class="lb-organizer-hero">
@@ -5396,12 +4882,12 @@ export function installLorebookOrganizer(
               </div>
 
               <div class="lb-organizer-hero-sub">
-                Last scan: ${escapeHtml(lastScan)}
+                ${activeTab === 'characters' ? 'Organize bots by author or tags' : `Lorebook scan: ${escapeHtml(lastScan)}`}
               </div>
             </div>
           </div>
 
-          <div class="lb-organizer-actions">
+          <div class="lb-organizer-actions" ${activeTab === 'characters' ? 'hidden' : ''}>
             <button
               type="button"
               data-organizer-scan
@@ -5412,7 +4898,7 @@ export function installLorebookOrganizer(
           </div>
         </div>
 
-        <div class="lb-organizer-toolbar">
+        <div class="lb-organizer-toolbar" ${activeTab === 'characters' ? 'hidden' : ''}>
           <input
             class="lb-organizer-search"
             id="lb-organizer-search"
@@ -5443,13 +4929,13 @@ export function installLorebookOrganizer(
         </div>
 
         <div>
-          <div class="lb-organizer-tabs" role="tablist" aria-label="Lorebook views">
+          <div class="lb-organizer-tabs" role="tablist" aria-label="Library tools">
             ${[
-              ['overview', 'Library'],
-              ['duplicates', 'Duplicates'],
+              ['characters', 'Characters'],
+              ['overview', 'Lorebooks'],
+              ['duplicates', 'Lorebook duplicates'],
               ['similar', 'Similar names'],
-              ['unlinked', 'Unlinked'],
-              ['ai', 'AI folders'],
+              ['unlinked', 'Unlinked books'],
             ].map(([key, label]) => `
               <button
                 type="button"
@@ -5472,7 +4958,7 @@ export function installLorebookOrganizer(
             `).join('')}
           </div>
 
-          <div class="lb-organizer-status" role="status" aria-live="polite">
+          <div class="lb-organizer-status" role="status" aria-live="polite" ${activeTab === 'characters' ? 'hidden' : ''}>
             ${escapeHtml(statusMessage)}
           </div>
         </div>
@@ -5482,6 +4968,8 @@ export function installLorebookOrganizer(
         </div>
       </div>
     `
+    if (activeTab === 'characters' && characterPanel) modalRoot.querySelector('.lb-organizer-content')?.append(characterPanel)
+
   }
 
   function syncSummary() {
@@ -5498,7 +4986,7 @@ export function installLorebookOrganizer(
     if (summary) {
       if (!lastScanAt) {
         summary.textContent =
-          'Not scanned yet.'
+          'Character folders, duplicate review and lorebook cleanup.'
       } else {
         summary.textContent =
           `${books.length} lorebooks · ${groups.length} duplicate group${groups.length === 1 ? '' : 's'} · ${unlinked.length} unlinked`
@@ -5553,57 +5041,13 @@ export function installLorebookOrganizer(
     }
   }
 
-  function suggestionAssignments(
-    card: HTMLElement
-  ) {
-    const nameInput =
-      card.querySelector(
-        '.lb-organizer-suggestion-name'
-      ) as HTMLInputElement | null
-
-    const folder =
-      nameInput?.value.trim() || ''
-
-    if (!folder) {
-      throw new Error(
-        'Folder name cannot be empty.'
-      )
-    }
-
-    const assignments =
-      Array.from(
-        card.querySelectorAll(
-          '[data-organizer-book-id]'
-        )
-      )
-        .filter(
-          input =>
-            (
-              input as HTMLInputElement
-            ).checked
-        )
-        .map(input => ({
-          bookId:
-            (
-              input as HTMLInputElement
-            ).dataset
-              .organizerBookId || '',
-          folder,
-        }))
-        .filter(
-          item => item.bookId
-        )
-
-    return assignments
-  }
-
   async function openOrganizer() {
     if (modal) return
 
     modal =
       ctx.ui.showModal({
         title:
-          'Lorebook organizer',
+          'Library',
         width: 1100,
         maxHeight: 900,
         persistent: false,
@@ -5611,6 +5055,11 @@ export function installLorebookOrganizer(
 
     modalRoot =
       modal.root
+    characterPanel = document.createElement('div')
+    characterPanel.id = 'lb-character-cleaner'
+    const characterWrapper = document.createElement('div')
+    characterWrapper.append(characterPanel)
+    characterCleanup = installCharacterCleaner(characterWrapper)
 
     renderAll()
 
@@ -5619,6 +5068,7 @@ export function installLorebookOrganizer(
       event => {
         const target =
           event.target as HTMLElement
+        if (target.closest('#lb-character-cleaner')) return
 
         if (
           target.closest(
@@ -6153,75 +5603,7 @@ export function installLorebookOrganizer(
           return
         }
 
-        if (
-          target.closest(
-            '[data-organizer-ai-analyze]'
-          )
-        ) {
-          void analyzeFolders()
-          return
-        }
 
-        const applyOne =
-          target.closest(
-            '[data-organizer-apply-suggestion]'
-          ) as HTMLElement | null
-
-        if (applyOne) {
-          const card =
-            applyOne.closest(
-              '[data-organizer-suggestion]'
-            ) as HTMLElement | null
-
-          if (!card) return
-
-          try {
-            const assignments =
-              suggestionAssignments(
-                card
-              )
-
-            void applyAssignments(
-              assignments
-            )
-          } catch (error: any) {
-            renderAll(
-              error?.message ||
-              String(error)
-            )
-          }
-
-          return
-        }
-
-        if (
-          target.closest(
-            '[data-organizer-apply-all]'
-          )
-        ) {
-          try {
-            const assignments =
-              Array.from(
-                modalRoot!.querySelectorAll(
-                  '[data-organizer-suggestion]'
-                )
-              )
-                .flatMap(card =>
-                  suggestionAssignments(
-                    card as HTMLElement
-                  )
-                )
-
-            void applyAssignments(
-              assignments
-            )
-          } catch (error: any) {
-            renderAll(
-              error?.message ||
-              String(error)
-            )
-          }
-        }
       }
     )
 
@@ -6230,6 +5612,7 @@ export function installLorebookOrganizer(
       event => {
         const target =
           event.target as HTMLInputElement
+        if (target.closest('#lb-character-cleaner')) return
 
         if (
           target.id ===
@@ -6449,36 +5832,17 @@ export function installLorebookOrganizer(
           return
         }
 
-        if (
-          target.id ===
-          'lb-organizer-connection'
-        ) {
-          saveConnectionId(
-            target.value
-          )
-        }
+
       }
     )
 
     modal.onDismiss(() => {
+      characterCleanup?.(); characterCleanup = null; characterPanel = null
       modal = null
       modalRoot = null
     })
 
-    if (
-      connections.length === 0
-    ) {
-      try {
-        await loadConnections()
-      } catch (error: any) {
-        renderAll(
-          `Could not load LLM connections: ${
-            error?.message ||
-            String(error)
-          }`
-        )
-      }
-    }
+
   }
 
   const openButton =
@@ -6521,6 +5885,9 @@ export function installLorebookOrganizer(
   syncSummary()
 
   return () => {
+    characterCleanup?.(); characterCleanup = null; characterPanel = null
+    modal?.dismiss?.()
+    modal = null; modalRoot = null
     openButton?.removeEventListener(
       'click',
       openHandler

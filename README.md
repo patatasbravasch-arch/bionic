@@ -99,10 +99,24 @@ Try `600` for a subtler contrast.
 - The cache is cleared on chat/message edit, swipe, and delete lifecycle events.
 - The extension does not make network requests and does not need any permissions besides the one required by Lumiverse's message-content-processor API.
 
-## Duplicate character cleaner
+## Library tools
 
-Open **Bionic → Characters → Scan duplicates**. Choose a keeper for each duplicate-name group. “Select matching copies” selects only identical card content; other variants require an explicit review of their differences. Cards linked to primary or group chats are protected.
+Open **Bionic → Library → Open library** to manage characters and lorebooks in one window.
 
-“Archive selected copies” moves cards to **Bionic — Duplicate cards** and saves their original folder in the card extensions. Use **Archived by Bionic → Restore** to put them back, including after reloads or from another browser. This does not delete cards, assets, lorebooks or chats. Archived cards remain in the library and can be viewed using the folder filter. The cleaner rechecks both copies and all chat references before each archive.
+### Character folders
+
+Choose **Characters → Folders → Scan characters**, then group by **Author** or **Tag**. Groups use the author and tags saved on each card; empty metadata and archived duplicates are excluded. Each group needs at least two bots. Select groups, rename the proposed folders if needed, and choose **Preview folder moves**. The preview lists every bot and its current and destination folder. Apply the preview to create the folders and move the bots.
+
+**Only bots without a folder** is enabled by default. Disable it explicitly to reorganize bots already in folders. A bot with several selected tags goes into the most common selected tag's folder, with an alphabetical tie-break. Both the preview and the updates use that same plan. Cards changed or moved since the preview stop the remaining updates. Only the folder field is changed.
+
+### Character duplicates
+
+Choose **Characters → Duplicates**. The view provides thumbnails, search, six groups per page and readable comparisons. Pick a keeper and archive selected unused copies. Only identical card content can be bulk-selected; other variants need explicit review. Cards linked to primary or group chats are protected.
+
+Archiving moves cards into **Bionic — Duplicate cards** and saves their original folder in the card extensions. **Characters → Archived → Restore** puts them back, including after reloads or from another browser. Cards, assets, lorebooks and chats remain intact. Archived cards remain in the library and are visible through its folder filter.
+
+### Lorebooks
+
+Use **Lorebooks**, **Lorebook duplicates**, **Similar names** and **Unlinked books** to inspect books, check references and assign folders manually. Character, chat, persona and global lorebook references are checked during cleanup.
 
 Run `bun install` followed by `bun test` for regression tests.

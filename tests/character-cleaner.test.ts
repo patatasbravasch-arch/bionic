@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'bun:test'
 import { ARCHIVE_FOLDER, ARCHIVE_KEY, characterFingerprint, duplicateGroups, chatReferences, assertArchiveSafe, pagedCharacters } from '../src/character-cleaner-core'
-import { installCharacterCleaner } from '../src/character-cleaner-frontend'
+import { installCharacterCleaner } from '../src/library-characters-frontend'
 import { JSDOM } from 'jsdom'
 
 const card = (id: string, name = 'Alice', extra = {}) => ({ id, name, description: 'A character', folder: 'Friends', created_at: 1, extensions: {}, ...extra })
@@ -71,7 +71,8 @@ describe('Duplicate character cleaner', () => {
     const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(resolve => setTimeout(resolve, 1)) }
     try {
       click('[data-cleaner="scan"]'); await settle()
-      expect(root.textContent).toContain('Different content')
+      click('[data-bot-view="duplicates"]')
+      expect(root.textContent).toContain('Different version')
       click('[data-cleaner="select"]')
       expect(root.querySelectorAll('input:checked')).toHaveLength(1)
       click('[data-cleaner="archive"]'); await settle()
@@ -79,6 +80,7 @@ describe('Duplicate character cleaner', () => {
       expect(writes[0].id).toBe('b')
       expect(writes[0].body.folder).toBe(ARCHIVE_FOLDER)
       expect(library[1].extensions[ARCHIVE_KEY].originalFolder).toBe('Friends')
+      click('[data-bot-view="archived"]')
       click('[data-restore="b"]'); await settle()
       expect(writes).toHaveLength(2)
       expect(library[1].folder).toBe('Friends')

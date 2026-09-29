@@ -1,11 +1,11 @@
 {
-  "version": "0.48.17",
+  "version": "0.48.18",
   "name": "Bionic Reading & Fonts",
   "identifier": "bionic_style_reading",
   "author": "patatasbravasch-arch",
   "github": "https://github.com/patatasbravasch-arch/bionic",
   "homepage": "https://github.com/patatasbravasch-arch/bionic",
-  "description": "Bionic reading and typography controls, chat-toolbar customization, reasoning repair, Lorebook Organizer and a reversible duplicate character cleaner.",
+  "description": "Bionic reading and typography controls, chat-toolbar customization, reasoning repair, and Library tools for character folders, duplicate review and reference-aware lorebook cleanup.",
   "permissions": [
     "generation",
     "chat_mutation",

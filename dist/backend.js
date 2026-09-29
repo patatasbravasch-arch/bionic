@@ -1,128 +1,7 @@
 // @bun
-// ../../tmp/bionic-organizer-build.u50gHn/src/lorebook-organizer-backend.ts
+// src/lorebook-organizer-backend.ts
 function organizerSend(spindleApi, userId, payload) {
   spindleApi.sendToFrontend(payload, userId);
-}
-function generationText(result) {
-  if (typeof result === "string") {
-    return result;
-  }
-  const direct = [
-    result?.text,
-    result?.content,
-    result?.response,
-    result?.output_text,
-    result?.message?.content,
-    result?.assistant_message?.content
-  ];
-  for (const value of direct) {
-    if (typeof value === "string" && value.trim()) {
-      return value;
-    }
-  }
-  const choice = result?.choices?.[0];
-  if (typeof choice?.message?.content === "string") {
-    return choice.message.content;
-  }
-  if (typeof choice?.text === "string") {
-    return choice.text;
-  }
-  return "";
-}
-function parseJsonResult(raw) {
-  let text = String(raw || "").trim();
-  text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
-  try {
-    return JSON.parse(text);
-  } catch {}
-  const objectStart = text.indexOf("{");
-  const objectEnd = text.lastIndexOf("}");
-  if (objectStart >= 0 && objectEnd > objectStart) {
-    return JSON.parse(text.slice(objectStart, objectEnd + 1));
-  }
-  throw new Error("The LLM did not return valid JSON.");
-}
-function sanitizeOrganizerBooks(value) {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value.filter((item) => item && typeof item === "object" && typeof item.id === "string" && typeof item.name === "string").slice(0, 1000).map((item) => ({
-    id: item.id,
-    name: item.name.slice(0, 300),
-    folder: typeof item.folder === "string" ? item.folder.slice(0, 300) : "",
-    description: typeof item.description === "string" ? item.description.slice(0, 1200) : "",
-    entryCount: Number.isFinite(Number(item.entryCount)) ? Number(item.entryCount) : 0,
-    sampleKeys: Array.isArray(item.sampleKeys) ? item.sampleKeys.filter((key) => typeof key === "string").slice(0, 12).map((key) => key.slice(0, 160)) : []
-  }));
-}
-function sanitizeSuggestions(parsed, books) {
-  const knownIds = new Set(books.map((book) => book.id));
-  const folders = Array.isArray(parsed?.folders) ? parsed.folders : [];
-  const usedIds = new Set;
-  const clean = [];
-  for (const folder of folders) {
-    if (!folder || typeof folder !== "object") {
-      continue;
-    }
-    const name = typeof folder.name === "string" ? folder.name.trim() : "";
-    if (!name)
-      continue;
-    const ids = Array.from(new Set((Array.isArray(folder.book_ids) ? folder.book_ids : Array.isArray(folder.bookIds) ? folder.bookIds : []).filter((id) => typeof id === "string" && knownIds.has(id) && !usedIds.has(id))));
-    if (ids.length < 2) {
-      continue;
-    }
-    for (const id of ids) {
-      usedIds.add(id);
-    }
-    clean.push({
-      name: name.slice(0, 120),
-      bookIds: ids,
-      reason: typeof folder.reason === "string" ? folder.reason.trim().slice(0, 500) : ""
-    });
-  }
-  return clean;
-}
-function organizerPrompt(books) {
-  const compact = books.map((book) => ({
-    id: book.id,
-    name: book.name,
-    current_folder: book.folder || "",
-    description: book.description || "",
-    entry_count: book.entryCount || 0,
-    representative_keys: book.sampleKeys || []
-  }));
-  return `
-You are organizing a Lumiverse lorebook library.
-
-Your ONLY task is to propose folders that gather related
-lorebooks together.
-
-Do not delete books.
-Do not merge books.
-Do not rename books.
-Do not rewrite lorebook contents.
-Do not invent book IDs.
-Do not put a book into more than one suggested folder.
-
-Prefer useful thematic folders containing at least 2 books.
-Leave unrelated books ungrouped rather than forcing them
-into bad categories.
-
-Return ONLY valid JSON in this exact shape:
-
-{
-  "folders": [
-    {
-      "name": "Folder name",
-      "book_ids": ["exact-id-1", "exact-id-2"],
-      "reason": "Short explanation"
-    }
-  ]
-}
-
-LOREBOOK LIBRARY:
-${JSON.stringify(compact)}
-`.trim();
 }
 async function organizerListAll(api, userId, label) {
   if (!api || typeof api.list !== "function") {
@@ -336,78 +215,6 @@ async function handleLorebookOrganizerMessage(spindleApi, payload, userId) {
     }
     return true;
   }
-  if (type === "bionic_lore_connections") {
-    try {
-      const raw = await spindleApi.connections.list(userId);
-      const connections = (Array.isArray(raw) ? raw : []).map((connection) => ({
-        id: String(connection?.id || ""),
-        name: connection?.name || connection?.display_name || connection?.provider || "Unnamed connection",
-        provider: connection?.provider || "",
-        model: connection?.model || connection?.model_id || ""
-      })).filter((connection) => connection.id);
-      organizerSend(spindleApi, userId, {
-        type: "bionic_lore_connections_result",
-        requestId: payload?.requestId || null,
-        connections
-      });
-    } catch (error) {
-      organizerSend(spindleApi, userId, {
-        type: "bionic_lore_connections_result",
-        requestId: payload?.requestId || null,
-        error: error?.message || String(error)
-      });
-    }
-    return true;
-  }
-  if (type === "bionic_lore_ai_organize") {
-    const requestId = payload?.requestId || null;
-    try {
-      const books = sanitizeOrganizerBooks(payload?.books);
-      if (books.length < 2) {
-        throw new Error("Scan at least two lorebooks before AI organization.");
-      }
-      const connectionId = typeof payload?.connectionId === "string" ? payload.connectionId.trim() : "";
-      organizerSend(spindleApi, userId, {
-        type: "bionic_lore_ai_progress",
-        requestId,
-        stage: "analyzing"
-      });
-      const prompt = organizerPrompt(books);
-      const result = await spindleApi.generate.quiet({
-        userId,
-        prompt,
-        messages: [
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-        connectionId: connectionId || undefined,
-        connection_id: connectionId || undefined,
-        parameters: {
-          temperature: 0.2
-        }
-      });
-      const text = generationText(result);
-      if (!text.trim()) {
-        throw new Error("The selected LLM returned no text.");
-      }
-      const parsed = parseJsonResult(text);
-      const folders = sanitizeSuggestions(parsed, books);
-      organizerSend(spindleApi, userId, {
-        type: "bionic_lore_ai_result",
-        requestId,
-        folders
-      });
-    } catch (error) {
-      organizerSend(spindleApi, userId, {
-        type: "bionic_lore_ai_result",
-        requestId,
-        error: error?.message || String(error)
-      });
-    }
-    return true;
-  }
   if (type === "bionic_lore_apply_folders") {
     const requestId = payload?.requestId || null;
     try {
@@ -440,7 +247,7 @@ async function handleLorebookOrganizerMessage(spindleApi, payload, userId) {
   return false;
 }
 
-// ../../tmp/bionic-organizer-build.u50gHn/src/backend.ts
+// src/backend.ts
 var FF_THINK_FIX_VERSION = "0.48.0";
 var DEFAULT_FF_THINK_CONFIG = {
   boundaryText: "[ \uD83D\uDD70\uFE0F Time",
