@@ -1,3 +1,4 @@
+import { installCharacterCleaner } from './character-cleaner-frontend'
 import { installLorebookOrganizer } from './lorebook-organizer-frontend'
 
 const BIONIC_DRAWER_ICON_SVG = `
@@ -824,12 +825,20 @@ export function setup(ctx) {
       display: none !important;
     }
 
+    .lb-character-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; }
+    .lb-character-row input { flex: 0 0 auto; }
+    .lb-character-row span { min-width: 0; overflow-wrap: anywhere; }
+    .lb-character-row small { display: block; opacity: .75; }
+    #lb-character-cleaner select { width: 100%; }
+    #lb-character-cleaner details { margin: 12px 0; padding: 10px; border: 1px solid rgba(127,127,127,.2); border-radius: 8px; }
+    #lb-character-cleaner button { margin: 4px 0; }
+
     .lumibionic-panel-nav {
       position: sticky;
       top: 0;
       z-index: 6;
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 4px;
       padding: 4px;
       border: 1px solid var(--lumi-border, rgba(127,127,127,.22));
@@ -2933,7 +2942,7 @@ export function setup(ctx) {
 
       <div>
         <div class="lumibionic-muted">
-          Adjust reading, toolbar controls and lorebooks.
+          Adjust reading, toolbar controls, lorebooks and characters.
         </div>
       </div>
 
@@ -3500,6 +3509,13 @@ export function setup(ctx) {
         </div>
       </div>
 
+      <details class="lumibionic-group" data-lumibionic-group="Character Cleaner">
+        <summary>Characters</summary>
+        <div class="lumibionic-group-body"><div class="lumibionic-section">
+          <strong>Duplicate character cleaner</strong>
+          <div id="lb-character-cleaner"></div>
+        </div></div>
+      </details>
       <div class="lumibionic-reset-footer" data-lumibionic-category="tools">
         <div class="lumibionic-muted">Restore reading, font, toolbar and automation settings.</div>
       <button
@@ -3515,6 +3531,8 @@ export function setup(ctx) {
 
   const $ = selector =>
     tab.root.querySelector(selector)
+
+  const characterCleanerCleanup = installCharacterCleaner(tab.root)
 
   const lorebookOrganizerCleanup =
     installLorebookOrganizer(
@@ -3634,7 +3652,7 @@ export function setup(ctx) {
     try {
       const saved = JSON.parse(localStorage.getItem(UI_STATE_KEY) || '{}')
       return {
-        activeCategory: ['reading', 'toolbar', 'lorebooks', 'tools'].includes(saved.activeCategory)
+        activeCategory: ['reading', 'toolbar', 'lorebooks', 'characters', 'tools'].includes(saved.activeCategory)
           ? saved.activeCategory : 'reading',
         previewVisible:
           typeof saved.previewVisible === 'boolean'
@@ -3700,12 +3718,14 @@ export function setup(ctx) {
       ['reading', 'Reading'],
       ['toolbar', 'Toolbar'],
       ['lorebooks', 'Lorebooks'],
+      ['characters', 'Characters'],
       ['tools', 'Tools'],
     ]
     const groupCategories = {
       'Reading & Typography': 'reading',
       'Chat Toolbar': 'toolbar',
       'Lorebook Organizer': 'lorebooks',
+      'Character Cleaner': 'characters',
       Settings: 'tools',
       'FF5 Thinking Fix': 'tools',
       Automation: 'tools',
@@ -6220,6 +6240,7 @@ export function setup(ctx) {
 
     tab.destroy()
     removeStyle()
+    characterCleanerCleanup?.()
     lorebookOrganizerCleanup?.()
     ctx.dom.cleanup()
   }

@@ -98,3 +98,11 @@ Try `600` for a subtler contrast.
 - The backend keeps a small render cache because Lumiverse currently invokes render processing twice per visible message.
 - The cache is cleared on chat/message edit, swipe, and delete lifecycle events.
 - The extension does not make network requests and does not need any permissions besides the one required by Lumiverse's message-content-processor API.
+
+## Duplicate character cleaner
+
+Open **Bionic → Characters → Scan duplicates**. Choose a keeper for each duplicate-name group. “Select matching copies” selects only identical card content; other variants require an explicit review of their differences. Cards linked to primary or group chats are protected.
+
+“Archive selected copies” moves cards to **Bionic — Duplicate cards** and saves their original folder in the card extensions. Use **Archived by Bionic → Restore** to put them back, including after reloads or from another browser. This does not delete cards, assets, lorebooks or chats. Archived cards remain in the library and can be viewed using the folder filter. The cleaner rechecks both copies and all chat references before each archive.
+
+Run `bun install` followed by `bun test` for regression tests.

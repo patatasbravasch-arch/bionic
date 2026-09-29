@@ -1,4 +1,252 @@
-// ../../tmp/bionic-panel-preview-codex/src/lorebook-organizer-core.ts
+// src/character-cleaner-core.ts
+var ARCHIVE_FOLDER = "Bionic — Duplicate cards";
+var ARCHIVE_KEY = "bionic_character_cleaner_archive";
+function characterName(value) {
+  return String(value ?? "").normalize("NFKC").trim().toLowerCase().replace(/(?:\s*\(copy\))+(?:\s*)$/i, "").trim();
+}
+function stable(value) {
+  if (Array.isArray(value))
+    return value.map(stable);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stable(value[key])]));
+  }
+  return value;
+}
+function characterFingerprint(card) {
+  const { id, user_id, created_at, updated_at, folder, name, chatCount, ...content } = card;
+  const extensions = { ...content.extensions || {} };
+  delete extensions._lumiverse_source_filename;
+  delete extensions[ARCHIVE_KEY];
+  return JSON.stringify(stable({ ...content, extensions, name: characterName(name) }));
+}
+function chatReferences(chats, characterId) {
+  return chats.filter((chat) => chat.character_id === characterId || Array.isArray(chat.metadata?.character_ids) && chat.metadata.character_ids.includes(characterId)).length;
+}
+function duplicateGroups(cards, chats) {
+  const groups = new Map;
+  for (const card of cards) {
+    if (card.folder === ARCHIVE_FOLDER || card.extensions?.[ARCHIVE_KEY])
+      continue;
+    const name = characterName(card.name);
+    if (!name)
+      continue;
+    const group = groups.get(name) || [];
+    group.push({ ...card, chatCount: chatReferences(chats, card.id) });
+    groups.set(name, group);
+  }
+  return [...groups.values()].filter((group) => group.length > 1).map((group) => {
+    group.sort((a, b) => b.chatCount - a.chatCount || Number(a.created_at) - Number(b.created_at) || a.id.localeCompare(b.id));
+    return { name: group[0].name, cards: group, keeperId: group[0].id };
+  });
+}
+function assertArchiveSafe(candidate, keeper, chats, expected, keeperExpected = expected, reviewed = false) {
+  if (!candidate || !keeper || candidate.id === keeper.id)
+    throw new Error("Both copies must still exist. Scan again.");
+  if (candidate.folder === ARCHIVE_FOLDER || candidate.extensions?.[ARCHIVE_KEY] || keeper.folder === ARCHIVE_FOLDER || keeper.extensions?.[ARCHIVE_KEY])
+    throw new Error("A copy is already archived. Scan again.");
+  if (characterFingerprint(candidate) !== expected || characterFingerprint(keeper) !== keeperExpected)
+    throw new Error("Card content changed or differs. Scan again.");
+  if (characterName(candidate.name) !== characterName(keeper.name) || !reviewed && expected !== keeperExpected)
+    throw new Error("Review the differences before archiving a variant.");
+  if (chatReferences(chats, candidate.id))
+    throw new Error("This copy is used in a chat and is protected.");
+}
+async function pagedCharacters(api, path) {
+  const cards = [];
+  const seen = new Set;
+  for (let offset = 0;; ) {
+    const page = await api(`${path}?limit=100&offset=${offset}`);
+    if (!Array.isArray(page?.data) || !Number.isFinite(page.total))
+      throw new Error("Incomplete library response. Nothing was changed.");
+    for (const item of page.data) {
+      if (!item?.id || seen.has(item.id))
+        throw new Error("Library changed during scanning. Scan again.");
+      seen.add(item.id);
+      cards.push(item);
+    }
+    offset += page.data.length;
+    if (offset >= page.total)
+      return cards;
+    if (!page.data.length)
+      throw new Error("Incomplete library response. Nothing was changed.");
+  }
+}
+
+// src/character-cleaner-frontend.ts
+var escape = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+function installCharacterCleaner(root) {
+  const host = root.querySelector("#lb-character-cleaner");
+  let cards = [], groups = [], busy = false, disposed = false;
+  const keepers = new Map;
+  const selected = new Set;
+  const reviewed = new Set;
+  let status = "Scan your library to find duplicate cards.";
+  async function api(path, options = {}) {
+    const response = await fetch(path, {
+      credentials: "same-origin",
+      cache: "no-store",
+      ...options,
+      headers: { "Content-Type": "application/json", ...options.headers }
+    });
+    if (!response.ok)
+      throw new Error(`Library request failed (${response.status}).`);
+    return response.json();
+  }
+  const characterPath = (id) => `/api/v1/characters/${encodeURIComponent(id)}`;
+  async function scan() {
+    const [library, chats] = await Promise.all([
+      pagedCharacters(api, "/api/v1/characters"),
+      pagedCharacters(api, "/api/v1/chats")
+    ]);
+    if (disposed)
+      return;
+    cards = library;
+    groups = duplicateGroups(library, chats);
+    selected.clear();
+    reviewed.clear();
+    keepers.clear();
+    groups.forEach((group) => keepers.set(group.cards[0].id, group.keeperId));
+  }
+  function eligible(card, keeper) {
+    return card.id !== keeper.id && !card.chatCount && (characterFingerprint(card) === characterFingerprint(keeper) || reviewed.has(card.id));
+  }
+  function differences(card, keeper) {
+    const fields = Object.keys(card).filter((key) => !["id", "user_id", "name", "folder", "created_at", "updated_at", "chatCount"].includes(key) && JSON.stringify(card[key]) !== JSON.stringify(keeper[key]));
+    return `<details><summary>Review differences (${escape(fields.join(", ") || "name only")})</summary>
+      ${fields.map((key) => `<p><strong>${escape(key)}</strong><br>Keeping: ${escape(String(JSON.stringify(keeper[key]) ?? "").slice(0, 700))}<br>This copy: ${escape(String(JSON.stringify(card[key]) ?? "").slice(0, 700))}</p>`).join("")}
+      <label><input type="checkbox" data-review="${escape(card.id)}" ${reviewed.has(card.id) ? "checked" : ""} ${busy || card.chatCount ? "disabled" : ""}> I reviewed this variant and allow archiving it</label></details>`;
+  }
+  function render() {
+    if (disposed)
+      return;
+    host.innerHTML = `<div class="lumibionic-muted">Copies can be archived into “${escape(ARCHIVE_FOLDER)}” and restored here. Cards used in chats are protected. Review differences before archiving a variant.</div>
+      <div class="lumibionic-toolbar-actions"><button type="button" data-cleaner="scan" ${busy ? "disabled" : ""}>Scan duplicates</button>
+      <button type="button" data-cleaner="select" ${busy || !groups.length ? "disabled" : ""}>Select matching copies</button></div>
+      <p role="status" aria-live="polite">${escape(status)}</p>
+      ${groups.map((group) => {
+      const keeper = group.cards.find((card) => card.id === keepers.get(group.cards[0].id));
+      return `<details class="lumibionic-subsection" open><summary>${escape(group.name)} · ${group.cards.length} cards</summary>
+          <div class="lumibionic-muted">Keep one copy:</div>
+          <select aria-label="Keep a copy of ${escape(group.name)}" data-keeper="${escape(group.cards[0].id)}" ${busy ? "disabled" : ""}>
+            ${group.cards.map((card) => `<option value="${escape(card.id)}" ${card.id === keeper.id ? "selected" : ""}>${escape(card.name)} · ${card.chatCount} chats · ${escape(card.id.slice(0, 8))}</option>`).join("")}</select>
+          ${group.cards.map((card) => `<label class="lb-character-row"><input type="checkbox" data-card="${escape(card.id)}" ${selected.has(card.id) ? "checked" : ""} ${busy || !eligible(card, keeper) ? "disabled" : ""}>
+            <span><strong>${escape(card.name)}</strong><small>${escape(card.folder || "No folder")} · ${escape(card.id.slice(0, 8))}<br>${card.id === keeper.id ? "Keeping this copy" : card.chatCount ? `Protected · ${card.chatCount} chats` : characterFingerprint(card) === characterFingerprint(keeper) ? "Matching content · can archive" : reviewed.has(card.id) ? "Reviewed variant · can archive" : "Different content · review below"}</small></span></label>${card.id !== keeper.id && characterFingerprint(card) !== characterFingerprint(keeper) ? differences(card, keeper) : ""}`).join("")}
+          </details>`;
+    }).join("")}
+      <button type="button" data-cleaner="archive" ${busy || !selected.size ? "disabled" : ""}>Archive selected copies (${selected.size})</button>
+      ${cards.filter((card) => card.extensions?.[ARCHIVE_KEY]).length ? `<details class="lumibionic-subsection"><summary>Archived by Bionic (${cards.filter((card) => card.extensions?.[ARCHIVE_KEY]).length})</summary>
+        ${cards.filter((card) => card.extensions?.[ARCHIVE_KEY]).map((card) => `<div class="lb-character-row"><span>${escape(card.name)}</span><button type="button" data-restore="${escape(card.id)}" ${busy ? "disabled" : ""}>Restore</button></div>`).join("")}</details>` : ""}`;
+  }
+  async function run(action) {
+    if (busy)
+      return;
+    busy = true;
+    render();
+    try {
+      await action();
+    } catch (error) {
+      status = error.message || "Cleaner failed.";
+    } finally {
+      busy = false;
+      render();
+    }
+  }
+  async function archive() {
+    const plan = groups.flatMap((group) => {
+      const keeper = group.cards.find((card) => card.id === keepers.get(group.cards[0].id));
+      return group.cards.filter((card) => selected.has(card.id) && eligible(card, keeper)).map((card) => ({ id: card.id, keeperId: keeper.id, expected: characterFingerprint(card), keeperExpected: characterFingerprint(keeper), reviewed: reviewed.has(card.id) }));
+    });
+    if (!plan.length || !window.confirm(`Archive ${plan.length} duplicate card(s), including any explicitly reviewed variants?
+
+They will move to “${ARCHIVE_FOLDER}”. No cards or chats will be deleted. You can restore them here.`))
+      return;
+    let count = 0;
+    try {
+      for (const item of plan) {
+        const [candidate, keeper, chats] = await Promise.all([
+          api(characterPath(item.id)),
+          api(characterPath(item.keeperId)),
+          pagedCharacters(api, "/api/v1/chats")
+        ]);
+        assertArchiveSafe(candidate, keeper, chats, item.expected, item.keeperExpected, item.reviewed);
+        await api(characterPath(item.id), { method: "PUT", body: JSON.stringify({
+          folder: ARCHIVE_FOLDER,
+          extensions: { ...candidate.extensions, [ARCHIVE_KEY]: { originalFolder: candidate.folder || "", keeperId: keeper.id, archivedAt: new Date().toISOString() } }
+        }) });
+        count++;
+      }
+      status = `Archived ${count} duplicate card(s). Choose the archive folder in Characters to see them.`;
+    } catch (error) {
+      status = `Archived ${count} card(s); stopped: ${error.message}`;
+    }
+    await scan();
+  }
+  const click = (event) => {
+    const button = event.target.closest("button");
+    if (!button || busy)
+      return;
+    if (button.dataset.cleaner === "scan")
+      run(async () => {
+        status = "Scanning…";
+        render();
+        await scan();
+        status = `${cards.length} cards scanned · ${groups.length} duplicate-name groups.`;
+      });
+    if (button.dataset.cleaner === "select") {
+      groups.forEach((group) => {
+        const keeper = group.cards.find((card) => card.id === keepers.get(group.cards[0].id));
+        group.cards.filter((card) => eligible(card, keeper) && characterFingerprint(card) === characterFingerprint(keeper)).forEach((card) => selected.add(card.id));
+      });
+      render();
+    }
+    if (button.dataset.cleaner === "archive")
+      run(archive);
+    if (button.dataset.restore)
+      run(async () => {
+        const card = await api(characterPath(button.dataset.restore));
+        const record = card.extensions?.[ARCHIVE_KEY];
+        if (!record)
+          throw new Error("This card is no longer archived. Scan again.");
+        if (card.folder !== ARCHIVE_FOLDER)
+          throw new Error("This card was moved elsewhere. Restore its folder manually.");
+        const extensions = { ...card.extensions };
+        delete extensions[ARCHIVE_KEY];
+        await api(characterPath(card.id), { method: "PUT", body: JSON.stringify({ folder: record.originalFolder || "", extensions }) });
+        await scan();
+        status = `Restored ${card.name}.`;
+      });
+  };
+  const change = (event) => {
+    if (busy)
+      return;
+    const target = event.target;
+    if (target.dataset.keeper) {
+      keepers.set(target.dataset.keeper, target.value);
+      selected.clear();
+      reviewed.clear();
+      render();
+    }
+    if (target.dataset.review) {
+      target.checked ? reviewed.add(target.dataset.review) : reviewed.delete(target.dataset.review);
+      selected.delete(target.dataset.review);
+      render();
+    }
+    if (target.dataset.card) {
+      target.checked ? selected.add(target.dataset.card) : selected.delete(target.dataset.card);
+      render();
+    }
+  };
+  host.addEventListener("click", click);
+  host.addEventListener("change", change);
+  render();
+  return () => {
+    disposed = true;
+    host.removeEventListener("click", click);
+    host.removeEventListener("change", change);
+  };
+}
+
+// src/lorebook-organizer-core.ts
 function uniqueStrings(value) {
   if (!Array.isArray(value))
     return [];
@@ -131,7 +379,7 @@ function summarizeReferences(refs) {
   return parts.length ? parts.join(" · ") : "no references";
 }
 
-// ../../tmp/bionic-panel-preview-codex/src/lorebook-organizer-frontend.ts
+// src/lorebook-organizer-frontend.ts
 var CONNECTION_KEY = "lumiverse:bionic-style-reading:lore-organizer-connection";
 var IGNORED_FOLDER = "Bionic — Ignored";
 var AI_BATCH_SIZE = 70;
@@ -3337,7 +3585,7 @@ Bionic will refresh characters, chats, personas and global activation immediatel
   };
 }
 
-// ../../tmp/bionic-panel-preview-codex/src/frontend.ts
+// src/frontend.ts
 var BIONIC_DRAWER_ICON_SVG = `
 <svg
   xmlns="http://www.w3.org/2000/svg"
@@ -3977,12 +4225,20 @@ function setup(ctx) {
       display: none !important;
     }
 
+    .lb-character-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; }
+    .lb-character-row input { flex: 0 0 auto; }
+    .lb-character-row span { min-width: 0; overflow-wrap: anywhere; }
+    .lb-character-row small { display: block; opacity: .75; }
+    #lb-character-cleaner select { width: 100%; }
+    #lb-character-cleaner details { margin: 12px 0; padding: 10px; border: 1px solid rgba(127,127,127,.2); border-radius: 8px; }
+    #lb-character-cleaner button { margin: 4px 0; }
+
     .lumibionic-panel-nav {
       position: sticky;
       top: 0;
       z-index: 6;
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 4px;
       padding: 4px;
       border: 1px solid var(--lumi-border, rgba(127,127,127,.22));
@@ -5254,7 +5510,7 @@ function setup(ctx) {
 
       <div>
         <div class="lumibionic-muted">
-          Adjust reading, toolbar controls and lorebooks.
+          Adjust reading, toolbar controls, lorebooks and characters.
         </div>
       </div>
 
@@ -5821,6 +6077,13 @@ function setup(ctx) {
         </div>
       </div>
 
+      <details class="lumibionic-group" data-lumibionic-group="Character Cleaner">
+        <summary>Characters</summary>
+        <div class="lumibionic-group-body"><div class="lumibionic-section">
+          <strong>Duplicate character cleaner</strong>
+          <div id="lb-character-cleaner"></div>
+        </div></div>
+      </details>
       <div class="lumibionic-reset-footer" data-lumibionic-category="tools">
         <div class="lumibionic-muted">Restore reading, font, toolbar and automation settings.</div>
       <button
@@ -5834,6 +6097,7 @@ function setup(ctx) {
     </div>
   `;
   const $ = (selector) => tab.root.querySelector(selector);
+  const characterCleanerCleanup = installCharacterCleaner(tab.root);
   const lorebookOrganizerCleanup = installLorebookOrganizer(ctx, tab.root);
   const preset = $("#lb-preset");
   const bionicEnabled = $("#lb-bionic-enabled");
@@ -5929,7 +6193,7 @@ function setup(ctx) {
     try {
       const saved = JSON.parse(localStorage.getItem(UI_STATE_KEY) || "{}");
       return {
-        activeCategory: ["reading", "toolbar", "lorebooks", "tools"].includes(saved.activeCategory) ? saved.activeCategory : "reading",
+        activeCategory: ["reading", "toolbar", "lorebooks", "characters", "tools"].includes(saved.activeCategory) ? saved.activeCategory : "reading",
         previewVisible: typeof saved.previewVisible === "boolean" ? saved.previewVisible : true,
         sections: saved.sections && typeof saved.sections === "object" ? saved.sections : {}
       };
@@ -5967,12 +6231,14 @@ function setup(ctx) {
       ["reading", "Reading"],
       ["toolbar", "Toolbar"],
       ["lorebooks", "Lorebooks"],
+      ["characters", "Characters"],
       ["tools", "Tools"]
     ];
     const groupCategories = {
       "Reading & Typography": "reading",
       "Chat Toolbar": "toolbar",
       "Lorebook Organizer": "lorebooks",
+      "Character Cleaner": "characters",
       Settings: "tools",
       "FF5 Thinking Fix": "tools",
       Automation: "tools"
@@ -7359,6 +7625,7 @@ The current scan found no character card referencing it. This cannot be undone.`
     }
     tab.destroy();
     removeStyle();
+    characterCleanerCleanup?.();
     lorebookOrganizerCleanup?.();
     ctx.dom.cleanup();
   };
