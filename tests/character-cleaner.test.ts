@@ -1,7 +1,5 @@
 import { describe, test, expect } from 'bun:test'
 import { ARCHIVE_FOLDER, ARCHIVE_KEY, characterFingerprint, duplicateGroups, chatReferences, assertArchiveSafe, pagedCharacters } from '../src/character-cleaner-core'
-import { installCharacterCleaner } from '../src/library-characters-frontend'
-import { JSDOM } from 'jsdom'
 
 const card = (id: string, name = 'Alice', extra = {}) => ({ id, name, description: 'A character', folder: 'Friends', created_at: 1, extensions: {}, ...extra })
 
@@ -47,44 +45,5 @@ describe('Duplicate character cleaner', () => {
     expect(() => assertArchiveSafe(a, b, [], expected, keeperExpected)).toThrow()
     expect(() => assertArchiveSafe(a, b, [], expected, keeperExpected, true)).not.toThrow()
     expect(() => assertArchiveSafe(a, card('b', 'Alice', { first_mes: 'Edited' }), [], expected, keeperExpected, true)).toThrow()
-  })
-  test('real UI archives only selected matching copies and restores the original folder', async () => {
-    const dom = new JSDOM('<div id="root"><div id="lb-character-cleaner"></div></div>')
-    const old = { window: globalThis.window, fetch: globalThis.fetch }
-    globalThis.window = dom.window as any
-    dom.window.confirm = () => true
-    const library = [card('a'), card('b', 'Alice (Copy)'), card('c', 'Alice', { description: 'Different' }), card('d', '<img src=x onerror=alert(1)>')]
-    const writes: any[] = []
-    globalThis.fetch = (async (path: string, options: any) => {
-      const id = path.split('/').pop()
-      if (options.method) {
-        expect(options.method).toBe('PUT')
-        const body = JSON.parse(options.body); writes.push({ id, body })
-        Object.assign(library.find(card => card.id === id)!, body)
-        return { ok: true, json: async () => library.find(card => card.id === id) }
-      }
-      return { ok: true, json: async () => path.includes('?') ? { data: path.includes('/chats?') ? [] : library, total: path.includes('/chats?') ? 0 : library.length } : library.find(card => card.id === id) }
-    }) as any
-    const root = dom.window.document.querySelector('#root') as HTMLElement
-    const cleanup = installCharacterCleaner(root)
-    const click = (selector: string) => (root.querySelector(selector) as HTMLButtonElement).click()
-    const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(resolve => setTimeout(resolve, 1)) }
-    try {
-      click('[data-cleaner="scan"]'); await settle()
-      click('[data-bot-view="duplicates"]')
-      expect(root.textContent).toContain('Different version')
-      click('[data-cleaner="select"]')
-      expect(root.querySelectorAll('input:checked')).toHaveLength(1)
-      click('[data-cleaner="archive"]'); await settle()
-      expect(writes).toHaveLength(1)
-      expect(writes[0].id).toBe('b')
-      expect(writes[0].body.folder).toBe(ARCHIVE_FOLDER)
-      expect(library[1].extensions[ARCHIVE_KEY].originalFolder).toBe('Friends')
-      click('[data-bot-view="archived"]')
-      click('[data-restore="b"]'); await settle()
-      expect(writes).toHaveLength(2)
-      expect(library[1].folder).toBe('Friends')
-      expect(library[1].extensions[ARCHIVE_KEY]).toBeUndefined()
-    } finally { cleanup(); globalThis.window = old.window; globalThis.fetch = old.fetch; dom.window.close() }
   })
 })

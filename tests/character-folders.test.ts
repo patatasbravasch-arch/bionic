@@ -70,6 +70,7 @@ test('folder UI previews before writing, protects existing folders and sends onl
   const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(resolve => setTimeout(resolve, 1)) }
   try {
     click('[data-cleaner="scan"]'); await settle()
+    click('[data-bot-view="folders"]')
     click('[data-cleaner="select-folders"]')
     click('[data-cleaner="preview-folders"]')
     expect(root.textContent).toContain('2 bots will move'); expect(writes).toHaveLength(0)

@@ -21,6 +21,7 @@ export function characterFingerprint(card: any): string {
   const extensions = { ...(content.extensions || {}) }
   delete extensions._lumiverse_source_filename
   delete extensions[ARCHIVE_KEY]
+  delete extensions.bionic_character_cleaner_ignored
   return JSON.stringify(stable({ ...content, extensions, name: characterName(name) }))
 }
 
@@ -32,7 +33,7 @@ export function chatReferences(chats: any[], characterId: string): number {
 export function duplicateGroups(cards: any[], chats: any[]) {
   const groups = new Map<string, any[]>()
   for (const card of cards) {
-    if (card.folder === ARCHIVE_FOLDER || card.extensions?.[ARCHIVE_KEY]) continue
+    if (card.folder === ARCHIVE_FOLDER || card.extensions?.[ARCHIVE_KEY] || card.extensions?.bionic_character_cleaner_ignored) continue
     const name = characterName(card.name)
     if (!name) continue
     const group = groups.get(name) || []

@@ -4882,7 +4882,7 @@ export function installLorebookOrganizer(
               </div>
 
               <div class="lb-organizer-hero-sub">
-                ${activeTab === 'characters' ? 'Organize bots by author or tags' : `Lorebook scan: ${escapeHtml(lastScan)}`}
+                ${activeTab === 'characters' ? 'Compare, edit and organize characters' : `Lorebook scan: ${escapeHtml(lastScan)}`}
               </div>
             </div>
           </div>
@@ -4898,6 +4898,10 @@ export function installLorebookOrganizer(
           </div>
         </div>
 
+          <div class="lb-organizer-tabs" role="tablist" aria-label="Library sections">
+            <button type="button" class="lb-organizer-tab" data-organizer-tab="characters" role="tab" aria-selected="${activeTab === 'characters'}">Characters</button>
+            <button type="button" class="lb-organizer-tab" data-organizer-tab="overview" role="tab" aria-selected="${activeTab !== 'characters'}">Lorebooks</button>
+          </div>
         <div class="lb-organizer-toolbar" ${activeTab === 'characters' ? 'hidden' : ''}>
           <input
             class="lb-organizer-search"
@@ -4929,34 +4933,9 @@ export function installLorebookOrganizer(
         </div>
 
         <div>
-          <div class="lb-organizer-tabs" role="tablist" aria-label="Library tools">
-            ${[
-              ['characters', 'Characters'],
-              ['overview', 'Lorebooks'],
-              ['duplicates', 'Lorebook duplicates'],
-              ['similar', 'Similar names'],
-              ['unlinked', 'Unlinked books'],
-            ].map(([key, label]) => `
-              <button
-                type="button"
-                class="lb-organizer-tab"
-                data-organizer-tab="${key}"
-              role="tab"
-                aria-selected="${String(activeTab === key)}"
-              >
-                ${label}
-                ${
-                  key === 'duplicates' && groups.length
-                    ? ` (${groups.length})`
-                    : key === 'similar' && similarNameGroups().length
-                      ? ` (${similarNameGroups().length})`
-                      : key === 'unlinked' && unlinked.length
-                        ? ` (${unlinked.length})`
-                        : ''
-                }
-              </button>
-            `).join('')}
-          </div>
+          ${activeTab !== 'characters' ? `<div class="lb-organizer-tabs" role="tablist" aria-label="Lorebook tools">
+            ${[['overview', 'All books'], ['duplicates', 'Duplicates'], ['similar', 'Similar names'], ['unlinked', 'Unlinked books']].map(([key, label]) => `<button type="button" class="lb-organizer-tab" data-organizer-tab="${key}" role="tab" aria-selected="${activeTab === key}">${label}</button>`).join('')}
+          </div>` : ''}
 
           <div class="lb-organizer-status" role="status" aria-live="polite" ${activeTab === 'characters' ? 'hidden' : ''}>
             ${escapeHtml(statusMessage)}

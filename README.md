@@ -111,12 +111,18 @@ Choose **Characters → Folders → Scan characters**, then group by **Author** 
 
 ### Character duplicates
 
-Choose **Characters → Duplicates**. The view provides thumbnails, search, six groups per page and readable comparisons. Pick a keeper and archive selected unused copies. Only identical card content can be bulk-selected; other variants need explicit review. Cards linked to primary or group chats are protected.
+Choose **Characters → Duplicates → Scan characters**. Duplicate groups show thumbnails and a keeper selector. **Compare copies** opens a full-width side-by-side view with selectors for the left and right cards and an **Only differences** toggle. Choose which copy to keep, edit either card, ignore cards or delete unused copies.
 
-Archiving moves cards into **Bionic — Duplicate cards** and saves their original folder in the card extensions. **Characters → Archived → Restore** puts them back, including after reloads or from another browser. Cards, assets, lorebooks and chats remain intact. Archived cards remain in the library and are visible through its folder filter.
+**Edit** provides name, author, folder, tags, description, personality, scenario, opening messages, alternate greetings, example messages, author notes and prompt fields. Saving updates only changed fields and rejects stale edits.
+
+**Ignore** leaves cards usable and in their current folder, while excluding them from future duplicate scans. **Ignore group** excludes the whole group. Use **Ignored → Include in scans again** to reverse that decision.
+
+**Delete** permanently removes the selected copies after confirmation. The keeper is retained. Cards used in primary or group chats are protected because Lumiverse's character deletion also removes linked chats. Both card snapshots, names, folders and all chat references are checked before any deletion, and again before each copy is removed. Only identical unused copies can be bulk-selected automatically; reviewed versions can be selected from the comparison view. Character-owned assets may be removed by Lumiverse when deleting a card.
+
+Cards archived by earlier versions remain restorable under **Previously archived**, which is shown only when such cards exist.
 
 ### Lorebooks
 
-Use **Lorebooks**, **Lorebook duplicates**, **Similar names** and **Unlinked books** to inspect books, check references and assign folders manually. Character, chat, persona and global lorebook references are checked during cleanup.
+Select the main **Lorebooks** tab, then use **All books**, **Duplicates**, **Similar names** and **Unlinked books** to inspect books, check references and assign folders manually. These controls appear only in the Lorebooks section. Character, chat, persona and global lorebook references are checked during cleanup.
 
 Run `bun install` followed by `bun test` for regression tests.
