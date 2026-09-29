@@ -1,3 +1,4 @@
+import { folderPreferences, FOLDER_PREFERENCES_PATH } from './folder-preferences'
 function organizerSend(
   spindleApi: any,
   userId: string,
@@ -336,6 +337,17 @@ export async function handleLorebookOrganizerMessage(
 ): Promise<boolean> {
   const type =
     payload?.type
+
+  if (payload?.type === 'bionic_character_folder_preferences_load' || payload?.type === 'bionic_character_folder_preferences_save') {
+    try {
+      const preferences = payload.type.endsWith('_save') ? folderPreferences(payload.preferences) : folderPreferences(await spindleApi.userStorage.getJson(FOLDER_PREFERENCES_PATH, { userId, fallback: { author: [], tag: [] } }))
+      if (payload.type.endsWith('_save')) await spindleApi.userStorage.setJson(FOLDER_PREFERENCES_PATH, preferences, { userId })
+      organizerSend(spindleApi, userId, { type: payload.type + '_result', requestId: payload.requestId, preferences })
+    } catch (error: any) {
+      organizerSend(spindleApi, userId, { type: payload.type + '_result', requestId: payload.requestId, error: error?.message || String(error) })
+    }
+    return true
+  }
 
   if (
     type ===

@@ -1,4 +1,11 @@
 // @bun
+// src/folder-preferences.ts
+var FOLDER_PREFERENCES_PATH = "settings/character-folder-preferences.json";
+function folderPreferences(raw) {
+  const keys = (value) => Array.isArray(value) ? [...new Set(value.filter((item) => typeof item === "string").map((item) => item.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase()).filter(Boolean))].slice(0, 500) : [];
+  return { author: keys(raw?.author), tag: keys(raw?.tag) };
+}
+
 // src/lorebook-organizer-backend.ts
 function organizerSend(spindleApi, userId, payload) {
   spindleApi.sendToFrontend(payload, userId);
@@ -113,6 +120,17 @@ async function organizerReferenceSnapshot(spindleApi, userId) {
 }
 async function handleLorebookOrganizerMessage(spindleApi, payload, userId) {
   const type = payload?.type;
+  if (payload?.type === "bionic_character_folder_preferences_load" || payload?.type === "bionic_character_folder_preferences_save") {
+    try {
+      const preferences = payload.type.endsWith("_save") ? folderPreferences(payload.preferences) : folderPreferences(await spindleApi.userStorage.getJson(FOLDER_PREFERENCES_PATH, { userId, fallback: { author: [], tag: [] } }));
+      if (payload.type.endsWith("_save"))
+        await spindleApi.userStorage.setJson(FOLDER_PREFERENCES_PATH, preferences, { userId });
+      organizerSend(spindleApi, userId, { type: payload.type + "_result", requestId: payload.requestId, preferences });
+    } catch (error) {
+      organizerSend(spindleApi, userId, { type: payload.type + "_result", requestId: payload.requestId, error: error?.message || String(error) });
+    }
+    return true;
+  }
   if (type === "bionic_lore_reference_snapshot") {
     const requestId = payload?.requestId || null;
     try {

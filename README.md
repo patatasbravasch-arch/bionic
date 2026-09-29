@@ -105,7 +105,7 @@ Open **Bionic → Library → Open library** to manage characters and lorebooks 
 
 ### Character folders
 
-Choose **Characters → Folders → Scan characters**, then group by **Author** or **Tag**. Groups use the author and tags saved on each card; empty metadata and archived duplicates are excluded. Each group needs at least two bots. Select groups, rename the proposed folders if needed, and choose **Preview folder moves**. The preview lists every bot and its current and destination folder. Apply the preview to create the folders and move the bots.
+Choose **Characters → Folders → Scan characters**, then group by **Author** or **Tag**. Groups use the author and tags saved on each card; empty metadata and archived duplicates are excluded. Each group needs at least two bots. Use **Select this folder** for each author or tag you want, rename the proposed folders if needed, and choose **Preview folder moves**. Suggestions start unselected; unselected folders are not created. **Don’t suggest this tag/author** saves an exclusion to your account, so tags such as musicmania or AnyPOV can be left out of future suggestions. Expand **Excluded tags/authors** and choose **Use … again** to restore a suggestion. The preview lists every bot and its current and destination folder. Apply the preview to create the folders and move the bots.
 
 **Only bots without a folder** is enabled by default. Disable it explicitly to reorganize bots already in folders. A bot with several selected tags goes into the most common selected tag's folder, with an alphabetical tie-break. Both the preview and the updates use that same plan. Cards changed or moved since the preview stop the remaining updates. Only the folder field is changed.
 
@@ -117,7 +117,7 @@ Choose **Characters → Duplicates → Scan characters**. Duplicate groups show 
 
 **Ignore** leaves cards usable and in their current folder, while excluding them from future duplicate scans. **Ignore group** excludes the whole group. Use **Ignored → Include in scans again** to reverse that decision.
 
-**Delete** permanently removes the selected copies after confirmation. The keeper is retained. Cards used in primary or group chats are protected because Lumiverse's character deletion also removes linked chats. Both card snapshots, names, folders and all chat references are checked before any deletion, and again before each copy is removed. Only identical unused copies can be bulk-selected automatically; reviewed versions can be selected from the comparison view. Character-owned assets may be removed by Lumiverse when deleting a card.
+**Delete** opens an in-panel **Yes, delete / No, keep it** confirmation for that copy. Deletion is available for unused identical copies and differing versions without a review or selection checkbox. The keeper is retained. Cards used in primary or group chats are protected because Lumiverse's character deletion also removes linked chats. Both card snapshots, names, folders and all chat references are checked before any deletion, and again before each copy is removed. Character-owned assets may be removed by Lumiverse when deleting a card.
 
 Cards archived by earlier versions remain restorable under **Previously archived**, which is shown only when such cards exist.
 

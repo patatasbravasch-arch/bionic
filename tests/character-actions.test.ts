@@ -49,17 +49,36 @@ test('comparison supports confirmed deletion of a variant while preserving the k
   click('[data-compare="copy"]')
   expect(root.querySelector('.lb-bot-comparison')).not.toBeNull()
   expect(root.textContent).toContain('A different version')
-  window.confirm = () => false
+  window.confirm = () => { throw new Error('Deletion must not use native dialogs') }
   click('[data-delete-card="copy"]'); await settle(); expect(writes).toHaveLength(0)
-  window.confirm = () => true
-  click('[data-delete-card="copy"]'); await settle()
+  expect(root.querySelector('[aria-label="Confirm deletion"]')).not.toBeNull()
+  click('[data-cleaner="cancel-delete"]'); expect(writes).toHaveLength(0)
+  click('[data-delete-card="copy"]'); click('[data-cleaner="confirm-delete"]'); await settle()
   expect(writes).toEqual([{ id: 'copy', method: 'DELETE' }]); expect(library.map(card => card.id)).toEqual(['keeper'])
+}))
+
+test('direct deletion is clickable for differing versions without review or selection checkboxes', async () => harness(async ({ root, click, settle, writes }) => {
+  expect((root.querySelector('[data-delete-card="copy"]') as HTMLButtonElement).disabled).toBe(false)
+  expect(root.querySelector('[data-card]')).toBeNull()
+  click('[data-delete-card="copy"]')
+  expect(root.textContent).toContain('These versions have different content')
+  expect(writes).toHaveLength(0)
+  click('[data-cleaner="confirm-delete"]'); await settle()
+  expect(writes).toEqual([{ id: 'copy', method: 'DELETE' }])
+}))
+
+test('changing the keeper leaves direct deletion available for the other copy', async () => harness(async ({ root, click, settle, library, writes }) => {
+  const target = root.querySelector('[data-keeper]') as HTMLSelectElement
+  target.value = 'copy'; target.dispatchEvent(new window.Event('change', { bubbles: true }))
+  expect((root.querySelector('[data-delete-card="keeper"]') as HTMLButtonElement).disabled).toBe(false)
+  click('[data-delete-card="keeper"]'); click('[data-cleaner="confirm-delete"]'); await settle()
+  expect(writes).toEqual([{ id: 'keeper', method: 'DELETE' }]); expect(library.map(card => card.id)).toEqual(['copy'])
 }))
 
 test('new chat links block deletion after comparison and cause no writes', async () => harness(async ({ root, click, settle, writes, chats }) => {
   click('[data-compare="copy"]')
   chats.push({ id: 'new-chat', character_id: 'other', metadata: { character_ids: ['copy'] } })
-  click('[data-delete-card="copy"]'); await settle()
+  click('[data-delete-card="copy"]'); click('[data-cleaner="confirm-delete"]'); await settle()
   expect(writes).toHaveLength(0); expect(root.textContent).toContain('Deletion is blocked')
 }))
 

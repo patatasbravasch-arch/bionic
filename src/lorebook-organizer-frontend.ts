@@ -5038,7 +5038,10 @@ export function installLorebookOrganizer(
     characterPanel.id = 'lb-character-cleaner'
     const characterWrapper = document.createElement('div')
     characterWrapper.append(characterPanel)
-    characterCleanup = installCharacterCleaner(characterWrapper)
+    characterCleanup = installCharacterCleaner(characterWrapper, {
+      loadFolderPreferences: () => sendBackend('bionic_character_folder_preferences_load'),
+      saveFolderPreferences: preferences => sendBackend('bionic_character_folder_preferences_save', { preferences }),
+    })
 
     renderAll()
 
