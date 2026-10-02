@@ -3688,19 +3688,22 @@ var lines = [
   "The next reply can wait until morning.",
   "Let’s get cozy and call it a night."
 ];
-var bunnySvg = `<svg class="ken-bunny" viewBox="0 0 116 145" role="img" aria-label="Bedtime bunny" xmlns="http://www.w3.org/2000/svg">
-  <ellipse class="ken-ear ken-ear-left" cx="42" cy="43" rx="13" ry="37" fill="#fff8f1" stroke="#714f55" stroke-width="3" transform="rotate(-12 42 43)"/>
-  <ellipse cx="42" cy="42" rx="6" ry="25" fill="#f7b5c0" transform="rotate(-12 42 42)"/>
-  <ellipse class="ken-ear ken-ear-right" cx="75" cy="42" rx="13" ry="38" fill="#fff8f1" stroke="#714f55" stroke-width="3" transform="rotate(12 75 42)"/>
-  <ellipse cx="75" cy="40" rx="6" ry="25" fill="#f7b5c0" transform="rotate(12 75 40)"/>
-  <ellipse class="ken-foot ken-foot-left" cx="37" cy="130" rx="17" ry="9" fill="#fff8f1" stroke="#714f55" stroke-width="3"/>
-  <ellipse class="ken-foot ken-foot-right" cx="79" cy="130" rx="17" ry="9" fill="#fff8f1" stroke="#714f55" stroke-width="3"/>
-  <ellipse cx="58" cy="105" rx="35" ry="31" fill="#fff8f1" stroke="#714f55" stroke-width="3"/>
-  <circle cx="58" cy="72" r="39" fill="#fff8f1" stroke="#714f55" stroke-width="3"/>
-  <ellipse cx="43" cy="75" rx="3.5" ry="5" fill="#433039"/><ellipse cx="74" cy="75" rx="3.5" ry="5" fill="#433039"/>
-  <ellipse cx="34" cy="86" rx="8" ry="4" fill="#f8c1c7" opacity=".65"/><ellipse cx="82" cy="86" rx="8" ry="4" fill="#f8c1c7" opacity=".65"/>
-  <path d="M53 86q5-5 10 0l-5 4z" fill="#ed91a3"/><path d="M58 90q-4 7-9 4m9-4q4 7 9 4" fill="none" stroke="#714f55" stroke-width="2.5" stroke-linecap="round"/>
-  <path class="ken-paw" d="M83 101q23-7 25 7q1 7-7 7q-7 0-18-3" fill="#fff8f1" stroke="#714f55" stroke-width="3" stroke-linecap="round"/>
+var bunnySvg = `<svg class="ken-bunny" viewBox="0 0 200 110" role="img" aria-label="Sleepy bunny lying on the chat textbox" xmlns="http://www.w3.org/2000/svg">
+  <ellipse cx="103" cy="100" rx="87" ry="6" fill="#5a4558" opacity=".24"/>
+  <path class="ken-ear" d="M50 46C31 28 13 16 9 30C6 43 25 57 45 58Z" fill="#fff8f1" stroke="#735a68" stroke-width="3"/>
+  <path d="M45 48C28 33 15 27 16 33C17 39 29 47 43 53Z" fill="#f4b7c3"/>
+  <path d="M58 42C52 17 58 5 70 10C82 15 75 34 69 49Z" fill="#fff8f1" stroke="#735a68" stroke-width="3"/>
+  <path d="M62 39C58 20 62 14 68 17C74 21 70 35 67 42Z" fill="#f4b7c3"/>
+  <ellipse cx="168" cy="82" rx="24" ry="15" fill="#fff8f1" stroke="#735a68" stroke-width="3"/>
+  <ellipse class="ken-bunny-body" cx="114" cy="72" rx="65" ry="29" fill="#fff8f1" stroke="#735a68" stroke-width="3"/>
+  <ellipse cx="160" cy="89" rx="20" ry="9" fill="#fff8f1" stroke="#735a68" stroke-width="3"/>
+  <circle cx="58" cy="67" r="30" fill="#fff8f1" stroke="#735a68" stroke-width="3"/>
+  <path d="M38 66q7 8 14 0m13 0q7 8 14 0" fill="none" stroke="#59434e" stroke-width="2.7" stroke-linecap="round"/>
+  <ellipse cx="38" cy="77" rx="7" ry="3" fill="#f7bec8" opacity=".68"/><ellipse cx="78" cy="77" rx="7" ry="3" fill="#f7bec8" opacity=".68"/>
+  <path d="M54 76q4-4 8 0l-4 3z" fill="#e99bad"/><path d="M58 79q-3 5-7 3m7-3q3 5 7 3" fill="none" stroke="#735a68" stroke-width="2" stroke-linecap="round"/>
+  <path d="M44 92q13 6 27 0" fill="none" stroke="#735a68" stroke-width="3" stroke-linecap="round"/>
+  <path class="ken-paw" d="M129 86q22-12 33-4q7 6 0 13q-6 5-18 2" fill="#fff8f1" stroke="#735a68" stroke-width="3" stroke-linecap="round"/>
+  <text x="92" y="33" fill="#b293ac" font-family="system-ui,sans-serif" font-size="17" font-weight="700">z</text><text x="105" y="21" fill="#b293ac" font-family="system-ui,sans-serif" font-size="12" font-weight="700">z</text>
 </svg>`;
 var pugSvg = `<svg class="ken-pug" viewBox="0 0 100 92" role="img" aria-label="Little pug being petted" xmlns="http://www.w3.org/2000/svg">
   <ellipse cx="49" cy="73" rx="38" ry="17" fill="#b89169" stroke="#664c42" stroke-width="3"/>
@@ -3711,23 +3714,23 @@ var pugSvg = `<svg class="ken-pug" viewBox="0 0 100 92" role="img" aria-label="L
   <ellipse cx="49" cy="52" rx="7" ry="5" fill="#2f2527"/><path d="M49 57q-5 6-10 4m10-4q5 6 10 4" fill="none" stroke="#2f2527" stroke-width="2" stroke-linecap="round"/>
 </svg>`;
 var style = `
-.ken-bedtime{position:fixed;z-index:2147483000;pointer-events:none;display:flex;align-items:flex-end;gap:0;max-width:min(360px,calc(100vw - 24px));filter:drop-shadow(0 9px 20px rgba(30,15,33,.22));animation:ken-arrive .9s cubic-bezier(.2,.9,.25,1) both}
-.ken-bedtime-bubble{position:relative;align-self:flex-start;max-width:230px;min-width:150px;padding:13px 29px 13px 15px;border:2px solid #795a72;border-radius:17px 17px 5px 17px;background:#fffaf5;color:#382c3b;font:600 14px/1.35 system-ui,sans-serif;pointer-events:auto}
-.ken-bedtime-bubble::after{content:"";position:absolute;right:-8px;bottom:18px;width:13px;height:13px;background:#fffaf5;border-right:2px solid #795a72;border-bottom:2px solid #795a72;transform:rotate(-45deg)}
+.ken-bedtime{position:fixed;z-index:2147483000;pointer-events:none;display:flex;flex-direction:column;align-items:flex-start;max-width:min(300px,calc(100vw - 24px));filter:drop-shadow(0 8px 15px rgba(30,15,33,.2));animation:ken-arrive-left .8s cubic-bezier(.2,.9,.25,1) both}
+.ken-bedtime-bubble{position:relative;max-width:245px;min-width:150px;margin-left:36px;padding:11px 29px 11px 14px;border:2px solid #795a72;border-radius:15px 15px 15px 5px;background:#fffaf5;color:#382c3b;font:600 14px/1.35 system-ui,sans-serif;pointer-events:auto}
+.ken-bedtime-bubble::after{content:"";position:absolute;left:20px;bottom:-8px;width:13px;height:13px;background:#fffaf5;border-right:2px solid #795a72;border-bottom:2px solid #795a72;transform:rotate(45deg)}
 .ken-bedtime-close{position:absolute;right:5px;top:3px;border:0;background:transparent;color:#705361;font:700 20px/1 system-ui,sans-serif;cursor:pointer;padding:2px 5px}
 .ken-bedtime-close:focus-visible{outline:2px solid #705361;border-radius:4px}
-.ken-bedtime-friends{display:flex;align-items:flex-end;flex:none;margin-left:-4px}
-.ken-bunny{width:82px;height:104px;overflow:visible;animation:ken-bob .42s ease-in-out 4 alternate}
-.ken-foot-left{transform-origin:37px 127px;animation:ken-step .3s ease-in-out 3 alternate}
-.ken-foot-right{transform-origin:79px 127px;animation:ken-step .3s ease-in-out 3 alternate-reverse}
-.ken-pug{width:60px;height:56px;margin-left:-21px;margin-bottom:1px;display:none}
+.ken-bedtime-friends{display:flex;align-items:flex-end;flex:none;margin-top:2px}
+.ken-bunny{width:168px;height:92px;overflow:visible}
+.ken-bunny-body{transform-origin:114px 72px;animation:ken-breathe 2.3s ease-in-out infinite alternate}
+.ken-ear{transform-origin:50px 46px;animation:ken-ear-twitch 4s ease-in-out infinite alternate}
+.ken-pug{width:54px;height:50px;margin-left:-22px;margin-bottom:2px;display:none}
 .ken-bedtime-with-pug .ken-pug{display:block}
-.ken-bedtime-with-pug .ken-paw{transform-origin:84px 104px;animation:ken-pet .55s ease-in-out 5 alternate}
-@keyframes ken-arrive{from{transform:translateX(calc(100vw + 380px))}to{transform:translateX(0)}}
-@keyframes ken-bob{to{transform:translateY(-5px)}}
-@keyframes ken-step{to{transform:rotate(13deg)}}
+.ken-bedtime-with-pug .ken-paw{transform-origin:130px 86px;animation:ken-pet .8s ease-in-out 4 alternate}
+@keyframes ken-arrive-left{from{transform:translateX(calc(-100vw - 300px))}to{transform:translateX(0)}}
+@keyframes ken-breathe{to{transform:scaleY(.94)}}
+@keyframes ken-ear-twitch{to{transform:rotate(-5deg)}}
 @keyframes ken-pet{to{transform:rotate(-16deg)}}
-@media(prefers-reduced-motion:reduce){.ken-bedtime,.ken-bunny,.ken-foot-left,.ken-foot-right,.ken-bedtime-with-pug .ken-paw{animation:none}}
+@media(prefers-reduced-motion:reduce){.ken-bedtime,.ken-bunny-body,.ken-ear,.ken-bedtime-with-pug .ken-paw{animation:none}}
 `;
 function createKenSleepCompanion(doc, options) {
   const random = options.random ?? Math.random;
@@ -3743,8 +3746,9 @@ function createKenSleepCompanion(doc, options) {
     const rect = composer?.getBoundingClientRect();
     const view = doc.defaultView;
     const width = view?.innerWidth ?? 1024, height = view?.innerHeight ?? 768;
-    root.style.right = `${Math.max(12, rect ? width - rect.right : 12)}px`;
-    root.style.bottom = `${Math.max(16, rect ? height - rect.top + 8 : 80)}px`;
+    const desiredLeft = rect ? rect.left + 12 : 12;
+    root.style.left = `${Math.max(12, Math.min(desiredLeft, width - root.offsetWidth - 12))}px`;
+    root.style.bottom = `${Math.max(16, rect ? height - rect.top - 19 : 80)}px`;
   };
   const remove = () => {
     if (timer)

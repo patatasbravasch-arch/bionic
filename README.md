@@ -40,7 +40,7 @@ Use **All books**, **Duplicates**, **Similar names**, and **Unlinked books** to 
 - **Reasoning repair:** Move text before or after a configurable boundary marker into Lumiverse's native reasoning field. You can run it on the latest reply or enable automatic repair.
 - **Auto regenerate:** Regenerate completed replies containing your chosen trigger text, up to your retry limit. This is off until you enable it.
 - **Menu Folder:** Move supported Lumiverse drawer items into one Folder entry and restore them later.
-- **Ken bedtime bunny:** When the active persona is named exactly `Ken`, late-night user messages (10 p.m.–6 a.m. on the device clock) can bring a bunny beside the chat textbox. It offers a short bedtime reminder and sometimes pets a pug. Close it to stop reminders for that night; if it disappears on its own, it may return after more chatting. Use **Tools → Ken bedtime bunny → Test bunny** to preview it at any time without sending a message or silencing the nightly reminder. It does not change messages or send anything to the AI.
+- **Ken bedtime bunny:** When the active persona is named exactly `Ken`, late-night user messages (10 p.m.–6 a.m. on the device clock) can bring a sleepy bunny onto the left edge of the chat textbox. It offers a short bedtime reminder and sometimes pets a pug. Close it to stop reminders for that night; if it disappears on its own, it may return after more chatting. Use **Tools → Ken bedtime bunny → Test bunny** to preview it at any time without sending a message or silencing the nightly reminder. It does not change messages or send anything to the AI.
 
 Reasoning repair and auto regenerate can change saved chat messages or trigger generation. Read their settings before enabling them.
 
