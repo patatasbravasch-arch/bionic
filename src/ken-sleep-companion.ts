@@ -120,7 +120,7 @@ export function createKenSleepCompanion(doc: Document, options: { onDismiss: () 
   }
   return {
     isVisible: () => Boolean(root),
-    show() {
+    show(preview = false) {
       if (root) return
       const line = lines[Math.floor(random() * lines.length) % lines.length]
       const withPug = random() < 0.3
@@ -130,7 +130,7 @@ export function createKenSleepCompanion(doc: Document, options: { onDismiss: () 
       root.setAttribute('aria-live', 'polite')
       root.innerHTML = `<div class="ken-bedtime-bubble"><span class="ken-bedtime-line"></span><button type="button" class="ken-bedtime-close" aria-label="Dismiss bedtime reminder">×</button></div><div class="ken-bedtime-friends">${bunnySvg}${pugSvg}</div>`
       root.querySelector('.ken-bedtime-line')!.textContent = line
-      root.querySelector('.ken-bedtime-close')!.addEventListener('click', () => { options.onDismiss(); remove() })
+      root.querySelector('.ken-bedtime-close')!.addEventListener('click', () => { if (!preview) options.onDismiss(); remove() })
       doc.body.append(root)
       position()
       doc.defaultView?.addEventListener('resize', position)

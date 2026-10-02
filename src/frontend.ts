@@ -3258,6 +3258,21 @@ export function setup(ctx) {
         </div>
       </details>
 
+      <details class="lumibionic-group" data-lumibionic-group="Ken bedtime bunny">
+        <summary>Ken bedtime bunny</summary>
+        <div class="lumibionic-group-body">
+          <div class="lumibionic-section">
+            <div class="lumibionic-muted">
+              The bunny appears after late-night messages from the persona named Ken.
+              Preview it any time without changing the nightly reminder.
+            </div>
+            <div class="lumibionic-toolbar-actions">
+              <button type="button" id="lb-ken-test">Test bunny</button>
+            </div>
+          </div>
+        </div>
+      </details>
+
       <details
         class="lumibionic-group"
         data-lumibionic-group="Lorebook Organizer"
@@ -3574,6 +3589,7 @@ export function setup(ctx) {
       Settings: 'tools',
       'FF5 Thinking Fix': 'tools',
       Automation: 'tools',
+      'Ken bedtime bunny': 'tools',
     }
     settingsRoot.querySelectorAll('.lumibionic-group').forEach(group => {
       const category = groupCategories[group.getAttribute('data-lumibionic-group')]
@@ -4727,13 +4743,16 @@ export function setup(ctx) {
     kenDismissedNight = night
     try { localStorage.setItem(KEN_SLEEP_DISMISSED_KEY, night) } catch {}
   }
+  function getKenSleepCompanion() {
+    kenSleepCompanion ||= createKenSleepCompanion(document, {
+      onDismiss: dismissKenForNight,
+    })
+    return kenSleepCompanion
+  }
   function showKenSleepPopup() {
     if (kenSleepModal || kenSleepCompanion?.isVisible()) return
     try {
-      kenSleepCompanion ||= createKenSleepCompanion(document, {
-        onDismiss: dismissKenForNight,
-      })
-      kenSleepCompanion.show()
+      getKenSleepCompanion().show()
       return
     } catch (error) {
       console.warn('[Lumi Toolkit] Ken bunny could not appear:', error)
@@ -4766,6 +4785,11 @@ export function setup(ctx) {
   function handleKenSleepMessage(payload) {
     kenSleepGate.onMessage(payload)
   }
+  tab.root.querySelector('#lb-ken-test')?.addEventListener('click', () => {
+    if (kenSleepModal) return
+    try { getKenSleepCompanion().show(true) }
+    catch (error) { console.warn('[Lumi Toolkit] Ken bunny preview failed:', error) }
+  })
 
   let loreCleanupGroups = []
   let loreCleanupUnlinked = []

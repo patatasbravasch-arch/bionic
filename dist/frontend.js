@@ -3757,7 +3757,7 @@ function createKenSleepCompanion(doc, options) {
   };
   return {
     isVisible: () => Boolean(root),
-    show() {
+    show(preview = false) {
       if (root)
         return;
       const line = lines[Math.floor(random() * lines.length) % lines.length];
@@ -3769,7 +3769,8 @@ function createKenSleepCompanion(doc, options) {
       root.innerHTML = `<div class="ken-bedtime-bubble"><span class="ken-bedtime-line"></span><button type="button" class="ken-bedtime-close" aria-label="Dismiss bedtime reminder">×</button></div><div class="ken-bedtime-friends">${bunnySvg}${pugSvg}</div>`;
       root.querySelector(".ken-bedtime-line").textContent = line;
       root.querySelector(".ken-bedtime-close").addEventListener("click", () => {
-        options.onDismiss();
+        if (!preview)
+          options.onDismiss();
         remove();
       });
       doc.body.append(root);
@@ -6113,6 +6114,21 @@ function setup(ctx) {
         </div>
       </details>
 
+      <details class="lumibionic-group" data-lumibionic-group="Ken bedtime bunny">
+        <summary>Ken bedtime bunny</summary>
+        <div class="lumibionic-group-body">
+          <div class="lumibionic-section">
+            <div class="lumibionic-muted">
+              The bunny appears after late-night messages from the persona named Ken.
+              Preview it any time without changing the nightly reminder.
+            </div>
+            <div class="lumibionic-toolbar-actions">
+              <button type="button" id="lb-ken-test">Test bunny</button>
+            </div>
+          </div>
+        </div>
+      </details>
+
       <details
         class="lumibionic-group"
         data-lumibionic-group="Lorebook Organizer"
@@ -6374,7 +6390,8 @@ function setup(ctx) {
       "Lorebook Organizer": "library",
       Settings: "tools",
       "FF5 Thinking Fix": "tools",
-      Automation: "tools"
+      Automation: "tools",
+      "Ken bedtime bunny": "tools"
     };
     settingsRoot.querySelectorAll(".lumibionic-group").forEach((group) => {
       const category = groupCategories[group.getAttribute("data-lumibionic-group")];
@@ -7045,14 +7062,17 @@ function setup(ctx) {
       localStorage.setItem(KEN_SLEEP_DISMISSED_KEY, night);
     } catch {}
   }
+  function getKenSleepCompanion() {
+    kenSleepCompanion ||= createKenSleepCompanion(document, {
+      onDismiss: dismissKenForNight
+    });
+    return kenSleepCompanion;
+  }
   function showKenSleepPopup() {
     if (kenSleepModal || kenSleepCompanion?.isVisible())
       return;
     try {
-      kenSleepCompanion ||= createKenSleepCompanion(document, {
-        onDismiss: dismissKenForNight
-      });
-      kenSleepCompanion.show();
+      getKenSleepCompanion().show();
       return;
     } catch (error) {
       console.warn("[Lumi Toolkit] Ken bunny could not appear:", error);
@@ -7093,6 +7113,15 @@ function setup(ctx) {
   function handleKenSleepMessage(payload) {
     kenSleepGate.onMessage(payload);
   }
+  tab.root.querySelector("#lb-ken-test")?.addEventListener("click", () => {
+    if (kenSleepModal)
+      return;
+    try {
+      getKenSleepCompanion().show(true);
+    } catch (error) {
+      console.warn("[Lumi Toolkit] Ken bunny preview failed:", error);
+    }
+  });
   let loreCleanupGroups = [];
   let loreCleanupUnlinked = [];
   let loreCleanupCharacters = [];
