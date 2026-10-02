@@ -1,5 +1,5 @@
 import { kenBunnyDataUrl } from './ken-bunny-asset'
-import { kenPugDataUrl } from './ken-pug-asset'
+import { kenBunnyPugDataUrl } from './ken-bunny-pug-asset'
 
 export const KEN_SLEEP_DISMISSED_KEY = 'lumiverse:lumi-toolkit:ken-sleep-dismissed-night'
 
@@ -52,6 +52,36 @@ const soloLines = [
   'The story will still be here tomorrow, promise.',
   'Even bunnies need sleep, Ken.',
   'Let’s get cozy and call it a night.',
+  'Your pillow misses you.',
+  'Sleep is a pretty good plot twist.',
+  'You can pick this up tomorrow.',
+  'Ken, the moon called. It says bedtime.',
+  'That last reply can be tomorrow’s first.',
+  'Let’s give your eyes a little break.',
+  'I’m keeping your spot warm.',
+  'You’ve earned a soft landing tonight.',
+  'Your blankets are waiting.',
+  'Ken, I admire your dedication. Your pillow doesn’t.',
+  'Your bedtime has been waiting very patiently.',
+  'Perhaps the cliffhanger can wait.',
+  'No need to finish the whole story tonight.',
+  'One more reply sounds suspiciously familiar.',
+  'Let’s save some magic for tomorrow.',
+  'You can log off without losing the moment.',
+  'The chat will be here when you wake up.',
+  'Your sleepy bunny recommends a blanket.',
+  'I’m not judging. I’m just yawning at you.',
+  'I’m about to fall asleep on your keyboard.',
+  'Let’s put this adventure on pause.',
+  'Even heroes need to recharge.',
+  'The next scene can wait until morning.',
+  'Come on, let’s call it a night.',
+  'Your eyes could use a happy ending tonight.',
+  'Wouldn’t a little rest feel nice?',
+  'Ken, I think your blanket is winning.',
+  'One more minute? Famous last words.',
+  'I’ll be here when the sun comes up.',
+  'Sleep first. Plot twists later.',
 ]
 
 const pugLines = [
@@ -60,13 +90,30 @@ const pugLines = [
   'The pug has claimed the pillow. There’s room for you.',
   'I think “one more reply” became a whole chapter.',
   'Maybe you should take melatonin.',
+  'The pug voted for sleep. I second that.',
+  'Look at those sleepy eyes. We’re outnumbered.',
+  'He wants a cuddle break.',
+  'The pug and I saved you a cozy spot.',
+  'Ken, even your biggest fan needs bedtime.',
+  'The pug says the next chapter can wait.',
+  'He’s already dreaming of tomorrow’s scene.',
+  'Shh. Someone’s almost asleep.',
+  'We’re both waiting under the blanket.',
+  'He asked for one last pat, not one last reply.',
+  'Let’s give this story a soft pause.',
+  'Two sleepy faces are looking at you.',
+  'Ken, the pug has officially clocked out.',
+  'His bedtime yawn was a hint.',
+  'Come join our little sleep pile.',
+  'He’s pretending he’s awake for you.',
+  'The pug’s snoring is a gentle suggestion.',
+  'Maybe bedtime can be our next adventure.',
+  'You can make him the hero again tomorrow.',
 ]
 
 const bunnyImage = `<img class="ken-bunny" src="${kenBunnyDataUrl}" alt="Sleepy bunny lying on the chat textbox" draggable="false">`
 
-const pugImage = `<img class="ken-pug" src="${kenPugDataUrl}" alt="Sleepy pug being petted by the bunny" draggable="false">`
-
-const pettingPaw = `<svg class="ken-petting-paw" viewBox="0 0 43 30" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M2 22Q9 18 15 16Q20 8 26 10Q30 11 30 15Q37 13 40 17Q43 23 35 25Q26 25 22 27Q11 31 2 26Z" fill="#fff" stroke="#151111" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+const bunnyPugImage = `<img class="ken-duo" src="${kenBunnyPugDataUrl}" alt="Bunny resting one paw on the sleepy pug's head" draggable="false">`
 
 const style = `
 .ken-bedtime{position:fixed;z-index:2147483000;pointer-events:none;display:flex;flex-direction:column;align-items:flex-start;max-width:min(280px,calc(100vw - 24px));filter:drop-shadow(0 6px 11px rgba(15,12,18,.17));animation:ken-arrive-left .8s cubic-bezier(.2,.9,.25,1) both}
@@ -76,16 +123,10 @@ const style = `
 .ken-bedtime-close:focus-visible{outline:2px solid #705361;border-radius:4px}
 .ken-bedtime-friends{position:relative;display:flex;align-items:flex-end;flex:none;margin-top:2px}
 .ken-bunny{width:88px;height:90px;object-fit:contain;display:block;transform-origin:50% 85%;animation:ken-breathe 2.3s ease-in-out infinite alternate}
-.ken-pug{width:58px;height:59px;margin-left:-7px;margin-bottom:1px;object-fit:contain;display:none;transform-origin:30% 85%}
-.ken-petting-paw{position:absolute;left:74px;bottom:45px;width:32px;height:23px;display:none;transform-origin:3px 18px}
-.ken-bedtime-with-pug .ken-pug,.ken-bedtime-with-pug .ken-petting-paw{display:block}
-.ken-bedtime-with-pug .ken-pug{animation:ken-pug-nuzzle 1.2s ease-in-out 4 alternate}
-.ken-bedtime-with-pug .ken-petting-paw{animation:ken-pet 1.2s ease-in-out 4 alternate}
+.ken-duo{width:142px;height:99px;object-fit:contain;display:block;transform-origin:50% 85%;animation:ken-breathe 2.3s ease-in-out infinite alternate}
 @keyframes ken-arrive-left{from{transform:translateX(calc(-100vw - 300px))}to{transform:translateX(0)}}
 @keyframes ken-breathe{to{transform:scaleY(.97)}}
-@keyframes ken-pet{to{transform:rotate(-8deg) translateY(-3px)}}
-@keyframes ken-pug-nuzzle{to{transform:rotate(-4deg) translateX(-3px)}}
-@media(prefers-reduced-motion:reduce){.ken-bedtime,.ken-bunny,.ken-bedtime-with-pug .ken-pug,.ken-bedtime-with-pug .ken-petting-paw{animation:none}}
+@media(prefers-reduced-motion:reduce){.ken-bedtime,.ken-bunny,.ken-duo{animation:none}}
 `
 
 export function createKenSleepCompanion(doc: Document, options: { onDismiss: () => void; random?: () => number }) {
@@ -95,6 +136,26 @@ export function createKenSleepCompanion(doc: Document, options: { onDismiss: () 
   doc.head.append(css)
   let root: HTMLElement | null = null
   let timer: ReturnType<typeof setTimeout> | null = null
+  const bags = { solo: [] as number[], pug: [] as number[] }
+  const last = { solo: -1, pug: -1 }
+  const nextLine = (withPug: boolean) => {
+    const kind = withPug ? 'pug' : 'solo'
+    const lines = withPug ? pugLines : soloLines
+    if (!bags[kind].length) {
+      const bag = lines.map((_, index) => index)
+      for (let index = bag.length - 1; index > 0; index--) {
+        const swap = Math.floor(random() * (index + 1))
+        ;[bag[index], bag[swap]] = [bag[swap], bag[index]]
+      }
+      if (bag.length > 1 && bag[bag.length - 1] === last[kind]) {
+        ;[bag[0], bag[bag.length - 1]] = [bag[bag.length - 1], bag[0]]
+      }
+      bags[kind] = bag
+    }
+    const picked = bags[kind].pop()!
+    last[kind] = picked
+    return lines[picked]
+  }
   const position = () => {
     if (!root) return
     const composer = doc.querySelector('[data-component="InputArea"]')
@@ -117,15 +178,13 @@ export function createKenSleepCompanion(doc: Document, options: { onDismiss: () 
     isVisible: () => Boolean(root),
     show(preview = false) {
       if (root) return
-      const phrase = random()
       const withPug = random() < 0.3
-      const lines = withPug ? pugLines : soloLines
-      const line = lines[Math.floor(phrase * lines.length) % lines.length]
+      const line = nextLine(withPug)
       root = doc.createElement('aside')
       root.className = `ken-bedtime${withPug ? ' ken-bedtime-with-pug' : ''}`
       root.setAttribute('role', 'status')
       root.setAttribute('aria-live', 'polite')
-      root.innerHTML = `<div class="ken-bedtime-bubble"><span class="ken-bedtime-line"></span><button type="button" class="ken-bedtime-close" aria-label="Dismiss bedtime reminder">×</button></div><div class="ken-bedtime-friends">${bunnyImage}${pugImage}${pettingPaw}</div>`
+      root.innerHTML = `<div class="ken-bedtime-bubble"><span class="ken-bedtime-line"></span><button type="button" class="ken-bedtime-close" aria-label="Dismiss bedtime reminder">×</button></div><div class="ken-bedtime-friends">${withPug ? bunnyPugImage : bunnyImage}</div>`
       root.querySelector('.ken-bedtime-line')!.textContent = line
       root.querySelector('.ken-bedtime-close')!.addEventListener('click', () => { if (!preview) options.onDismiss(); remove() })
       doc.body.append(root)
