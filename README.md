@@ -12,9 +12,9 @@ If you already use the extension, update it through Lumiverse and reload. The ex
 
 ## Reading
 
-Choose a preset or adjust word emphasis, font, text size, spacing, line width, justification, and hyphenation yourself. **Show preview** displays a live sample while you tune the settings; hide it when you are done. You can save settings to your account or to this browser only.
+Start with an optional built-in setup or tune **Bionic Reading**, font, text size, spacing, line width, justification, and hyphenation yourself. Name and save your current reading setup to switch back to it later; you can update or delete saved setups. **Show preview** displays a live sample while you tune the settings. Your current settings and saved setups follow your choice of account or browser storage.
 
-Word emphasis changes rendered chat text. It does not rewrite stored messages, prompts, or exports. Code and links are preserved. The reading effect is inspired by Bionic-style reading; this project is not affiliated with or endorsed by Bionic Reading®.
+Bionic Reading changes rendered chat text. It does not rewrite stored messages, prompts, or exports. Code and links are preserved. This project is not affiliated with or endorsed by Bionic Reading®.
 
 ## Toolbar
 

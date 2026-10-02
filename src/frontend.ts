@@ -1,5 +1,6 @@
 import { installLorebookOrganizer } from './lorebook-organizer-frontend'
 import { createKenSleepCompanion, createKenSleepGate, kenSleepNight, KEN_SLEEP_DISMISSED_KEY } from './ken-sleep-companion'
+import { normalizeReadingPresets, readingPresetValues, saveReadingPreset } from './reading-presets'
 
 const BIONIC_DRAWER_ICON_SVG = `
 <svg
@@ -129,6 +130,7 @@ export function setup(ctx) {
 
   const DEFAULTS = {
     preset: 'custom',
+    savedPresets: [],
     bionicEnabled: true,
     density: 'balanced',
     fixation: 35,
@@ -290,14 +292,17 @@ export function setup(ctx) {
         '{}'
 
       const saved = JSON.parse(raw)
+      const savedPresets = normalizeReadingPresets(saved.savedPresets)
 
       return {
         ...DEFAULTS,
 
         preset:
-          ['custom', 'clean', 'comfortable', 'mobile', 'bionicLight'].includes(saved.preset)
+          (['custom', 'clean', 'comfortable', 'mobile', 'bionicLight'].includes(saved.preset)
+            || savedPresets.some(preset => saved.preset === `saved:${preset.id}`))
             ? saved.preset
             : 'custom',
+        savedPresets,
 
         bionicEnabled:
           typeof saved.bionicEnabled === 'boolean'
@@ -2777,7 +2782,8 @@ export function setup(ctx) {
       return
     }
 
-    const values = PRESETS[name]
+    const savedPreset = settings.savedPresets.find(preset => name === `saved:${preset.id}`)
+    const values = PRESETS[name] || (savedPreset && readingPresetValues(savedPreset.values))
     if (!values) return
 
     settings = {
@@ -2789,6 +2795,7 @@ export function setup(ctx) {
     saveSettings()
     applyCssSettings()
     syncControls()
+    presetName.value = savedPreset?.name || ''
     rebuildAll()
     renderPreview()
   }
@@ -2830,20 +2837,35 @@ export function setup(ctx) {
       <div class="lumibionic-section">
 
         <div class="lumibionic-section-title">
-          Preset
+          Reading setups
         </div>
 
         <div class="lumibionic-control">
-          <label for="lb-preset">Reading preset</label>
+          <label for="lb-preset">Choose a setup</label>
           <select id="lb-preset">
-            <option value="custom">Custom</option>
-            <option value="clean">Clean — minimal changes</option>
-            <option value="comfortable">Comfortable — long-form</option>
-            <option value="mobile">Mobile — touch-friendly reading</option>
-            <option value="bionicLight">Light emphasis</option>
+            <option value="custom">Current settings</option>
+            <optgroup label="Starting points">
+              <option value="clean">Clean — minimal changes</option>
+              <option value="comfortable">Comfortable — long-form</option>
+              <option value="mobile">Mobile — touch-friendly reading</option>
+              <option value="bionicLight">Light Bionic Reading</option>
+            </optgroup>
+            <optgroup label="Your saved setups" id="lb-saved-presets"></optgroup>
           </select>
           <div class="lumibionic-muted">
-            Choose a starting point, then adjust. Your font stays unchanged.
+            Starting points are optional. Tune the controls below, then save your own setup.
+          </div>
+        </div>
+
+        <div class="lumibionic-control">
+          <label for="lb-preset-name">Name your current settings</label>
+          <input id="lb-preset-name" type="text" maxlength="40" placeholder="For example, evening reading">
+          <div class="lumibionic-toolbar-actions">
+            <button type="button" id="lb-preset-save">Save current setup</button>
+            <button type="button" id="lb-preset-delete" disabled>Delete selected</button>
+          </div>
+          <div class="lumibionic-muted" id="lb-preset-status" role="status" aria-live="polite">
+            Saved setups follow your account or browser storage choice.
           </div>
         </div>
 
@@ -2852,12 +2874,12 @@ export function setup(ctx) {
       <div class="lumibionic-section">
 
         <div class="lumibionic-section-title">
-          Word emphasis
+          Bionic Reading
         </div>
 
         <div class="lumibionic-row">
           <label for="lb-bionic-enabled">
-            Enable word emphasis
+            Enable Bionic Reading
           </label>
 
           <input
@@ -3388,6 +3410,12 @@ export function setup(ctx) {
     )
 
   const preset = $('#lb-preset')
+  const savedPresetGroup = $('#lb-saved-presets')
+  const presetName = $('#lb-preset-name')
+  const presetSave = $('#lb-preset-save')
+  const presetDelete = $('#lb-preset-delete')
+  const presetStatus = $('#lb-preset-status')
+  presetName.value = settings.savedPresets.find(saved => settings.preset === `saved:${saved.id}`)?.name || ''
   const bionicEnabled = $('#lb-bionic-enabled')
   const bionicOptions = $('#lb-bionic-options')
   const density = $('#lb-density')
@@ -3667,7 +3695,7 @@ export function setup(ctx) {
 
     const sectionControllers = []
     const sectionNames = {
-      'Word emphasis': 'Word emphasis',
+      'Bionic Reading': 'Bionic Reading',
       'Font override': 'Font',
       'Long-form reading': 'Layout',
       'Message typography': 'Text size & spacing',
@@ -3682,7 +3710,7 @@ export function setup(ctx) {
         if (!title) return
 
         if (section.closest('.lumibionic-group')?.dataset.lumibionicCategory !== 'reading'
-          || title.textContent.trim() === 'Preset') {
+          || title.textContent.trim() === 'Reading setups') {
           title.remove()
           return
         }
@@ -3708,7 +3736,7 @@ export function setup(ctx) {
         const initialExpanded =
           typeof savedExpanded === 'boolean'
             ? savedExpanded
-            : ['bionic-emphasis', 'message-typography'].includes(key)
+            : ['bionic-reading', 'bionic-emphasis', 'message-typography'].includes(key)
 
         const setExpanded = (expanded, persist = true) => {
           body.classList.toggle(
@@ -3799,8 +3827,24 @@ export function setup(ctx) {
     return `${Number(value).toFixed(digits)}em`
   }
 
-  function syncControls() {
+  function syncReadingSetups() {
+    savedPresetGroup.replaceChildren()
+    for (const saved of settings.savedPresets) {
+      const option = document.createElement('option')
+      option.value = `saved:${saved.id}`
+      option.textContent = saved.name
+      savedPresetGroup.append(option)
+    }
     preset.value = settings.preset || 'custom'
+    if (preset.value !== settings.preset) preset.value = 'custom'
+    presetDelete.disabled = !settings.savedPresets.some(saved => preset.value === `saved:${saved.id}`)
+    const name = presetName.value.trim().toLocaleLowerCase()
+    const exists = settings.savedPresets.some(saved => saved.name.toLocaleLowerCase() === name)
+    presetSave.textContent = exists ? 'Update saved setup' : 'Save current setup'
+  }
+
+  function syncControls() {
+    syncReadingSetups()
     bionicEnabled.checked = settings.bionicEnabled
 
     bionicOptions.classList.toggle(
@@ -4107,6 +4151,42 @@ export function setup(ctx) {
     'change',
     () => applyPreset(preset.value)
   )
+  presetName.addEventListener('input', syncReadingSetups)
+  let savedPresetNonce = 0
+  presetSave.addEventListener('click', () => {
+    try {
+      const result = saveReadingPreset(
+        settings.savedPresets,
+        presetName.value,
+        settings,
+        () => `${Date.now().toString(36)}-${(++savedPresetNonce).toString(36)}`,
+      )
+      const updated = settings.savedPresets.some(saved => saved.id === result.preset.id)
+      settings = {
+        ...settings,
+        savedPresets: result.presets,
+        preset: `saved:${result.preset.id}`,
+      }
+      saveSettings()
+      syncControls()
+      presetStatus.textContent = `${updated ? 'Updated' : 'Saved'} “${result.preset.name}”.`
+    } catch (error) {
+      presetStatus.textContent = error instanceof Error ? error.message : 'Could not save this setup.'
+    }
+  })
+  presetDelete.addEventListener('click', () => {
+    const selected = settings.savedPresets.find(saved => preset.value === `saved:${saved.id}`)
+    if (!selected || !window.confirm(`Delete the saved setup “${selected.name}”?`)) return
+    settings = {
+      ...settings,
+      preset: 'custom',
+      savedPresets: settings.savedPresets.filter(saved => saved.id !== selected.id),
+    }
+    presetName.value = ''
+    saveSettings()
+    syncControls()
+    presetStatus.textContent = `Deleted “${selected.name}”. Your current reading settings stay in place.`
+  })
 
   bionicEnabled.addEventListener(
     'change',
@@ -4701,9 +4781,12 @@ export function setup(ctx) {
 
       settings = {
         ...DEFAULTS,
+        savedPresets: settings.savedPresets,
         toolbarHidden: { ...DEFAULT_TOOLBAR_HIDDEN },
       }
 
+      presetName.value = ''
+      presetStatus.textContent = 'Reading controls restored. Your saved setups are still available.'
       saveSettings()
       applyCssSettings()
       syncControls()
@@ -5647,6 +5730,7 @@ export function setup(ctx) {
               })
             )
             settings = loadSettings()
+            presetName.value = settings.savedPresets.find(saved => settings.preset === `saved:${saved.id}`)?.name || ''
             applyCssSettings()
             syncControls()
             rebuildAll()

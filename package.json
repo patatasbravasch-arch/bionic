@@ -1,6 +1,6 @@
 {
   "name": "lumiverse-lumi-toolkit",
-  "version": "0.48.29",
+  "version": "0.48.30",
   "private": true,
   "type": "module",
   "scripts": {
