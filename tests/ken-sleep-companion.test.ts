@@ -43,7 +43,7 @@ test('bunny appears by the chat input, pets a pug sometimes, and dismisses clean
     expect(bunny).not.toBeNull()
     expect(bunny.style.left).toBe('112px')
     expect(bunny.style.bottom).toBe('81px')
-    expect(bunny.querySelector('.ken-bunny')!.getAttribute('aria-label')).toBe('Sleepy bunny lying on the chat textbox')
+    expect(bunny.querySelector('.ken-bunny')!.getAttribute('alt')).toBe('Sleepy bunny lying on the chat textbox')
     expect(bunny.querySelector('.ken-bunny')).not.toBeNull()
     expect(bunny.querySelector('.ken-pug')).not.toBeNull()
     expect(bunny.classList.contains('ken-bedtime-with-pug')).toBe(true)

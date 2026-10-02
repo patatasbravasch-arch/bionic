@@ -1,3 +1,5 @@
+import { kenBunnyDataUrl } from './ken-bunny-asset'
+
 export const KEN_SLEEP_DISMISSED_KEY = 'lumiverse:lumi-toolkit:ken-sleep-dismissed-night'
 
 // The hours after midnight belong to the previous evening's reminder.
@@ -50,21 +52,7 @@ const lines = [
   'Let’s get cozy and call it a night.',
 ]
 
-const bunnySvg = `<svg class="ken-bunny" viewBox="0 0 150 110" role="img" aria-label="Sleepy bunny lying on the chat textbox" xmlns="http://www.w3.org/2000/svg">
-  <ellipse cx="73" cy="102" rx="61" ry="5" fill="#18151a" opacity=".17"/>
-  <path d="M24 70C11 67 8 77 13 86C19 96 31 91 36 83" fill="#fffefa" stroke="#302a30" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round"/>
-  <path class="ken-ear" d="M41 48C28 37 17 26 23 18C29 9 43 21 54 41" fill="#fffefa" stroke="#302a30" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round"/>
-  <path d="M39 39C32 31 27 24 29 22C33 20 41 30 46 40" fill="#f3b0bd" stroke="none"/>
-  <path d="M53 43C45 29 44 16 52 14C62 10 69 28 68 44" fill="#fffefa" stroke="#302a30" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round"/>
-  <path d="M55 38C51 27 52 21 55 20C60 20 63 29 63 39" fill="#f3b0bd" stroke="none"/>
-  <path class="ken-bunny-body" d="M30 53C39 44 53 43 65 43C76 41 91 43 98 48C116 48 128 62 129 78C131 91 119 99 103 100C87 103 50 101 37 99C23 98 18 86 21 73C22 64 25 58 30 53Z" fill="#fffefa" stroke="#302a30" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round"/>
-  <path d="M67 68q4-5 9 0m17 0q4-5 9 0" fill="none" stroke="#302a30" stroke-width="3" stroke-linecap="round"/>
-  <circle cx="83" cy="64" r="1.5" fill="#302a30"/><circle cx="107" cy="63" r="1.5" fill="#302a30"/>
-  <path d="M84 78q4-4 7 0l-3 3z" fill="#ed9fac"/><path d="M88 81q-3 5-7 2m7-2q3 5 7 2" fill="none" stroke="#302a30" stroke-width="2.4" stroke-linecap="round"/>
-  <path d="M111 84q7-4 12 0" fill="none" stroke="#302a30" stroke-width="2.5" stroke-linecap="round"/>
-  <path class="ken-paw" d="M107 92q14-9 24-4q7 4 3 10q-5 5-16 1" fill="#fffefa" stroke="#302a30" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="80" y="34" fill="#766b78" font-family="system-ui,sans-serif" font-size="14" font-weight="700">z</text><text x="91" y="25" fill="#766b78" font-family="system-ui,sans-serif" font-size="10" font-weight="700">z</text>
-</svg>`
+const bunnyImage = `<img class="ken-bunny" src="${kenBunnyDataUrl}" alt="Sleepy bunny lying on the chat textbox" draggable="false">`
 
 const pugSvg = `<svg class="ken-pug" viewBox="0 0 100 92" role="img" aria-label="Little pug being petted" xmlns="http://www.w3.org/2000/svg">
   <ellipse cx="49" cy="73" rx="38" ry="17" fill="#b89169" stroke="#664c42" stroke-width="3"/>
@@ -82,17 +70,13 @@ const style = `
 .ken-bedtime-close{position:absolute;right:5px;top:3px;border:0;background:transparent;color:#705361;font:700 20px/1 system-ui,sans-serif;cursor:pointer;padding:2px 5px}
 .ken-bedtime-close:focus-visible{outline:2px solid #705361;border-radius:4px}
 .ken-bedtime-friends{display:flex;align-items:flex-end;flex:none;margin-top:2px}
-.ken-bunny{width:132px;height:97px;overflow:visible}
-.ken-bunny-body{transform-origin:75px 80px;animation:ken-breathe 2.3s ease-in-out infinite alternate}
-.ken-ear{transform-origin:41px 48px;animation:ken-ear-twitch 4s ease-in-out infinite alternate}
-.ken-pug{width:51px;height:49px;margin-left:-13px;margin-bottom:2px;display:none}
-.ken-bedtime-with-pug .ken-pug{display:block}
-.ken-bedtime-with-pug .ken-paw{transform-origin:108px 92px;animation:ken-pet .8s ease-in-out 4 alternate}
+.ken-bunny{width:88px;height:90px;object-fit:contain;display:block;transform-origin:50% 85%;animation:ken-breathe 2.3s ease-in-out infinite alternate}
+.ken-pug{width:43px;height:40px;margin-left:-3px;margin-bottom:1px;display:none}
+.ken-bedtime-with-pug .ken-pug{display:block;transform-origin:20% 85%;animation:ken-pet .8s ease-in-out 4 alternate}
 @keyframes ken-arrive-left{from{transform:translateX(calc(-100vw - 300px))}to{transform:translateX(0)}}
-@keyframes ken-breathe{to{transform:scaleY(.94)}}
-@keyframes ken-ear-twitch{to{transform:rotate(-5deg)}}
-@keyframes ken-pet{to{transform:rotate(-16deg)}}
-@media(prefers-reduced-motion:reduce){.ken-bedtime,.ken-bunny-body,.ken-ear,.ken-bedtime-with-pug .ken-paw{animation:none}}
+@keyframes ken-breathe{to{transform:scaleY(.97)}}
+@keyframes ken-pet{to{transform:rotate(-9deg) translateX(-2px)}}
+@media(prefers-reduced-motion:reduce){.ken-bedtime,.ken-bunny,.ken-bedtime-with-pug .ken-pug{animation:none}}
 `
 
 export function createKenSleepCompanion(doc: Document, options: { onDismiss: () => void; random?: () => number }) {
@@ -130,7 +114,7 @@ export function createKenSleepCompanion(doc: Document, options: { onDismiss: () 
       root.className = `ken-bedtime${withPug ? ' ken-bedtime-with-pug' : ''}`
       root.setAttribute('role', 'status')
       root.setAttribute('aria-live', 'polite')
-      root.innerHTML = `<div class="ken-bedtime-bubble"><span class="ken-bedtime-line"></span><button type="button" class="ken-bedtime-close" aria-label="Dismiss bedtime reminder">×</button></div><div class="ken-bedtime-friends">${bunnySvg}${pugSvg}</div>`
+      root.innerHTML = `<div class="ken-bedtime-bubble"><span class="ken-bedtime-line"></span><button type="button" class="ken-bedtime-close" aria-label="Dismiss bedtime reminder">×</button></div><div class="ken-bedtime-friends">${bunnyImage}${pugSvg}</div>`
       root.querySelector('.ken-bedtime-line')!.textContent = line
       root.querySelector('.ken-bedtime-close')!.addEventListener('click', () => { if (!preview) options.onDismiss(); remove() })
       doc.body.append(root)
