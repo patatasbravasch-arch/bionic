@@ -1,4 +1,5 @@
 import { kenBunnyDataUrl } from './ken-bunny-asset'
+import { kenPugDataUrl } from './ken-pug-asset'
 
 export const KEN_SLEEP_DISMISSED_KEY = 'lumiverse:lumi-toolkit:ken-sleep-dismissed-night'
 
@@ -44,24 +45,28 @@ export function createKenSleepGate(options: {
   }
 }
 
-const lines = [
+const soloLines = [
   "I'm sleepy. You should go to bed too.",
   'Maybe you should take melatonin.',
+  'Ken, does “one more reply” ever mean one?',
+  'The story will still be here tomorrow, promise.',
   'Even bunnies need sleep, Ken.',
-  'The next reply can wait until morning.',
   'Let’s get cozy and call it a night.',
+]
+
+const pugLines = [
+  "I'm sleepy. Come rest with us.",
+  'The pug’s ready for bed. Are you, Ken?',
+  'The pug has claimed the pillow. There’s room for you.',
+  'I think “one more reply” became a whole chapter.',
+  'Maybe you should take melatonin.',
 ]
 
 const bunnyImage = `<img class="ken-bunny" src="${kenBunnyDataUrl}" alt="Sleepy bunny lying on the chat textbox" draggable="false">`
 
-const pugSvg = `<svg class="ken-pug" viewBox="0 0 100 92" role="img" aria-label="Little pug being petted" xmlns="http://www.w3.org/2000/svg">
-  <ellipse cx="49" cy="73" rx="38" ry="17" fill="#b89169" stroke="#664c42" stroke-width="3"/>
-  <path d="M20 41q-14-21-6-29q12-7 23 11M78 41q16-22 8-29q-12-7-24 11" fill="#664c42" stroke="#664c42" stroke-width="3"/>
-  <ellipse cx="49" cy="41" rx="35" ry="33" fill="#cba77c" stroke="#664c42" stroke-width="3"/>
-  <ellipse cx="49" cy="55" rx="21" ry="16" fill="#66504a"/>
-  <circle cx="35" cy="38" r="4" fill="#2f2527"/><circle cx="64" cy="38" r="4" fill="#2f2527"/>
-  <ellipse cx="49" cy="52" rx="7" ry="5" fill="#2f2527"/><path d="M49 57q-5 6-10 4m10-4q5 6 10 4" fill="none" stroke="#2f2527" stroke-width="2" stroke-linecap="round"/>
-</svg>`
+const pugImage = `<img class="ken-pug" src="${kenPugDataUrl}" alt="Sleepy pug being petted by the bunny" draggable="false">`
+
+const pettingPaw = `<svg class="ken-petting-paw" viewBox="0 0 43 30" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M2 22Q9 18 15 16Q20 8 26 10Q30 11 30 15Q37 13 40 17Q43 23 35 25Q26 25 22 27Q11 31 2 26Z" fill="#fff" stroke="#151111" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`
 
 const style = `
 .ken-bedtime{position:fixed;z-index:2147483000;pointer-events:none;display:flex;flex-direction:column;align-items:flex-start;max-width:min(280px,calc(100vw - 24px));filter:drop-shadow(0 6px 11px rgba(15,12,18,.17));animation:ken-arrive-left .8s cubic-bezier(.2,.9,.25,1) both}
@@ -69,14 +74,18 @@ const style = `
 .ken-bedtime-bubble::after{content:"";position:absolute;left:20px;bottom:-8px;width:13px;height:13px;background:#fffefa;border-right:2px solid #373037;border-bottom:2px solid #373037;transform:rotate(45deg)}
 .ken-bedtime-close{position:absolute;right:5px;top:3px;border:0;background:transparent;color:#705361;font:700 20px/1 system-ui,sans-serif;cursor:pointer;padding:2px 5px}
 .ken-bedtime-close:focus-visible{outline:2px solid #705361;border-radius:4px}
-.ken-bedtime-friends{display:flex;align-items:flex-end;flex:none;margin-top:2px}
+.ken-bedtime-friends{position:relative;display:flex;align-items:flex-end;flex:none;margin-top:2px}
 .ken-bunny{width:88px;height:90px;object-fit:contain;display:block;transform-origin:50% 85%;animation:ken-breathe 2.3s ease-in-out infinite alternate}
-.ken-pug{width:43px;height:40px;margin-left:-3px;margin-bottom:1px;display:none}
-.ken-bedtime-with-pug .ken-pug{display:block;transform-origin:20% 85%;animation:ken-pet .8s ease-in-out 4 alternate}
+.ken-pug{width:58px;height:59px;margin-left:-7px;margin-bottom:1px;object-fit:contain;display:none;transform-origin:30% 85%}
+.ken-petting-paw{position:absolute;left:74px;bottom:45px;width:32px;height:23px;display:none;transform-origin:3px 18px}
+.ken-bedtime-with-pug .ken-pug,.ken-bedtime-with-pug .ken-petting-paw{display:block}
+.ken-bedtime-with-pug .ken-pug{animation:ken-pug-nuzzle 1.2s ease-in-out 4 alternate}
+.ken-bedtime-with-pug .ken-petting-paw{animation:ken-pet 1.2s ease-in-out 4 alternate}
 @keyframes ken-arrive-left{from{transform:translateX(calc(-100vw - 300px))}to{transform:translateX(0)}}
 @keyframes ken-breathe{to{transform:scaleY(.97)}}
-@keyframes ken-pet{to{transform:rotate(-9deg) translateX(-2px)}}
-@media(prefers-reduced-motion:reduce){.ken-bedtime,.ken-bunny,.ken-bedtime-with-pug .ken-pug{animation:none}}
+@keyframes ken-pet{to{transform:rotate(-8deg) translateY(-3px)}}
+@keyframes ken-pug-nuzzle{to{transform:rotate(-4deg) translateX(-3px)}}
+@media(prefers-reduced-motion:reduce){.ken-bedtime,.ken-bunny,.ken-bedtime-with-pug .ken-pug,.ken-bedtime-with-pug .ken-petting-paw{animation:none}}
 `
 
 export function createKenSleepCompanion(doc: Document, options: { onDismiss: () => void; random?: () => number }) {
@@ -108,13 +117,15 @@ export function createKenSleepCompanion(doc: Document, options: { onDismiss: () 
     isVisible: () => Boolean(root),
     show(preview = false) {
       if (root) return
-      const line = lines[Math.floor(random() * lines.length) % lines.length]
+      const phrase = random()
       const withPug = random() < 0.3
+      const lines = withPug ? pugLines : soloLines
+      const line = lines[Math.floor(phrase * lines.length) % lines.length]
       root = doc.createElement('aside')
       root.className = `ken-bedtime${withPug ? ' ken-bedtime-with-pug' : ''}`
       root.setAttribute('role', 'status')
       root.setAttribute('aria-live', 'polite')
-      root.innerHTML = `<div class="ken-bedtime-bubble"><span class="ken-bedtime-line"></span><button type="button" class="ken-bedtime-close" aria-label="Dismiss bedtime reminder">×</button></div><div class="ken-bedtime-friends">${bunnyImage}${pugSvg}</div>`
+      root.innerHTML = `<div class="ken-bedtime-bubble"><span class="ken-bedtime-line"></span><button type="button" class="ken-bedtime-close" aria-label="Dismiss bedtime reminder">×</button></div><div class="ken-bedtime-friends">${bunnyImage}${pugImage}${pettingPaw}</div>`
       root.querySelector('.ken-bedtime-line')!.textContent = line
       root.querySelector('.ken-bedtime-close')!.addEventListener('click', () => { if (!preview) options.onDismiss(); remove() })
       doc.body.append(root)
