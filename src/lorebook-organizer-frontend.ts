@@ -265,9 +265,7 @@ export function installLorebookOrganizer(
           }, timeoutMs)
 
         pending.set(id, {
-          resultType: type === 'bionic_lore_ai_organize'
-            ? 'bionic_lore_ai_result'
-            : `${type}_result`,
+          resultType: `${type}_result`,
           resolve,
           reject,
           timer,

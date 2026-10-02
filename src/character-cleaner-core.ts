@@ -46,14 +46,6 @@ export function duplicateGroups(cards: any[], chats: any[]) {
   })
 }
 
-export function assertArchiveSafe(candidate: any, keeper: any, chats: any[], expected: string, keeperExpected = expected, reviewed = false) {
-  if (!candidate || !keeper || candidate.id === keeper.id) throw new Error('Both copies must still exist. Scan again.')
-  if (candidate.folder === ARCHIVE_FOLDER || candidate.extensions?.[ARCHIVE_KEY] || keeper.folder === ARCHIVE_FOLDER || keeper.extensions?.[ARCHIVE_KEY]) throw new Error('A copy is already archived. Scan again.')
-  if (characterFingerprint(candidate) !== expected || characterFingerprint(keeper) !== keeperExpected) throw new Error('Card content changed or differs. Scan again.')
-  if (characterName(candidate.name) !== characterName(keeper.name) || (!reviewed && expected !== keeperExpected)) throw new Error('Review the differences before archiving a variant.')
-  if (chatReferences(chats, candidate.id)) throw new Error('This copy is used in a chat and is protected.')
-}
-
 export async function pagedCharacters(api: (path: string) => Promise<any>, path: string): Promise<any[]> {
   const cards: any[] = []
   const seen = new Set<string>()

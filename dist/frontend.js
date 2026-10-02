@@ -838,7 +838,7 @@ function installLorebookOrganizer(ctx, settingsRoot) {
         reject(new Error(`${type} timed out.`));
       }, timeoutMs);
       pending.set(id, {
-        resultType: type === "bionic_lore_ai_organize" ? "bionic_lore_ai_result" : `${type}_result`,
+        resultType: `${type}_result`,
         resolve,
         reject,
         timer
@@ -5017,69 +5017,6 @@ function setup(ctx) {
   }
   function clearLumiRealmFontLock(root = document) {
     clearFontLocksInRoot(root);
-  }
-  function elementDescriptor(element) {
-    if (!(element instanceof Element)) {
-      return "(not an element)";
-    }
-    const parts = [
-      element.tagName.toLowerCase()
-    ];
-    if (element.id) {
-      parts.push(`#${element.id}`);
-    }
-    const component = element.getAttribute("data-component");
-    if (component) {
-      parts.push(`[data-component="${component}"]`);
-    }
-    const messageId = element.getAttribute("data-message-id");
-    if (messageId) {
-      parts.push(`[data-message-id="${messageId}"]`);
-    }
-    const spindleMount = element.getAttribute("data-spindle-mount");
-    if (spindleMount) {
-      parts.push(`[data-spindle-mount="${spindleMount}"]`);
-    }
-    if (element.classList?.length) {
-      parts.push("." + Array.from(element.classList).slice(0, 4).join("."));
-    }
-    return parts.join("");
-  }
-  function firstVisibleTextElement(root) {
-    if (!(root instanceof Element)) {
-      return null;
-    }
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    let node;
-    while (node = walker.nextNode()) {
-      const text = node.textContent?.trim();
-      if (!text)
-        continue;
-      const parent = node.parentElement;
-      if (!parent)
-        continue;
-      if (parent.closest("script, style, noscript, svg")) {
-        continue;
-      }
-      const style = getComputedStyle(parent);
-      if (style.display === "none" || style.visibility === "hidden") {
-        continue;
-      }
-      return parent;
-    }
-    return root;
-  }
-  function detectSpecialRendering(element) {
-    const notes = [];
-    const rootNode = element?.getRootNode?.();
-    if (typeof ShadowRoot !== "undefined" && rootNode instanceof ShadowRoot) {
-      notes.push(`inside ${rootNode.mode} shadow root`);
-    }
-    const frame = element?.closest?.("iframe");
-    if (frame) {
-      notes.push("inside iframe element");
-    }
-    return notes;
   }
   function processMessage(root) {
     root.classList.toggle("lumibionic-justify", settings.justifyMessages);

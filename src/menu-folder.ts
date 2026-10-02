@@ -322,18 +322,6 @@ export function installMenuFolder(
     })
   }
 
-  function targetLabel(
-    id: string
-  ) {
-    return (
-      MENU_FOLDER_TARGETS.find(
-        ([targetId]) =>
-          targetId === id
-      )?.[1] ||
-      id
-    )
-  }
-
   function renderFolder() {
     if (destroyed) return
 
