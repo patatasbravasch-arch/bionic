@@ -450,7 +450,7 @@ spindle.onFrontendMessage(
         )
       } catch (error: any) {
         spindle.log.warn(
-          `Bionic settings save failed: ${
+          `Lumi Toolkit settings save failed: ${
             error?.message || String(error)
           }`,
         )
@@ -742,5 +742,5 @@ if (false) spindle.on(
 )
 
 spindle.log.info(
-  `Bionic Reading & Fonts FF backend v${FF_THINK_FIX_VERSION} loaded`,
+  `Lumi Toolkit FF backend v${FF_THINK_FIX_VERSION} loaded`,
 )

@@ -1,128 +1,54 @@
-# Lumiverse Bionic-style Reading
+# Lumi Toolkit
 
-An unofficial Spindle extension for Lumiverse that adds a Bionic-style fixation effect to rendered chat prose.
+Lumi Toolkit is an unofficial Lumiverse Spindle extension for reading, chat controls, and library cleanup. It puts its controls in one drawer tab with **Reading**, **Toolbar**, **Library**, and **Tools** sections.
 
-Example:
+## Install
 
-- `Lumiverse makes reading easier.`
-- becomes visually similar to **Lumiv**erse **mak**es **read**ing **eas**ier.
+1. In Lumiverse, open **Extensions** and install `https://github.com/patatasbravasch-arch/bionic`.
+2. Review the permissions Lumiverse requests, then enable the extension.
+3. Reload Lumiverse and open the **Lumi Toolkit** drawer tab.
 
-The extension only changes the rendered version of a message. Stored chat content, generation prompts, memories, embeddings, and exports remain unchanged.
+If you already use the extension, update it through Lumiverse and reload. The extension keeps its existing internal identifier so your installed copy and saved settings continue to work. The GitHub repository remains at `/bionic`.
 
-> This project is not affiliated with or endorsed by Bionic Reading®.
+## Reading
 
-## Why this implementation
+Choose a preset or adjust word emphasis, font, text size, spacing, line width, justification, and hyphenation yourself. **Show preview** displays a live sample while you tune the settings; hide it when you are done. You can save settings to your account or to this browser only.
 
-Lumiverse staging exposes a `registerMessageContentProcessor` hook with `origin === "render"`. That is a better fit than rewriting mounted DOM nodes because it follows Lumiverse's own message render lifecycle and survives virtualized message mounting/unmounting automatically.
+Word emphasis changes rendered chat text. It does not rewrite stored messages, prompts, or exports. Code and links are preserved. The reading effect is inspired by Bionic-style reading; this project is not affiliated with or endorsed by Bionic Reading®.
 
-The transform is deliberately conservative. It rewrites normal prose while preserving:
+## Toolbar
 
-- fenced code blocks
-- inline code
-- Markdown image syntax
-- Markdown link destinations and raw URLs
-- raw HTML elements / Lumiverse HTML islands
-- HTML entities
-- Markdown escapes
+Show or hide individual chat toolbar buttons and adjust their spacing. The controls cover the usual chat actions, including regeneration, continuation, persona, connection, attachments, and customization. Hidden buttons can be shown again from this section.
 
-Markdown link *labels* are transformed because they are visible prose.
+## Library
 
-## Files
+Open **Library → Open library**. The window has separate **Characters** and **Lorebooks** tabs; lorebook tools appear only on the Lorebooks tab.
 
-```text
-spindle.json
-src/
-  backend.ts
-  frontend.ts
-  transform.ts
-dist/
-  backend.js
-  frontend.js
-  transform.js
-package.json
-tsconfig.json
-```
+### Characters
 
-## Before publishing
+- **Duplicates:** Scan cards with matching names, compare copies side by side, choose which card to keep, and edit or ignore copies. **Delete** opens a **Yes, delete / No, keep it** prompt for one unused copy. Deletion is permanent; cards linked to primary or group chats are protected and checked again before deletion. Ignored cards can be included in scans again from the **Ignored** tab.
+- **Folders:** Scan characters, group suggestions by **Author** or **Tag**, and use **Select this folder** only for the folders you want. You can rename each proposed folder. **Don’t suggest this tag/author** saves an exclusion to your account; expand **Excluded tags/authors** to restore a suggestion. **Preview folder moves** shows every planned destination before you apply it. By default, only cards without a folder are eligible.
 
-Edit `spindle.json` and replace:
-
-- `YOUR_NAME`
-- `YOUR_USERNAME`
-
-with your actual author name and GitHub username/repository URL.
-
-## Build
-
-Lumiverse can auto-build from `src/`, but for a normal local build:
-
-```bash
-bun install
-bun run build
-```
-
-The official Spindle TypeScript package is included as a dev dependency for editor/type support.
-
-## Install in Lumiverse
-
-1. Push the extension to a GitHub repository.
-2. In Lumiverse staging, open the Extensions panel.
-3. Install the repository URL.
-4. Approve the `chat_mutation` permission.
-5. Enable the extension and open/re-open a chat.
-
-## Tuning the fixation amount
-
-The current rule bolds roughly the first 50% of each word (single-letter words are left alone).
-
-To change it, edit `fixationLength()` in `src/transform.ts`:
-
-```ts
-return Math.max(1, Math.ceil(length * 0.5))
-```
-
-For a lighter effect, try `0.4`; for a stronger effect, try `0.6`.
-
-The visual weight is controlled in `src/frontend.ts`:
-
-```css
-.lumibionic-fix {
-  font-weight: 700;
-}
-```
-
-Try `600` for a subtler contrast.
-
-## Notes
-
-- The backend keeps a small render cache because Lumiverse currently invokes render processing twice per visible message.
-- The cache is cleared on chat/message edit, swipe, and delete lifecycle events.
-- The extension does not make network requests and does not need any permissions besides the one required by Lumiverse's message-content-processor API.
-
-## Library tools
-
-Open **Bionic → Library → Open library** to manage characters and lorebooks in one window.
-
-### Character folders
-
-Choose **Characters → Folders → Scan characters**, then group by **Author** or **Tag**. Groups use the author and tags saved on each card; empty metadata and archived duplicates are excluded. Each group needs at least two bots. Use **Select this folder** for each author or tag you want, rename the proposed folders if needed, and choose **Preview folder moves**. Suggestions start unselected; unselected folders are not created. **Don’t suggest this tag/author** saves an exclusion to your account, so tags such as musicmania or AnyPOV can be left out of future suggestions. Expand **Excluded tags/authors** and choose **Use … again** to restore a suggestion. The preview lists every bot and its current and destination folder. Apply the preview to create the folders and move the bots.
-
-**Only bots without a folder** is enabled by default. Disable it explicitly to reorganize bots already in folders. A bot with several selected tags goes into the most common selected tag's folder, with an alphabetical tie-break. Both the preview and the updates use that same plan. Cards changed or moved since the preview stop the remaining updates. Only the folder field is changed.
-
-### Character duplicates
-
-Choose **Characters → Duplicates → Scan characters**. Duplicate groups show thumbnails and a keeper selector. **Compare copies** opens a full-width side-by-side view with selectors for the left and right cards and an **Only differences** toggle. Choose which copy to keep, edit either card, ignore cards or delete unused copies.
-
-**Edit** provides name, author, folder, tags, description, personality, scenario, opening messages, alternate greetings, example messages, author notes and prompt fields. Saving updates only changed fields and rejects stale edits.
-
-**Ignore** leaves cards usable and in their current folder, while excluding them from future duplicate scans. **Ignore group** excludes the whole group. Use **Ignored → Include in scans again** to reverse that decision.
-
-**Delete** opens an in-panel **Yes, delete / No, keep it** confirmation for that copy. Deletion is available for unused identical copies and differing versions without a review or selection checkbox. The keeper is retained. Cards used in primary or group chats are protected because Lumiverse's character deletion also removes linked chats. Both card snapshots, names, folders and all chat references are checked before any deletion, and again before each copy is removed. Character-owned assets may be removed by Lumiverse when deleting a card.
-
-Cards archived by earlier versions remain restorable under **Previously archived**, which is shown only when such cards exist.
+No character folders are created by scanning or previewing. Confirmed moves change only the folder field.
 
 ### Lorebooks
 
-Select the main **Lorebooks** tab, then use **All books**, **Duplicates**, **Similar names** and **Unlinked books** to inspect books, check references and assign folders manually. These controls appear only in the Lorebooks section. Character, chat, persona and global lorebook references are checked during cleanup.
+Use **All books**, **Duplicates**, **Similar names**, and **Unlinked books** to inspect entries, review references, and organize lorebooks manually. Cleanup checks character, chat, persona, and global references. Review the proposed change and its confirmation before applying it.
 
-Run `bun install` followed by `bun test` for regression tests.
+## Tools
+
+- **Reasoning repair:** Move text before or after a configurable boundary marker into Lumiverse's native reasoning field. You can run it on the latest reply or enable automatic repair.
+- **Auto regenerate:** Regenerate completed replies containing your chosen trigger text, up to your retry limit. This is off until you enable it.
+- **Menu Folder:** Move supported Lumiverse drawer items into one Folder entry and restore them later.
+
+Reasoning repair and auto regenerate can change saved chat messages or trigger generation. Read their settings before enabling them.
+
+## Build from source
+
+```bash
+bun install
+bun test
+bun run build
+```
+
+`spindle.json` is the extension manifest; `src/` contains the source and `dist/` contains the built frontend and backend. The extension's internal identifier remains `bionic_style_reading` for update compatibility.

@@ -1212,7 +1212,7 @@ export function installLorebookOrganizer(
 
     if (
       !window.confirm(
-        `Delete "${book.name}"?\n\nBionic will refresh all four reference sources first.`
+        `Delete "${book.name}"?\n\nLumi Toolkit will refresh all four reference sources first.`
       )
     ) {
       return
@@ -2843,7 +2843,7 @@ export function installLorebookOrganizer(
 
     if (
       !window.confirm(
-        `Use "${keeper.name}" for all ${initialCharacterIds.size} character${initialCharacterIds.size === 1 ? '' : 's'} in this similar-name group?\n\nBionic will refresh references first, remove the other lorebooks in this similar-name group from those characters, and attach this copy instead.\n\nChats, personas, global activation, unrelated lorebooks, and the other lorebook files themselves will not be changed.`
+        `Use "${keeper.name}" for all ${initialCharacterIds.size} character${initialCharacterIds.size === 1 ? '' : 's'} in this similar-name group?\n\nLumi Toolkit will refresh references first, remove the other lorebooks in this similar-name group from those characters, and attach this copy instead.\n\nChats, personas, global activation, unrelated lorebooks, and the other lorebook files themselves will not be changed.`
       )
     ) {
       return
@@ -3795,7 +3795,7 @@ export function installLorebookOrganizer(
 
     if (
       !window.confirm(
-        `Delete ${selected.length} selected unlinked lorebook${selected.length === 1 ? '' : 's'}?\n\nBionic will refresh characters, chats, personas and global activation immediately before deletion.`
+        `Delete ${selected.length} selected unlinked lorebook${selected.length === 1 ? '' : 's'}?\n\nLumi Toolkit will refresh characters, chats, personas and global activation immediately before deletion.`
       )
     ) {
       return

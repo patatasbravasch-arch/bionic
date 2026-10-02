@@ -1176,7 +1176,7 @@ function installLorebookOrganizer(ctx, settingsRoot) {
       return;
     if (!window.confirm(`Delete "${book.name}"?
 
-Bionic will refresh all four reference sources first.`)) {
+Lumi Toolkit will refresh all four reference sources first.`)) {
       return;
     }
     busy = true;
@@ -2126,7 +2126,7 @@ Unrelated lorebooks will be preserved. The old lorebook files will NOT be delete
     }
     if (!window.confirm(`Use "${keeper.name}" for all ${initialCharacterIds.size} character${initialCharacterIds.size === 1 ? "" : "s"} in this similar-name group?
 
-Bionic will refresh references first, remove the other lorebooks in this similar-name group from those characters, and attach this copy instead.
+Lumi Toolkit will refresh references first, remove the other lorebooks in this similar-name group from those characters, and attach this copy instead.
 
 Chats, personas, global activation, unrelated lorebooks, and the other lorebook files themselves will not be changed.`)) {
       return;
@@ -2554,7 +2554,7 @@ Chats, personas, global activation, unrelated lorebooks, and the other lorebook 
       return;
     if (!window.confirm(`Delete ${selected.length} selected unlinked lorebook${selected.length === 1 ? "" : "s"}?
 
-Bionic will refresh characters, chats, personas and global activation immediately before deletion.`)) {
+Lumi Toolkit will refresh characters, chats, personas and global activation immediately before deletion.`)) {
       return;
     }
     busy = true;
@@ -4838,12 +4838,17 @@ function setup(ctx) {
   const tab = ctx.ui.registerDrawerTab({
     id: "bionic-reading",
     iconSvg: BIONIC_DRAWER_ICON_SVG,
-    title: "Bionic",
-    shortName: "Bionic",
-    headerTitle: "Bionic",
-    description: "Reading appearance, chat toolbar controls and lorebook organization",
+    title: "Lumi Toolkit",
+    shortName: "Lumi Toolkit",
+    headerTitle: "Lumi Toolkit",
+    description: "Reading, toolbar, characters and lorebooks",
     keywords: [
       "bionic",
+      "lumi",
+      "toolkit",
+      "characters",
+      "lorebooks",
+      "toolbar",
       "reading",
       "font",
       "typography",
@@ -5593,7 +5598,7 @@ function setup(ctx) {
             <option value="clean">Clean — minimal changes</option>
             <option value="comfortable">Comfortable — long-form</option>
             <option value="mobile">Mobile — touch-friendly reading</option>
-            <option value="bionicLight">Bionic Light</option>
+            <option value="bionicLight">Light emphasis</option>
           </select>
           <div class="lumibionic-muted">
             Choose a starting point, then adjust. Your font stays unchanged.
@@ -5605,12 +5610,12 @@ function setup(ctx) {
       <div class="lumibionic-section">
 
         <div class="lumibionic-section-title">
-          Bionic emphasis
+          Word emphasis
         </div>
 
         <div class="lumibionic-row">
           <label for="lb-bionic-enabled">
-            Enable Bionic Reading
+            Enable word emphasis
           </label>
 
           <input
@@ -6290,7 +6295,7 @@ function setup(ctx) {
     const navigation = document.createElement("div");
     navigation.className = "lumibionic-panel-nav";
     navigation.setAttribute("role", "tablist");
-    navigation.setAttribute("aria-label", "Bionic settings");
+    navigation.setAttribute("aria-label", "Lumi Toolkit settings");
     navigation.innerHTML = categories.map(([key, label]) => `
       <button type="button" role="tab" data-panel-category="${key}">${label}</button>
     `).join("");
@@ -6346,7 +6351,7 @@ function setup(ctx) {
     }
     const sectionControllers = [];
     const sectionNames = {
-      "Bionic emphasis": "Bionic reading",
+      "Word emphasis": "Word emphasis",
       "Font override": "Font",
       "Long-form reading": "Layout",
       "Message typography": "Text size & spacing"
@@ -6967,7 +6972,7 @@ function setup(ctx) {
         }
       });
     } catch (error) {
-      console.warn("[Bionic Reading] Ken sleep popup failed:", error);
+      console.warn("[Lumi Toolkit] Ken sleep popup failed:", error);
     }
   }
   function handleKenSleepMessage(payload) {

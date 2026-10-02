@@ -1,6 +1,6 @@
 {
-  "name": "lumiverse-bionic-style-reading",
-  "version": "0.48.20",
+  "name": "lumiverse-lumi-toolkit",
+  "version": "0.48.21",
   "private": true,
   "type": "module",
   "scripts": {

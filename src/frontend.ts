@@ -1397,12 +1397,17 @@ export function setup(ctx) {
   const tab = ctx.ui.registerDrawerTab({
     id: 'bionic-reading',
     iconSvg: BIONIC_DRAWER_ICON_SVG,
-    title: 'Bionic',
-    shortName: 'Bionic',
-    headerTitle: 'Bionic',
-    description: 'Reading appearance, chat toolbar controls and lorebook organization',
+    title: 'Lumi Toolkit',
+    shortName: 'Lumi Toolkit',
+    headerTitle: 'Lumi Toolkit',
+    description: 'Reading, toolbar, characters and lorebooks',
     keywords: [
       'bionic',
+      'lumi',
+      'toolkit',
+      'characters',
+      'lorebooks',
+      'toolbar',
       'reading',
       'font',
       'typography',
@@ -2983,7 +2988,7 @@ export function setup(ctx) {
             <option value="clean">Clean — minimal changes</option>
             <option value="comfortable">Comfortable — long-form</option>
             <option value="mobile">Mobile — touch-friendly reading</option>
-            <option value="bionicLight">Bionic Light</option>
+            <option value="bionicLight">Light emphasis</option>
           </select>
           <div class="lumibionic-muted">
             Choose a starting point, then adjust. Your font stays unchanged.
@@ -2995,12 +3000,12 @@ export function setup(ctx) {
       <div class="lumibionic-section">
 
         <div class="lumibionic-section-title">
-          Bionic emphasis
+          Word emphasis
         </div>
 
         <div class="lumibionic-row">
           <label for="lb-bionic-enabled">
-            Enable Bionic Reading
+            Enable word emphasis
           </label>
 
           <input
@@ -3734,7 +3739,7 @@ export function setup(ctx) {
     const navigation = document.createElement('div')
     navigation.className = 'lumibionic-panel-nav'
     navigation.setAttribute('role', 'tablist')
-    navigation.setAttribute('aria-label', 'Bionic settings')
+    navigation.setAttribute('aria-label', 'Lumi Toolkit settings')
     navigation.innerHTML = categories.map(([key, label]) => `
       <button type="button" role="tab" data-panel-category="${key}">${label}</button>
     `).join('')
@@ -3810,7 +3815,7 @@ export function setup(ctx) {
 
     const sectionControllers = []
     const sectionNames = {
-      'Bionic emphasis': 'Bionic reading',
+      'Word emphasis': 'Word emphasis',
       'Font override': 'Font',
       'Long-form reading': 'Layout',
       'Message typography': 'Text size & spacing',
@@ -4922,7 +4927,7 @@ export function setup(ctx) {
       })
     } catch (error) {
       console.warn(
-        '[Bionic Reading] Ken sleep popup failed:',
+        '[Lumi Toolkit] Ken sleep popup failed:',
         error
       )
     }

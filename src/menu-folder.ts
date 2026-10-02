@@ -433,7 +433,7 @@ export function installMenuFolder(
         <div class="lumibionic-muted">
           Move supported Lumiverse drawer items into one
           Folder icon. Their native panels are preserved;
-          Bionic only changes where Lumiverse mounts them.
+          Lumi Toolkit only changes where Lumiverse mounts them.
         </div>
 
         <div class="lb-menu-folder-grid">

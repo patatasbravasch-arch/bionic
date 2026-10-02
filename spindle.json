@@ -1,11 +1,11 @@
 {
-  "version": "0.48.20",
-  "name": "Bionic Reading & Fonts",
+  "version": "0.48.21",
+  "name": "Lumi Toolkit",
   "identifier": "bionic_style_reading",
   "author": "patatasbravasch-arch",
   "github": "https://github.com/patatasbravasch-arch/bionic",
   "homepage": "https://github.com/patatasbravasch-arch/bionic",
-  "description": "Bionic reading and typography controls, chat-toolbar customization, reasoning repair, and Library tools for character folders, duplicate comparison/editing/deletion and reference-aware lorebook cleanup.",
+  "description": "Reading and typography controls, chat toolbar customization, reasoning tools, and character and lorebook library cleanup for Lumiverse.",
   "permissions": [
     "generation",
     "chat_mutation",

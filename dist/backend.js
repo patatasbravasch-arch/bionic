@@ -457,7 +457,7 @@ spindle.onFrontendMessage(async (payload, userId) => {
         ok: true
       }, userId);
     } catch (error) {
-      spindle.log.warn(`Bionic settings save failed: ${error?.message || String(error)}`);
+      spindle.log.warn(`Lumi Toolkit settings save failed: ${error?.message || String(error)}`);
       spindle.sendToFrontend({
         type: "bionic_settings_saved",
         ok: false
@@ -551,4 +551,4 @@ try {
 }
 if (false)
   ;
-spindle.log.info(`Bionic Reading & Fonts FF backend v${FF_THINK_FIX_VERSION} loaded`);
+spindle.log.info(`Lumi Toolkit FF backend v${FF_THINK_FIX_VERSION} loaded`);
