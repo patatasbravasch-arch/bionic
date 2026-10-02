@@ -3688,22 +3688,20 @@ var lines = [
   "The next reply can wait until morning.",
   "Let’s get cozy and call it a night."
 ];
-var bunnySvg = `<svg class="ken-bunny" viewBox="0 0 200 110" role="img" aria-label="Sleepy bunny lying on the chat textbox" xmlns="http://www.w3.org/2000/svg">
-  <ellipse cx="103" cy="100" rx="87" ry="6" fill="#5a4558" opacity=".24"/>
-  <path class="ken-ear" d="M50 46C31 28 13 16 9 30C6 43 25 57 45 58Z" fill="#fff8f1" stroke="#735a68" stroke-width="3"/>
-  <path d="M45 48C28 33 15 27 16 33C17 39 29 47 43 53Z" fill="#f4b7c3"/>
-  <path d="M58 42C52 17 58 5 70 10C82 15 75 34 69 49Z" fill="#fff8f1" stroke="#735a68" stroke-width="3"/>
-  <path d="M62 39C58 20 62 14 68 17C74 21 70 35 67 42Z" fill="#f4b7c3"/>
-  <ellipse cx="168" cy="82" rx="24" ry="15" fill="#fff8f1" stroke="#735a68" stroke-width="3"/>
-  <ellipse class="ken-bunny-body" cx="114" cy="72" rx="65" ry="29" fill="#fff8f1" stroke="#735a68" stroke-width="3"/>
-  <ellipse cx="160" cy="89" rx="20" ry="9" fill="#fff8f1" stroke="#735a68" stroke-width="3"/>
-  <circle cx="58" cy="67" r="30" fill="#fff8f1" stroke="#735a68" stroke-width="3"/>
-  <path d="M38 66q7 8 14 0m13 0q7 8 14 0" fill="none" stroke="#59434e" stroke-width="2.7" stroke-linecap="round"/>
-  <ellipse cx="38" cy="77" rx="7" ry="3" fill="#f7bec8" opacity=".68"/><ellipse cx="78" cy="77" rx="7" ry="3" fill="#f7bec8" opacity=".68"/>
-  <path d="M54 76q4-4 8 0l-4 3z" fill="#e99bad"/><path d="M58 79q-3 5-7 3m7-3q3 5 7 3" fill="none" stroke="#735a68" stroke-width="2" stroke-linecap="round"/>
-  <path d="M44 92q13 6 27 0" fill="none" stroke="#735a68" stroke-width="3" stroke-linecap="round"/>
-  <path class="ken-paw" d="M129 86q22-12 33-4q7 6 0 13q-6 5-18 2" fill="#fff8f1" stroke="#735a68" stroke-width="3" stroke-linecap="round"/>
-  <text x="92" y="33" fill="#b293ac" font-family="system-ui,sans-serif" font-size="17" font-weight="700">z</text><text x="105" y="21" fill="#b293ac" font-family="system-ui,sans-serif" font-size="12" font-weight="700">z</text>
+var bunnySvg = `<svg class="ken-bunny" viewBox="0 0 150 110" role="img" aria-label="Sleepy bunny lying on the chat textbox" xmlns="http://www.w3.org/2000/svg">
+  <ellipse cx="73" cy="102" rx="61" ry="5" fill="#18151a" opacity=".17"/>
+  <path d="M24 70C11 67 8 77 13 86C19 96 31 91 36 83" fill="#fffefa" stroke="#302a30" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round"/>
+  <path class="ken-ear" d="M41 48C28 37 17 26 23 18C29 9 43 21 54 41" fill="#fffefa" stroke="#302a30" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M39 39C32 31 27 24 29 22C33 20 41 30 46 40" fill="#f3b0bd" stroke="none"/>
+  <path d="M53 43C45 29 44 16 52 14C62 10 69 28 68 44" fill="#fffefa" stroke="#302a30" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M55 38C51 27 52 21 55 20C60 20 63 29 63 39" fill="#f3b0bd" stroke="none"/>
+  <path class="ken-bunny-body" d="M30 53C39 44 53 43 65 43C76 41 91 43 98 48C116 48 128 62 129 78C131 91 119 99 103 100C87 103 50 101 37 99C23 98 18 86 21 73C22 64 25 58 30 53Z" fill="#fffefa" stroke="#302a30" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M67 68q4-5 9 0m17 0q4-5 9 0" fill="none" stroke="#302a30" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="83" cy="64" r="1.5" fill="#302a30"/><circle cx="107" cy="63" r="1.5" fill="#302a30"/>
+  <path d="M84 78q4-4 7 0l-3 3z" fill="#ed9fac"/><path d="M88 81q-3 5-7 2m7-2q3 5 7 2" fill="none" stroke="#302a30" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M111 84q7-4 12 0" fill="none" stroke="#302a30" stroke-width="2.5" stroke-linecap="round"/>
+  <path class="ken-paw" d="M107 92q14-9 24-4q7 4 3 10q-5 5-16 1" fill="#fffefa" stroke="#302a30" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="80" y="34" fill="#766b78" font-family="system-ui,sans-serif" font-size="14" font-weight="700">z</text><text x="91" y="25" fill="#766b78" font-family="system-ui,sans-serif" font-size="10" font-weight="700">z</text>
 </svg>`;
 var pugSvg = `<svg class="ken-pug" viewBox="0 0 100 92" role="img" aria-label="Little pug being petted" xmlns="http://www.w3.org/2000/svg">
   <ellipse cx="49" cy="73" rx="38" ry="17" fill="#b89169" stroke="#664c42" stroke-width="3"/>
@@ -3714,18 +3712,18 @@ var pugSvg = `<svg class="ken-pug" viewBox="0 0 100 92" role="img" aria-label="L
   <ellipse cx="49" cy="52" rx="7" ry="5" fill="#2f2527"/><path d="M49 57q-5 6-10 4m10-4q5 6 10 4" fill="none" stroke="#2f2527" stroke-width="2" stroke-linecap="round"/>
 </svg>`;
 var style = `
-.ken-bedtime{position:fixed;z-index:2147483000;pointer-events:none;display:flex;flex-direction:column;align-items:flex-start;max-width:min(300px,calc(100vw - 24px));filter:drop-shadow(0 8px 15px rgba(30,15,33,.2));animation:ken-arrive-left .8s cubic-bezier(.2,.9,.25,1) both}
-.ken-bedtime-bubble{position:relative;max-width:245px;min-width:150px;margin-left:36px;padding:11px 29px 11px 14px;border:2px solid #795a72;border-radius:15px 15px 15px 5px;background:#fffaf5;color:#382c3b;font:600 14px/1.35 system-ui,sans-serif;pointer-events:auto}
-.ken-bedtime-bubble::after{content:"";position:absolute;left:20px;bottom:-8px;width:13px;height:13px;background:#fffaf5;border-right:2px solid #795a72;border-bottom:2px solid #795a72;transform:rotate(45deg)}
+.ken-bedtime{position:fixed;z-index:2147483000;pointer-events:none;display:flex;flex-direction:column;align-items:flex-start;max-width:min(280px,calc(100vw - 24px));filter:drop-shadow(0 6px 11px rgba(15,12,18,.17));animation:ken-arrive-left .8s cubic-bezier(.2,.9,.25,1) both}
+.ken-bedtime-bubble{position:relative;max-width:245px;min-width:150px;margin-left:22px;padding:11px 29px 11px 14px;border:2px solid #373037;border-radius:16px 19px 15px 6px;background:#fffefa;color:#302a30;font:600 14px/1.35 system-ui,sans-serif;pointer-events:auto}
+.ken-bedtime-bubble::after{content:"";position:absolute;left:20px;bottom:-8px;width:13px;height:13px;background:#fffefa;border-right:2px solid #373037;border-bottom:2px solid #373037;transform:rotate(45deg)}
 .ken-bedtime-close{position:absolute;right:5px;top:3px;border:0;background:transparent;color:#705361;font:700 20px/1 system-ui,sans-serif;cursor:pointer;padding:2px 5px}
 .ken-bedtime-close:focus-visible{outline:2px solid #705361;border-radius:4px}
 .ken-bedtime-friends{display:flex;align-items:flex-end;flex:none;margin-top:2px}
-.ken-bunny{width:168px;height:92px;overflow:visible}
-.ken-bunny-body{transform-origin:114px 72px;animation:ken-breathe 2.3s ease-in-out infinite alternate}
-.ken-ear{transform-origin:50px 46px;animation:ken-ear-twitch 4s ease-in-out infinite alternate}
-.ken-pug{width:54px;height:50px;margin-left:-22px;margin-bottom:2px;display:none}
+.ken-bunny{width:132px;height:97px;overflow:visible}
+.ken-bunny-body{transform-origin:75px 80px;animation:ken-breathe 2.3s ease-in-out infinite alternate}
+.ken-ear{transform-origin:41px 48px;animation:ken-ear-twitch 4s ease-in-out infinite alternate}
+.ken-pug{width:51px;height:49px;margin-left:-13px;margin-bottom:2px;display:none}
 .ken-bedtime-with-pug .ken-pug{display:block}
-.ken-bedtime-with-pug .ken-paw{transform-origin:130px 86px;animation:ken-pet .8s ease-in-out 4 alternate}
+.ken-bedtime-with-pug .ken-paw{transform-origin:108px 92px;animation:ken-pet .8s ease-in-out 4 alternate}
 @keyframes ken-arrive-left{from{transform:translateX(calc(-100vw - 300px))}to{transform:translateX(0)}}
 @keyframes ken-breathe{to{transform:scaleY(.94)}}
 @keyframes ken-ear-twitch{to{transform:rotate(-5deg)}}
