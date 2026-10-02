@@ -549,6 +549,29 @@ try {
 } catch (error) {
   spindle.log.warn(`FF automatic listener not registered: ${error?.message || String(error)}`);
 }
-if (false)
-  ;
+spindle.on("MESSAGE_SENT", async (payload, userId) => {
+  const chatId = typeof payload?.chatId === "string" ? payload.chatId : typeof payload?.message?.chat_id === "string" ? payload.message.chat_id : "";
+  if (!chatId || payload?.message?.is_user !== true)
+    return;
+  let personaName = "";
+  try {
+    const persona = await spindle.personas.getActive(userId);
+    if (persona?.name) {
+      personaName = persona.name;
+    } else {
+      const defaultPersona = await spindle.personas.getDefault(userId);
+      personaName = defaultPersona?.name || "";
+    }
+  } catch (error) {
+    spindle.log.warn(`Ken sleep reminder could not resolve active persona: ${error?.message || String(error)}`);
+    return;
+  }
+  spindle.sendToFrontend({
+    type: "ken_sleep_message_sent",
+    chatId,
+    personaName,
+    isUser: true,
+    messageId: typeof payload?.message?.id === "string" ? payload.message.id : null
+  }, userId);
+});
 spindle.log.info(`Lumi Toolkit FF backend v${FF_THINK_FIX_VERSION} loaded`);

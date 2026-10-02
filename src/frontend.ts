@@ -1,4 +1,5 @@
 import { installLorebookOrganizer } from './lorebook-organizer-frontend'
+import { createKenSleepCompanion, createKenSleepGate, kenSleepNight, KEN_SLEEP_DISMISSED_KEY } from './ken-sleep-companion'
 
 const BIONIC_DRAWER_ICON_SVG = `
 <svg
@@ -4715,150 +4716,55 @@ export function setup(ctx) {
   // Sync the saved user choice/config as soon as the frontend loads.
   syncFFThinkBackendConfig()
 
-  /*
-    Ken sleep reminder
-    ------------------
-    The backend tells us when a real MESSAGE_SENT row was created and
-    supplies the active persona name (the identity behind {{user}}).
-
-    IMPORTANT: the hour check deliberately lives in the frontend.
-    `new Date().getHours()` therefore uses the browser/device's local
-    clock, not the Lumiverse server's timezone.
-  */
-  let kenSleepMessageCount = 0
-  let kenSleepChatId = null
+  /* The reminder uses the browser's local clock and only responds to
+     user messages sent with the exact Ken persona. */
   let kenSleepModal = null
-
-  function resetKenSleepCounter(
-    chatId = null
-  ) {
-    kenSleepMessageCount = 0
-    kenSleepChatId = chatId
+  let kenSleepCompanion = null
+  let kenDismissedNight = null
+  function dismissKenForNight() {
+    const night = kenSleepNight(new Date())
+    if (!night) return
+    kenDismissedNight = night
+    try { localStorage.setItem(KEN_SLEEP_DISMISSED_KEY, night) } catch {}
   }
-
-  function isKenSleepWindow() {
-    const hour =
-      new Date().getHours()
-
-    return hour >= 6 && hour < 12
-  }
-
   function showKenSleepPopup() {
-    if (kenSleepModal) return
-
+    if (kenSleepModal || kenSleepCompanion?.isVisible()) return
     try {
-      const modal =
-        ctx.ui.showModal({
-          title: 'Ken.',
-          width: 380,
-          maxHeight: 240,
-          persistent: false,
-        })
-
-      const message =
-        document.createElement('div')
-
-      message.textContent =
-        'go the fuck to sleep, Ken.'
-
-      message.style.padding = '18px 8px'
-      message.style.fontSize = '1.15rem'
-      message.style.fontWeight = '700'
-      message.style.lineHeight = '1.45'
-      message.style.textAlign = 'center'
-
-      modal.root.appendChild(message)
-
-      kenSleepModal = modal
-
-      modal.onDismiss(() => {
-        if (kenSleepModal === modal) {
-          kenSleepModal = null
-        }
+      kenSleepCompanion ||= createKenSleepCompanion(document, {
+        onDismiss: dismissKenForNight,
       })
+      kenSleepCompanion.show()
+      return
     } catch (error) {
-      console.warn(
-        '[Lumi Toolkit] Ken sleep popup failed:',
-        error
-      )
+      console.warn('[Lumi Toolkit] Ken bunny could not appear:', error)
+    }
+    // Keep the original modal path as a fallback when the chat UI cannot host the bunny.
+    try {
+      const modal = ctx.ui.showModal({ title: 'Ken, bedtime?', width: 380, maxHeight: 240, persistent: false })
+      const message = document.createElement('div')
+      message.textContent = "I'm sleepy. You should go to bed too."
+      message.style.cssText = 'padding:18px 8px;font-size:1.15rem;font-weight:700;line-height:1.45;text-align:center'
+      modal.root.appendChild(message)
+      kenSleepModal = modal
+      modal.onDismiss(() => { if (kenSleepModal === modal) kenSleepModal = null; dismissKenForNight() })
+    } catch (error) {
+      console.warn('[Lumi Toolkit] Ken sleep popup failed:', error)
     }
   }
-
-  function handleKenSleepMessage(
-    payload
-  ) {
-    // Temporarily disabled in v0.28 while the final Ken settings are designed.
-    return
-
-    const active =
-      ctx.getActiveChat?.()
-
-    const activeChatId =
-      typeof active?.chatId === 'string'
-        ? active.chatId
-        : null
-
-    const eventChatId =
-      typeof payload?.chatId === 'string'
-        ? payload.chatId
-        : null
-
-    /*
-      Only count messages belonging to the chat the user is actually
-      looking at. Switching chats starts a fresh pair.
-    */
-    if (
-      !activeChatId ||
-      !eventChatId ||
-      activeChatId !== eventChatId
-    ) {
-      if (
-        kenSleepChatId !== activeChatId
-      ) {
-        resetKenSleepCounter(
-          activeChatId
-        )
-      }
-      return
-    }
-
-    if (
-      kenSleepChatId !== activeChatId
-    ) {
-      resetKenSleepCounter(
-        activeChatId
-      )
-    }
-
-    const personaName =
-      typeof payload?.personaName === 'string'
-        ? payload.personaName.trim()
-        : ''
-
-    const qualifies =
-      isKenSleepWindow() &&
-      personaName === 'Ken'
-
-    /*
-      A message outside either condition breaks the streak. This stops
-      counts accumulated before 06:00, after noon, or under another
-      persona from carrying into Ken's reminder cadence.
-    */
-    if (!qualifies) {
-      resetKenSleepCounter(
-        activeChatId
-      )
-      return
-    }
-
-    kenSleepMessageCount += 1
-
-    if (
-      kenSleepMessageCount >= 2
-    ) {
-      kenSleepMessageCount = 0
-      showKenSleepPopup()
-    }
+  const kenSleepGate = createKenSleepGate({
+    activeChatId: () => {
+      const active = ctx.getActiveChat?.()
+      return typeof active?.chatId === 'string' ? active.chatId : null
+    },
+    now: () => new Date(),
+    dismissedNight: () => {
+      if (kenDismissedNight) return kenDismissedNight
+      try { return localStorage.getItem(KEN_SLEEP_DISMISSED_KEY) } catch { return null }
+    },
+    show: showKenSleepPopup,
+  })
+  function handleKenSleepMessage(payload) {
+    kenSleepGate.onMessage(payload)
   }
 
   let loreCleanupGroups = []
@@ -6015,6 +5921,8 @@ export function setup(ctx) {
       fontCompatLateTimer = null
     }
 
+    kenSleepCompanion?.destroy()
+    kenSleepCompanion = null
     if (kenSleepModal) {
       try {
         kenSleepModal.dismiss()

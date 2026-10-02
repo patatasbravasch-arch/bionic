@@ -674,8 +674,7 @@ try {
   actual {{user}} identity, while the frontend itself performs the
   device-local time check.
 */
-// Ken sleep alert temporarily disabled in v0.28.
-if (false) spindle.on(
+spindle.on(
   'MESSAGE_SENT',
   async (
     payload: any,
@@ -690,7 +689,7 @@ if (false) spindle.on(
               : ''
           )
 
-    if (!chatId) return
+    if (!chatId || payload?.message?.is_user !== true) return
 
     let personaName = ''
 
@@ -731,6 +730,7 @@ if (false) spindle.on(
         type: 'ken_sleep_message_sent',
         chatId,
         personaName,
+        isUser: true,
         messageId:
           typeof payload?.message?.id === 'string'
             ? payload.message.id
