@@ -12,7 +12,7 @@ If you already use the extension, update it through Lumiverse and reload. The ex
 
 ## Reading
 
-Start with an optional built-in setup or tune **Bionic Reading**, font, text size, spacing, line width, justification, and hyphenation yourself. Name and save your current reading setup to switch back to it later; you can update or delete saved setups. **Show preview** displays a live sample while you tune the settings. Your current settings and saved setups follow your choice of account or browser storage.
+The Reading tab keeps the **Bionic Reading** switch and setup picker at the top. Open **Text size & spacing**, **Bionic details**, **Font**, or **Layout** when you need finer controls. Choose an optional starting point or save your own named setup to reuse later. **Show preview** opens a live sample that stays near the top while you tune it. Your current settings and saved setups follow your choice of account or browser storage.
 
 Bionic Reading changes rendered chat text. It does not rewrite stored messages, prompts, or exports. Code and links are preserved. This project is not affiliated with or endorsed by Bionic Reading®.
 

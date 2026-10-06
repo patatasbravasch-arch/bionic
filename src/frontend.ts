@@ -1096,22 +1096,21 @@ export function setup(ctx) {
 
     .lumibionic-preview-section {
       position: relative;
-      margin: 0 -8px;
-      padding: 10px 8px 12px !important;
+      margin: 0;
+      padding: 8px 10px !important;
       border-top: 0 !important;
-      border-bottom: 1px solid rgba(127, 127, 127, 0.22);
       background: color-mix(in srgb, var(--lumiverse-bg, #080812) 92%, transparent);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
       border: 1px solid rgba(255,255,255,.14);
       border-radius: 10px;
-      box-shadow: 0 8px 24px rgba(0,0,0,.28);
     }
 
     .lumibionic-preview-section.lumibionic-preview-visible {
       position: sticky;
       top: 60px;
       z-index: 5;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      box-shadow: 0 8px 24px rgba(0,0,0,.28);
     }
 
     .lumibionic-preview-toolbar {
@@ -1119,8 +1118,23 @@ export function setup(ctx) {
       align-items: center;
       justify-content: space-between;
       gap: 10px;
-      margin-bottom: 8px;
+      margin-bottom: 0;
     }
+
+    .lumibionic-preview-visible .lumibionic-preview-toolbar { margin-bottom: 8px; }
+
+    .lumibionic-reading-quick {
+      padding: 12px;
+      border: 1px solid color-mix(in srgb, var(--lumiverse-primary, #7c9bc8) 32%, transparent);
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--lumiverse-primary, #7c9bc8) 7%, transparent);
+      display: grid;
+      gap: 3px;
+    }
+
+    .lumibionic-reading-quick label { font-weight: 700; }
+
+    #lb-preset-status:empty { display: none; }
 
     .lumibionic-preview-toolbar strong {
       font-size: 13px;
@@ -1130,18 +1144,6 @@ export function setup(ctx) {
       width: auto !important;
       padding: 6px 9px !important;
       font-size: 12px;
-    }
-
-    .lumibionic-ui-actions {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-    }
-
-    .lumibionic-ui-actions button {
-      min-height: 32px !important;
-      padding: 6px 8px !important;
-      font-size: 12px !important;
     }
 
     .lumibionic-ff-grid {
@@ -1203,6 +1205,8 @@ export function setup(ctx) {
       grid-template-columns: 1fr 1fr;
       gap: 8px;
     }
+
+    .lumibionic-toolbar-actions.lumibionic-single-action { grid-template-columns: 1fr; }
 
     @media (max-width: 440px) {
       .lumibionic-toolbar-grid {
@@ -2834,6 +2838,14 @@ export function setup(ctx) {
       <details class="lumibionic-group" data-lumibionic-group="Reading & Typography" open>
         <summary>Reading & Typography</summary>
         <div class="lumibionic-group-body">
+      <div class="lumibionic-reading-quick">
+        <div class="lumibionic-row">
+          <label for="lb-bionic-enabled">Bionic Reading</label>
+          <input id="lb-bionic-enabled" type="checkbox">
+        </div>
+        <div class="lumibionic-muted">Bold word beginnings in chat text.</div>
+      </div>
+
       <div class="lumibionic-section">
 
         <div class="lumibionic-section-title">
@@ -2853,39 +2865,30 @@ export function setup(ctx) {
             <optgroup label="Your saved setups" id="lb-saved-presets"></optgroup>
           </select>
           <div class="lumibionic-muted">
-            Starting points are optional. Tune the controls below, then save your own setup.
+            Built-ins are starting points; your saved setups are reusable.
           </div>
         </div>
 
-        <div class="lumibionic-control">
-          <label for="lb-preset-name">Name your current settings</label>
+        <div class="lumibionic-toolbar-actions">
+          <button type="button" id="lb-preset-new">Save current</button>
+          <button type="button" id="lb-preset-delete" disabled>Delete selected</button>
+        </div>
+        <div class="lumibionic-control lumibionic-hidden" id="lb-preset-save-panel">
+          <label for="lb-preset-name">Setup name</label>
           <input id="lb-preset-name" type="text" maxlength="40" placeholder="For example, evening reading">
           <div class="lumibionic-toolbar-actions">
-            <button type="button" id="lb-preset-save">Save current setup</button>
-            <button type="button" id="lb-preset-delete" disabled>Delete selected</button>
-          </div>
-          <div class="lumibionic-muted" id="lb-preset-status" role="status" aria-live="polite">
-            Saved setups follow your account or browser storage choice.
+            <button type="button" id="lb-preset-save">Save setup</button>
+            <button type="button" id="lb-preset-cancel">Cancel</button>
           </div>
         </div>
+        <div class="lumibionic-muted" id="lb-preset-status" role="status" aria-live="polite"></div>
 
       </div>
 
       <div class="lumibionic-section">
 
         <div class="lumibionic-section-title">
-          Bionic Reading
-        </div>
-
-        <div class="lumibionic-row">
-          <label for="lb-bionic-enabled">
-            Enable Bionic Reading
-          </label>
-
-          <input
-            id="lb-bionic-enabled"
-            type="checkbox"
-          >
+          Bionic details
         </div>
 
         <div id="lb-bionic-options">
@@ -3411,13 +3414,22 @@ export function setup(ctx) {
 
   const preset = $('#lb-preset')
   const savedPresetGroup = $('#lb-saved-presets')
+  const presetNew = $('#lb-preset-new')
+  const presetSavePanel = $('#lb-preset-save-panel')
   const presetName = $('#lb-preset-name')
   const presetSave = $('#lb-preset-save')
+  const presetCancel = $('#lb-preset-cancel')
   const presetDelete = $('#lb-preset-delete')
   const presetStatus = $('#lb-preset-status')
   presetName.value = settings.savedPresets.find(saved => settings.preset === `saved:${saved.id}`)?.name || ''
+  function showPresetSavePanel(open) {
+    presetSavePanel.classList.toggle('lumibionic-hidden', !open)
+    presetNew.setAttribute('aria-expanded', String(open))
+    if (open) presetName.focus()
+  }
   const bionicEnabled = $('#lb-bionic-enabled')
   const bionicOptions = $('#lb-bionic-options')
+  const bionicDetailsSection = bionicOptions.closest('.lumibionic-section')
   const density = $('#lb-density')
   const fixation = $('#lb-fixation')
   const fixationValue = $('#lb-fixation-value')
@@ -3569,6 +3581,15 @@ export function setup(ctx) {
     }
   } catch {}
 
+  try {
+    const compactReadingKey = `${UI_STATE_KEY}:compact-reading-v04831`
+    if (localStorage.getItem(compactReadingKey) !== '1') {
+      uiState = { ...uiState, previewVisible: false, sections: {} }
+      localStorage.setItem(UI_STATE_KEY, JSON.stringify(uiState))
+      localStorage.setItem(compactReadingKey, '1')
+    }
+  } catch {}
+
   function saveUiState() {
     try {
       localStorage.setItem(UI_STATE_KEY, JSON.stringify(uiState))
@@ -3603,6 +3624,9 @@ export function setup(ctx) {
       'FF5 Thinking Fix': 'tools',
       Automation: 'tools',
     }
+    const textSection = settingsRoot.querySelector('#lb-size')?.closest('.lumibionic-section')
+    const bionicSection = settingsRoot.querySelector('#lb-bionic-options')?.closest('.lumibionic-section')
+    if (textSection && bionicSection) bionicSection.before(textSection)
     settingsRoot.querySelectorAll('.lumibionic-group').forEach(group => {
       const category = groupCategories[group.getAttribute('data-lumibionic-group')]
       group.dataset.lumibionicCategory = category
@@ -3680,22 +3704,8 @@ export function setup(ctx) {
 
     if (headingBlock) headingBlock.insertAdjacentElement('afterend', navigation)
 
-    const uiActions = document.createElement('div')
-    uiActions.className = 'lumibionic-ui-actions'
-    uiActions.innerHTML = `
-      <button type="button" id="lb-collapse-all">Collapse sections</button>
-      <button type="button" id="lb-expand-all">Expand sections</button>
-    `
-
-    if (previewSection) {
-      previewSection.insertAdjacentElement('afterend', uiActions)
-    } else if (headingBlock) {
-      headingBlock.insertAdjacentElement('afterend', uiActions)
-    }
-
-    const sectionControllers = []
     const sectionNames = {
-      'Bionic Reading': 'Bionic Reading',
+      'Bionic details': 'Bionic details',
       'Font override': 'Font',
       'Long-form reading': 'Layout',
       'Message typography': 'Text size & spacing',
@@ -3736,7 +3746,7 @@ export function setup(ctx) {
         const initialExpanded =
           typeof savedExpanded === 'boolean'
             ? savedExpanded
-            : ['bionic-reading', 'bionic-emphasis', 'message-typography'].includes(key)
+            : false
 
         const setExpanded = (expanded, persist = true) => {
           body.classList.toggle(
@@ -3762,19 +3772,6 @@ export function setup(ctx) {
         })
 
         setExpanded(initialExpanded, false)
-        sectionControllers.push(setExpanded)
-      })
-
-    uiActions
-      .querySelector('#lb-collapse-all')
-      ?.addEventListener('click', () => {
-        for (const setExpanded of sectionControllers) setExpanded(false)
-      })
-
-    uiActions
-      .querySelector('#lb-expand-all')
-      ?.addEventListener('click', () => {
-        for (const setExpanded of sectionControllers) setExpanded(true)
       })
 
     const selectCategory = (category, persist = true) => {
@@ -3787,7 +3784,6 @@ export function setup(ctx) {
         button.setAttribute('aria-selected', String(active))
         button.tabIndex = active ? 0 : -1
       })
-      uiActions.hidden = category !== 'reading'
       syncPreviewVisibility()
       if (persist) {
         saveUiState()
@@ -3837,7 +3833,10 @@ export function setup(ctx) {
     }
     preset.value = settings.preset || 'custom'
     if (preset.value !== settings.preset) preset.value = 'custom'
-    presetDelete.disabled = !settings.savedPresets.some(saved => preset.value === `saved:${saved.id}`)
+    const canDelete = settings.savedPresets.some(saved => preset.value === `saved:${saved.id}`)
+    presetDelete.disabled = !canDelete
+    presetDelete.classList.toggle('lumibionic-hidden', !canDelete)
+    presetNew.parentElement.classList.toggle('lumibionic-single-action', !canDelete)
     const name = presetName.value.trim().toLocaleLowerCase()
     const exists = settings.savedPresets.some(saved => saved.name.toLocaleLowerCase() === name)
     presetSave.textContent = exists ? 'Update saved setup' : 'Save current setup'
@@ -3851,6 +3850,7 @@ export function setup(ctx) {
       'lumibionic-hidden',
       !settings.bionicEnabled
     )
+    bionicDetailsSection.classList.toggle('lumibionic-hidden', !settings.bionicEnabled)
 
     density.value = settings.density
     fixation.value = String(settings.fixation)
@@ -4149,8 +4149,17 @@ export function setup(ctx) {
 
   preset.addEventListener(
     'change',
-    () => applyPreset(preset.value)
+    () => {
+      showPresetSavePanel(false)
+      applyPreset(preset.value)
+    }
   )
+  presetNew.addEventListener('click', () => showPresetSavePanel(true))
+  presetCancel.addEventListener('click', () => showPresetSavePanel(false))
+  presetName.addEventListener('keydown', event => {
+    if (event.key === 'Enter') presetSave.click()
+    if (event.key === 'Escape') showPresetSavePanel(false)
+  })
   presetName.addEventListener('input', syncReadingSetups)
   let savedPresetNonce = 0
   presetSave.addEventListener('click', () => {
@@ -4169,6 +4178,7 @@ export function setup(ctx) {
       }
       saveSettings()
       syncControls()
+      showPresetSavePanel(false)
       presetStatus.textContent = `${updated ? 'Updated' : 'Saved'} “${result.preset.name}”.`
     } catch (error) {
       presetStatus.textContent = error instanceof Error ? error.message : 'Could not save this setup.'
