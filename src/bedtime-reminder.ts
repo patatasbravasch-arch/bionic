@@ -1,45 +1,39 @@
 import { kenBunnyDataUrl } from './ken-bunny-asset'
 import { kenBunnyPugDataUrl } from './ken-bunny-pug-asset'
 
-export const KEN_SLEEP_DISMISSED_KEY = 'lumiverse:lumi-toolkit:ken-sleep-dismissed-night'
+export const DEFAULT_BEDTIME = '22:00'
+export const DEFAULT_WAKE_TIME = '06:00'
 
-// The hours after midnight belong to the previous evening's reminder.
-export function kenSleepNight(now: Date): string | null {
-  const hour = now.getHours()
-  if (hour >= 6 && hour < 22) return null
+export function validClockTime(value: unknown): value is string {
+  return typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value)
+}
+
+// A reminder window can cross midnight; that morning still belongs to last night.
+export function bedtimeNight(now: Date, bedtime: string, wakeTime: string): string | null {
+  if (!validClockTime(bedtime) || !validClockTime(wakeTime) || bedtime === wakeTime) return null
+  const minute = now.getHours() * 60 + now.getMinutes()
+  const start = Number(bedtime.slice(0, 2)) * 60 + Number(bedtime.slice(3))
+  const end = Number(wakeTime.slice(0, 2)) * 60 + Number(wakeTime.slice(3))
+  const overnight = start > end
+  if (overnight ? minute < start && minute >= end : minute < start || minute >= end) return null
   const night = new Date(now)
-  if (hour < 6) night.setDate(night.getDate() - 1)
+  if (overnight && minute < end) night.setDate(night.getDate() - 1)
   return `${night.getFullYear()}-${String(night.getMonth() + 1).padStart(2, '0')}-${String(night.getDate()).padStart(2, '0')}`
 }
 
-export function createKenSleepGate(options: {
-  activeChatId: () => string | null
+export function createBedtimeGate(options: {
   now: () => Date
-  dismissedNight: () => string | null
+  config: () => { enabled: boolean; bedtime: string; wakeTime: string }
+  hasOpenChat: () => boolean
+  shownNight: () => string | null
   show: () => void
 }) {
-  let chatId: string | null = null
-  let count = 0
-  let shown = false
-  let lastShownAt = 0
-  let currentNight: string | null = null
   return {
-    onMessage(payload: { chatId?: unknown; personaName?: unknown; isUser?: unknown }) {
-      const active = options.activeChatId()
-      if (!active || payload.chatId !== active) return
-      if (chatId !== active) { chatId = active; count = 0 }
-      if (payload.isUser !== true) return
-      if (payload.personaName !== 'Ken') { count = 0; return }
-      const now = options.now()
-      const night = kenSleepNight(now)
-      if (!night || options.dismissedNight() === night) { count = 0; return }
-      if (night !== currentNight) { currentNight = night; count = 0; shown = false; lastShownAt = 0 }
-      count++
-      const threshold = shown ? 6 : 2
-      if (count < threshold || (shown && now.getTime() - lastShownAt < 15 * 60_000)) return
-      count = 0
-      shown = true
-      lastShownAt = now.getTime()
+    check() {
+      const { enabled, bedtime, wakeTime } = options.config()
+      if (!enabled || !options.hasOpenChat()) return
+      const night = bedtimeNight(options.now(), bedtime, wakeTime)
+      if (!night || options.shownNight() === night) return
       options.show()
     },
   }
@@ -48,20 +42,20 @@ export function createKenSleepGate(options: {
 const soloLines = [
   "I'm sleepy. You should go to bed too.",
   'Maybe you should take melatonin.',
-  'Ken, does “one more reply” ever mean one?',
+  'Does “one more reply” ever mean one?',
   'The story will still be here tomorrow, promise.',
-  'Even bunnies need sleep, Ken.',
+  'Even bunnies need sleep.',
   'Let’s get cozy and call it a night.',
   'Your pillow misses you.',
   'Sleep is a pretty good plot twist.',
   'You can pick this up tomorrow.',
-  'Ken, the moon called. It says bedtime.',
+  'The moon called. It says bedtime.',
   'That last reply can be tomorrow’s first.',
   'Let’s give your eyes a little break.',
   'I’m keeping your spot warm.',
   'You’ve earned a soft landing tonight.',
   'Your blankets are waiting.',
-  'Ken, I admire your dedication. Your pillow doesn’t.',
+  'I admire your dedication. Your pillow doesn’t.',
   'Your bedtime has been waiting very patiently.',
   'Perhaps the cliffhanger can wait.',
   'No need to finish the whole story tonight.',
@@ -78,7 +72,7 @@ const soloLines = [
   'Come on, let’s call it a night.',
   'Your eyes could use a happy ending tonight.',
   'Wouldn’t a little rest feel nice?',
-  'Ken, I think your blanket is winning.',
+  'I think your blanket is winning.',
   'One more minute? Famous last words.',
   'I’ll be here when the sun comes up.',
   'Sleep first. Plot twists later.',
@@ -86,7 +80,7 @@ const soloLines = [
 
 const pugLines = [
   "I'm sleepy. Come rest with us.",
-  'The pug’s ready for bed. Are you, Ken?',
+  'The pug’s ready for bed. Are you?',
   'The pug has claimed the pillow. There’s room for you.',
   'I think “one more reply” became a whole chapter.',
   'Maybe you should take melatonin.',
@@ -94,7 +88,7 @@ const pugLines = [
   'Look at those sleepy eyes. We’re outnumbered.',
   'He wants a cuddle break.',
   'The pug and I saved you a cozy spot.',
-  'Ken, even your biggest fan needs bedtime.',
+  'Even your biggest fan needs bedtime.',
   'The pug says the next chapter can wait.',
   'He’s already dreaming of tomorrow’s scene.',
   'Shh. Someone’s almost asleep.',
@@ -102,7 +96,7 @@ const pugLines = [
   'He asked for one last pat, not one last reply.',
   'Let’s give this story a soft pause.',
   'Two sleepy faces are looking at you.',
-  'Ken, the pug has officially clocked out.',
+  'The pug has officially clocked out.',
   'His bedtime yawn was a hint.',
   'Come join our little sleep pile.',
   'He’s pretending he’s awake for you.',
@@ -129,7 +123,7 @@ const style = `
 @media(prefers-reduced-motion:reduce){.ken-bedtime,.ken-bunny,.ken-duo{animation:none}}
 `
 
-export function createKenSleepCompanion(doc: Document, options: { onDismiss: () => void; random?: () => number }) {
+export function createBedtimeCompanion(doc: Document, options: { onDismiss: () => void; random?: () => number }) {
   const random = options.random ?? Math.random
   const css = doc.createElement('style')
   css.textContent = style

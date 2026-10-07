@@ -1,5 +1,5 @@
 import { installLorebookOrganizer } from './lorebook-organizer-frontend'
-import { createKenSleepCompanion, createKenSleepGate, kenSleepNight, KEN_SLEEP_DISMISSED_KEY } from './ken-sleep-companion'
+import { bedtimeNight, createBedtimeCompanion, createBedtimeGate, DEFAULT_BEDTIME, DEFAULT_WAKE_TIME, validClockTime } from './bedtime-reminder'
 import { normalizeReadingPresets, readingPresetValues, saveReadingPreset } from './reading-presets'
 
 const BIONIC_DRAWER_ICON_SVG = `
@@ -164,6 +164,11 @@ export function setup(ctx) {
     autoRegenerateEnabled: false,
     autoRegenerateTriggerText: '',
     autoRegenerateMaxAttempts: 3,
+
+    bedtimeReminderEnabled: false,
+    bedtimeReminderTime: DEFAULT_BEDTIME,
+    bedtimeReminderUntil: DEFAULT_WAKE_TIME,
+    bedtimeLastShownNight: null,
 
     settingsPersistenceMode: 'account',
 
@@ -438,6 +443,15 @@ export function setup(ctx) {
           DEFAULTS.autoRegenerateMaxAttempts
         ),
 
+        bedtimeReminderEnabled: saved.bedtimeReminderEnabled === true,
+        bedtimeReminderTime: validClockTime(saved.bedtimeReminderTime)
+          ? saved.bedtimeReminderTime : DEFAULT_BEDTIME,
+        bedtimeReminderUntil: validClockTime(saved.bedtimeReminderUntil)
+          ? saved.bedtimeReminderUntil : DEFAULT_WAKE_TIME,
+        bedtimeLastShownNight: typeof saved.bedtimeLastShownNight === 'string'
+          && /^\d{4}-\d{2}-\d{2}$/.test(saved.bedtimeLastShownNight)
+          ? saved.bedtimeLastShownNight : null,
+
         settingsPersistenceMode:
           saved.settingsPersistenceMode === 'browser'
             ? 'browser'
@@ -506,6 +520,7 @@ export function setup(ctx) {
           'Settings storage: loading account-saved settings…'
       }
     } catch {
+      bedtimeSettingsReady = true
       if (settingsSaveStatus) {
         settingsSaveStatus.textContent =
           'Settings storage: backend unavailable; browser copy active.'
@@ -1267,6 +1282,7 @@ export function setup(ctx) {
     .lumibionic-settings input[type="range"],
     .lumibionic-settings select,
     .lumibionic-settings input[type="text"],
+    .lumibionic-settings input[type="time"],
     .lumibionic-settings input[type="file"],
     .lumibionic-settings textarea,
     .lumibionic-settings button {
@@ -1276,6 +1292,7 @@ export function setup(ctx) {
 
     .lumibionic-settings select,
     .lumibionic-settings input[type="text"],
+    .lumibionic-settings input[type="time"],
     .lumibionic-settings textarea,
     .lumibionic-settings button {
       padding: 9px 10px;
@@ -1295,6 +1312,8 @@ export function setup(ctx) {
       font-size: 13px;
       font-weight: 600;
     }
+
+    #lb-bedtime-options { display: grid; gap: 12px; }
 
     .lumibionic-stepper {
       display: none;
@@ -3283,6 +3302,31 @@ export function setup(ctx) {
         </div>
       </details>
 
+      <details class="lumibionic-group" data-lumibionic-group="Bedtime reminder">
+        <summary>Bedtime reminder</summary>
+        <div class="lumibionic-group-body">
+          <div class="lumibionic-section">
+            <label class="lumibionic-check">
+              <input id="lb-bedtime-enabled" type="checkbox">
+              <span>Let the sleepy bunny remind me to rest</span>
+            </label>
+            <div id="lb-bedtime-options">
+              <div class="lumibionic-control">
+                <label for="lb-bedtime-time">Bedtime</label>
+                <input id="lb-bedtime-time" type="time">
+              </div>
+              <div class="lumibionic-control">
+                <label for="lb-bedtime-until">Stop reminders at</label>
+                <input id="lb-bedtime-until" type="time">
+              </div>
+            </div>
+            <div class="lumibionic-muted" id="lb-bedtime-status">
+              Once each night while a chat is open. Uses this device’s clock.
+            </div>
+          </div>
+        </div>
+      </details>
+
       <details
         class="lumibionic-group"
         data-lumibionic-group="Lorebook Organizer"
@@ -3480,6 +3524,11 @@ export function setup(ctx) {
   const autoRegenMax = $('#lb-auto-regen-max')
   const autoRegenMaxValue = $('#lb-auto-regen-max-value')
   const autoRegenStatus = $('#lb-auto-regen-status')
+  const bedtimeEnabled = $('#lb-bedtime-enabled')
+  const bedtimeTime = $('#lb-bedtime-time')
+  const bedtimeUntil = $('#lb-bedtime-until')
+  const bedtimeOptions = $('#lb-bedtime-options')
+  const bedtimeStatus = $('#lb-bedtime-status')
   const settingsPersistence = $('#lb-settings-persistence')
   const settingsSaveStatus = $('#lb-settings-save-status')
   const loreScan = $('#lb-lore-scan')
@@ -3623,6 +3672,7 @@ export function setup(ctx) {
       Settings: 'tools',
       'FF5 Thinking Fix': 'tools',
       Automation: 'tools',
+      'Bedtime reminder': 'tools',
     }
     const textSection = settingsRoot.querySelector('#lb-size')?.closest('.lumibionic-section')
     const bionicSection = settingsRoot.querySelector('#lb-bionic-options')?.closest('.lumibionic-section')
@@ -3921,6 +3971,15 @@ export function setup(ctx) {
     autoRegenTrigger.value = settings.autoRegenerateTriggerText
     autoRegenMax.value = String(settings.autoRegenerateMaxAttempts)
     autoRegenMaxValue.textContent = String(settings.autoRegenerateMaxAttempts)
+    bedtimeEnabled.checked = settings.bedtimeReminderEnabled
+    bedtimeTime.value = settings.bedtimeReminderTime
+    bedtimeUntil.value = settings.bedtimeReminderUntil
+    bedtimeOptions.classList.toggle('lumibionic-hidden', !settings.bedtimeReminderEnabled)
+    bedtimeStatus.textContent = settings.bedtimeReminderEnabled
+      ? settings.bedtimeReminderTime === settings.bedtimeReminderUntil
+        ? 'Choose different bedtime and stop times.'
+        : 'The bunny appears once each night while a chat is open. Uses this device’s clock.'
+      : 'Off until you enable it.'
     settingsPersistence.value = settings.settingsPersistenceMode
     syncAutoRegenerateStatus()
 
@@ -4709,8 +4768,10 @@ export function setup(ctx) {
       syncControls()
 
       if (settings.settingsPersistenceMode === 'account') {
+        bedtimeSettingsReady = false
         requestAccountSettings()
       } else if (settingsSaveStatus) {
+        bedtimeSettingsReady = true
         settingsSaveStatus.textContent =
           'Settings storage: this browser only.'
       }
@@ -4809,59 +4870,81 @@ export function setup(ctx) {
   // Sync the saved user choice/config as soon as the frontend loads.
   syncFFThinkBackendConfig()
 
-  /* The reminder uses the browser's local clock and only responds to
-     user messages sent with the exact Ken persona. */
-  let kenSleepModal = null
-  let kenSleepCompanion = null
-  let kenDismissedNight = null
-  function dismissKenForNight() {
-    const night = kenSleepNight(new Date())
+  // The reminder follows the viewer's local clock, independent of persona or messages.
+  let bedtimeSettingsReady = settings.settingsPersistenceMode !== 'account'
+  let bedtimeModal = null
+  let bedtimeCompanion = null
+  function markBedtimeShown() {
+    const night = bedtimeNight(new Date(), settings.bedtimeReminderTime, settings.bedtimeReminderUntil)
     if (!night) return
-    kenDismissedNight = night
-    try { localStorage.setItem(KEN_SLEEP_DISMISSED_KEY, night) } catch {}
+    settings.bedtimeLastShownNight = night
+    saveSettings()
   }
-  function getKenSleepCompanion() {
-    kenSleepCompanion ||= createKenSleepCompanion(document, {
-      onDismiss: dismissKenForNight,
-    })
-    return kenSleepCompanion
-  }
-  function showKenSleepPopup() {
-    if (kenSleepModal || kenSleepCompanion?.isVisible()) return
+  function showBedtimeReminder() {
+    if (bedtimeModal || bedtimeCompanion?.isVisible()) return
     try {
-      getKenSleepCompanion().show()
+      bedtimeCompanion ||= createBedtimeCompanion(document, { onDismiss: () => {} })
+      bedtimeCompanion.show()
+      markBedtimeShown()
       return
     } catch (error) {
-      console.warn('[Lumi Toolkit] Ken bunny could not appear:', error)
+      console.warn('[Lumi Toolkit] Bedtime bunny could not appear:', error)
     }
-    // Keep the original modal path as a fallback when the chat UI cannot host the bunny.
     try {
-      const modal = ctx.ui.showModal({ title: 'Ken, bedtime?', width: 380, maxHeight: 240, persistent: false })
+      const modal = ctx.ui.showModal({ title: 'Bedtime reminder', width: 380, maxHeight: 240, persistent: false })
       const message = document.createElement('div')
       message.textContent = "I'm sleepy. You should go to bed too."
       message.style.cssText = 'padding:18px 8px;font-size:1.15rem;font-weight:700;line-height:1.45;text-align:center'
       modal.root.appendChild(message)
-      kenSleepModal = modal
-      modal.onDismiss(() => { if (kenSleepModal === modal) kenSleepModal = null; dismissKenForNight() })
+      bedtimeModal = modal
+      modal.onDismiss(() => { if (bedtimeModal === modal) bedtimeModal = null })
+      markBedtimeShown()
     } catch (error) {
-      console.warn('[Lumi Toolkit] Ken sleep popup failed:', error)
+      console.warn('[Lumi Toolkit] Bedtime reminder failed:', error)
     }
   }
-  const kenSleepGate = createKenSleepGate({
-    activeChatId: () => {
-      const active = ctx.getActiveChat?.()
-      return typeof active?.chatId === 'string' ? active.chatId : null
-    },
+  const bedtimeGate = createBedtimeGate({
     now: () => new Date(),
-    dismissedNight: () => {
-      if (kenDismissedNight) return kenDismissedNight
-      try { return localStorage.getItem(KEN_SLEEP_DISMISSED_KEY) } catch { return null }
-    },
-    show: showKenSleepPopup,
+    config: () => ({
+      enabled: bedtimeSettingsReady && settings.bedtimeReminderEnabled,
+      bedtime: settings.bedtimeReminderTime,
+      wakeTime: settings.bedtimeReminderUntil,
+    }),
+    hasOpenChat: () => document.visibilityState !== 'hidden'
+      && Boolean(ctx.getActiveChat?.()?.chatId)
+      && Boolean(document.querySelector('[data-component="InputArea"]')),
+    shownNight: () => settings.bedtimeLastShownNight,
+    show: showBedtimeReminder,
   })
-  function handleKenSleepMessage(payload) {
-    kenSleepGate.onMessage(payload)
+  let bedtimeCheckTimer = null
+  function checkBedtimeReminder() {
+    bedtimeGate.check()
   }
+  function scheduleBedtimeCheck() {
+    checkBedtimeReminder()
+    bedtimeCheckTimer = setTimeout(scheduleBedtimeCheck, 60_050 - Date.now() % 60_000)
+  }
+  bedtimeEnabled.addEventListener('change', () => {
+    settings.bedtimeReminderEnabled = bedtimeEnabled.checked
+    saveSettings()
+    syncControls()
+    checkBedtimeReminder()
+  })
+  for (const [control, key] of [
+    [bedtimeTime, 'bedtimeReminderTime'],
+    [bedtimeUntil, 'bedtimeReminderUntil'],
+  ]) {
+    control.addEventListener('change', () => {
+      if (!validClockTime(control.value)) { syncControls(); return }
+      settings[key] = control.value
+      saveSettings()
+      syncControls()
+      checkBedtimeReminder()
+    })
+  }
+  document.addEventListener('visibilitychange', checkBedtimeReminder)
+  window.addEventListener('focus', checkBedtimeReminder)
+  scheduleBedtimeCheck()
   let loreCleanupGroups = []
   let loreCleanupUnlinked = []
   let loreCleanupCharacters = []
@@ -5740,6 +5823,7 @@ export function setup(ctx) {
               })
             )
             settings = loadSettings()
+            bedtimeSettingsReady = true
             presetName.value = settings.savedPresets.find(saved => settings.preset === `saved:${saved.id}`)?.name || ''
             applyCssSettings()
             syncControls()
@@ -5754,10 +5838,13 @@ export function setup(ctx) {
           } finally {
             applyingAccountSettings = false
           }
+          checkBedtimeReminder()
         } else {
+          bedtimeSettingsReady = true
           if (settings.settingsPersistenceMode === 'account') {
             saveSettings()
           }
+          checkBedtimeReminder()
           if (settingsSaveStatus) {
             settingsSaveStatus.textContent =
               'Settings storage: account save initialized.'
@@ -5776,16 +5863,6 @@ export function setup(ctx) {
               ? 'Settings storage: account save failed; browser copy kept.'
               : 'Settings storage: saved to your Lumiverse account.'
         }
-        return
-      }
-
-      if (
-        payload?.type ===
-        'ken_sleep_message_sent'
-      ) {
-        handleKenSleepMessage(
-          payload
-        )
         return
       }
 
@@ -6017,13 +6094,16 @@ export function setup(ctx) {
       fontCompatLateTimer = null
     }
 
-    kenSleepCompanion?.destroy()
-    kenSleepCompanion = null
-    if (kenSleepModal) {
+    if (bedtimeCheckTimer) clearTimeout(bedtimeCheckTimer)
+    document.removeEventListener('visibilitychange', checkBedtimeReminder)
+    window.removeEventListener('focus', checkBedtimeReminder)
+    bedtimeCompanion?.destroy()
+    bedtimeCompanion = null
+    if (bedtimeModal) {
       try {
-        kenSleepModal.dismiss()
+        bedtimeModal.dismiss()
       } catch {}
-      kenSleepModal = null
+      bedtimeModal = null
     }
 
     unwrap()
