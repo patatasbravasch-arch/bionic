@@ -39,7 +39,7 @@ Use **All books**, **Duplicates**, **Similar names**, and **Unlinked books** to 
 
 - **Reasoning repair:** Move text before or after a configurable boundary marker into Lumiverse's native reasoning field. You can run it on the latest reply or enable automatic repair.
 - **Auto regenerate:** Regenerate completed replies containing your chosen trigger text, up to your retry limit. This is off until you enable it.
-- **Bedtime reminder:** Turn on the sleepy bunny, choose your bedtime and a stop time, and it will visit once per night while a chat is open. It uses your device’s local clock and works with any persona. If you open a chat after bedtime, it visits then; closing the bunny or letting it leave ends the reminder for that night. The bunny is off until you enable it.
+- **Bedtime reminder:** Turn on the sleepy bunny, choose your bedtime and stop time, and it will visit while a chat is open. The bunny stays until you choose **Dismiss tonight** or **Snooze**. Set the return delay in minutes on the bunny, or change its default in Tools. After snoozing, it returns when that time passes if bedtime hours are still active. It uses your device’s local clock, works with any persona, and is off until you enable it.
 - **Menu Folder:** Move supported Lumiverse drawer items into one Folder entry and restore them later.
 
 Reasoning repair and auto regenerate can change saved chat messages or trigger generation. Read their settings before enabling them.

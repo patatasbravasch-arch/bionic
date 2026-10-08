@@ -168,7 +168,9 @@ export function setup(ctx) {
     bedtimeReminderEnabled: false,
     bedtimeReminderTime: DEFAULT_BEDTIME,
     bedtimeReminderUntil: DEFAULT_WAKE_TIME,
-    bedtimeLastShownNight: null,
+    bedtimeSnoozeMinutes: 15,
+    bedtimeSnoozedUntil: 0,
+    bedtimeDismissedNight: null,
 
     settingsPersistenceMode: 'account',
 
@@ -448,9 +450,13 @@ export function setup(ctx) {
           ? saved.bedtimeReminderTime : DEFAULT_BEDTIME,
         bedtimeReminderUntil: validClockTime(saved.bedtimeReminderUntil)
           ? saved.bedtimeReminderUntil : DEFAULT_WAKE_TIME,
-        bedtimeLastShownNight: typeof saved.bedtimeLastShownNight === 'string'
-          && /^\d{4}-\d{2}-\d{2}$/.test(saved.bedtimeLastShownNight)
-          ? saved.bedtimeLastShownNight : null,
+        bedtimeSnoozeMinutes: Math.round(clamp(saved.bedtimeSnoozeMinutes, 1, 120, 15)),
+        bedtimeSnoozedUntil: typeof saved.bedtimeSnoozedUntil === 'number'
+          && Number.isFinite(saved.bedtimeSnoozedUntil) && saved.bedtimeSnoozedUntil > 0
+          ? saved.bedtimeSnoozedUntil : 0,
+        bedtimeDismissedNight: typeof saved.bedtimeDismissedNight === 'string'
+          && /^\d{4}-\d{2}-\d{2}$/.test(saved.bedtimeDismissedNight)
+          ? saved.bedtimeDismissedNight : null,
 
         settingsPersistenceMode:
           saved.settingsPersistenceMode === 'browser'
@@ -1283,6 +1289,7 @@ export function setup(ctx) {
     .lumibionic-settings select,
     .lumibionic-settings input[type="text"],
     .lumibionic-settings input[type="time"],
+    .lumibionic-settings input[type="number"],
     .lumibionic-settings input[type="file"],
     .lumibionic-settings textarea,
     .lumibionic-settings button {
@@ -1293,6 +1300,7 @@ export function setup(ctx) {
     .lumibionic-settings select,
     .lumibionic-settings input[type="text"],
     .lumibionic-settings input[type="time"],
+    .lumibionic-settings input[type="number"],
     .lumibionic-settings textarea,
     .lumibionic-settings button {
       padding: 9px 10px;
@@ -3316,12 +3324,16 @@ export function setup(ctx) {
                 <input id="lb-bedtime-time" type="time">
               </div>
               <div class="lumibionic-control">
-                <label for="lb-bedtime-until">Stop reminders at</label>
+                <label for="lb-bedtime-until">End bedtime hours</label>
                 <input id="lb-bedtime-until" type="time">
+              </div>
+              <div class="lumibionic-control">
+                <label for="lb-bedtime-snooze">Default snooze (minutes)</label>
+                <input id="lb-bedtime-snooze" type="number" min="1" max="120" step="1">
               </div>
             </div>
             <div class="lumibionic-muted" id="lb-bedtime-status">
-              Once each night while a chat is open. Uses this device’s clock.
+              The bunny stays until you snooze or dismiss it for tonight. Uses this device’s clock.
             </div>
           </div>
         </div>
@@ -3527,6 +3539,7 @@ export function setup(ctx) {
   const bedtimeEnabled = $('#lb-bedtime-enabled')
   const bedtimeTime = $('#lb-bedtime-time')
   const bedtimeUntil = $('#lb-bedtime-until')
+  const bedtimeSnooze = $('#lb-bedtime-snooze')
   const bedtimeOptions = $('#lb-bedtime-options')
   const bedtimeStatus = $('#lb-bedtime-status')
   const settingsPersistence = $('#lb-settings-persistence')
@@ -3974,11 +3987,12 @@ export function setup(ctx) {
     bedtimeEnabled.checked = settings.bedtimeReminderEnabled
     bedtimeTime.value = settings.bedtimeReminderTime
     bedtimeUntil.value = settings.bedtimeReminderUntil
+    bedtimeSnooze.value = String(settings.bedtimeSnoozeMinutes)
     bedtimeOptions.classList.toggle('lumibionic-hidden', !settings.bedtimeReminderEnabled)
     bedtimeStatus.textContent = settings.bedtimeReminderEnabled
       ? settings.bedtimeReminderTime === settings.bedtimeReminderUntil
         ? 'Choose different bedtime and stop times.'
-        : 'The bunny appears once each night while a chat is open. Uses this device’s clock.'
+        : 'The bunny stays until you snooze or dismiss it for tonight. It returns after snooze while a chat is open and bedtime hours remain.'
       : 'Off until you enable it.'
     settingsPersistence.value = settings.settingsPersistenceMode
     syncAutoRegenerateStatus()
@@ -4874,31 +4888,72 @@ export function setup(ctx) {
   let bedtimeSettingsReady = settings.settingsPersistenceMode !== 'account'
   let bedtimeModal = null
   let bedtimeCompanion = null
-  function markBedtimeShown() {
+  function dismissBedtimeTonight() {
     const night = bedtimeNight(new Date(), settings.bedtimeReminderTime, settings.bedtimeReminderUntil)
     if (!night) return
-    settings.bedtimeLastShownNight = night
+    settings.bedtimeDismissedNight = night
+    settings.bedtimeSnoozedUntil = 0
     saveSettings()
+  }
+  function snoozeBedtime(minutes) {
+    settings.bedtimeSnoozeMinutes = minutes
+    settings.bedtimeSnoozedUntil = Date.now() + minutes * 60_000
+    saveSettings()
+    syncControls()
+    scheduleBedtimeCheck()
   }
   function showBedtimeReminder() {
     if (bedtimeModal || bedtimeCompanion?.isVisible()) return
     try {
-      bedtimeCompanion ||= createBedtimeCompanion(document, { onDismiss: () => {} })
+      bedtimeCompanion ||= createBedtimeCompanion(document, {
+        onDismiss: dismissBedtimeTonight,
+        onSnooze: snoozeBedtime,
+        snoozeMinutes: () => settings.bedtimeSnoozeMinutes,
+      })
       bedtimeCompanion.show()
-      markBedtimeShown()
       return
     } catch (error) {
       console.warn('[Lumi Toolkit] Bedtime bunny could not appear:', error)
     }
     try {
-      const modal = ctx.ui.showModal({ title: 'Bedtime reminder', width: 380, maxHeight: 240, persistent: false })
+      const modal = ctx.ui.showModal({ title: 'Bedtime reminder', width: 380, maxHeight: 280, persistent: false })
       const message = document.createElement('div')
       message.textContent = "I'm sleepy. You should go to bed too."
       message.style.cssText = 'padding:18px 8px;font-size:1.15rem;font-weight:700;line-height:1.45;text-align:center'
-      modal.root.appendChild(message)
+      const actions = document.createElement('div')
+      actions.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px'
+      const minutes = document.createElement('input')
+      minutes.type = 'number'
+      minutes.min = '1'
+      minutes.max = '120'
+      minutes.value = String(settings.bedtimeSnoozeMinutes)
+      minutes.setAttribute('aria-label', 'Minutes until bunny returns')
+      minutes.style.width = '55px'
+      const snoozeLabel = document.createElement('label')
+      snoozeLabel.textContent = 'Come back in '
+      snoozeLabel.append(minutes, document.createTextNode(' minutes'))
+      const snooze = document.createElement('button')
+      snooze.type = 'button'
+      snooze.textContent = 'Snooze'
+      const dismiss = document.createElement('button')
+      dismiss.type = 'button'
+      dismiss.textContent = 'Dismiss tonight'
+      actions.append(snoozeLabel, snooze, dismiss)
+      modal.root.append(message, actions)
       bedtimeModal = modal
-      modal.onDismiss(() => { if (bedtimeModal === modal) bedtimeModal = null })
-      markBedtimeShown()
+      let snoozing = false
+      modal.onDismiss(() => {
+        if (bedtimeModal !== modal) return
+        bedtimeModal = null
+        if (!snoozing && settings.bedtimeReminderEnabled) dismissBedtimeTonight()
+      })
+      snooze.addEventListener('click', () => {
+        const delay = Math.min(120, Math.max(1, Math.round(Number(minutes.value) || settings.bedtimeSnoozeMinutes)))
+        snoozing = true
+        snoozeBedtime(delay)
+        modal.dismiss()
+      })
+      dismiss.addEventListener('click', () => modal.dismiss())
     } catch (error) {
       console.warn('[Lumi Toolkit] Bedtime reminder failed:', error)
     }
@@ -4913,7 +4968,9 @@ export function setup(ctx) {
     hasOpenChat: () => document.visibilityState !== 'hidden'
       && Boolean(ctx.getActiveChat?.()?.chatId)
       && Boolean(document.querySelector('[data-component="InputArea"]')),
-    shownNight: () => settings.bedtimeLastShownNight,
+    dismissedNight: () => settings.bedtimeDismissedNight,
+    snoozedUntil: () => settings.bedtimeSnoozedUntil,
+    isVisible: () => Boolean(bedtimeModal || bedtimeCompanion?.isVisible()),
     show: showBedtimeReminder,
   })
   let bedtimeCheckTimer = null
@@ -4921,11 +4978,20 @@ export function setup(ctx) {
     bedtimeGate.check()
   }
   function scheduleBedtimeCheck() {
+    if (bedtimeCheckTimer) clearTimeout(bedtimeCheckTimer)
     checkBedtimeReminder()
-    bedtimeCheckTimer = setTimeout(scheduleBedtimeCheck, 60_050 - Date.now() % 60_000)
+    const now = Date.now()
+    const minuteDelay = 60_050 - now % 60_000
+    const snoozeDelay = settings.bedtimeSnoozedUntil > now
+      ? settings.bedtimeSnoozedUntil - now + 50 : Infinity
+    bedtimeCheckTimer = setTimeout(scheduleBedtimeCheck, Math.min(minuteDelay, snoozeDelay))
   }
   bedtimeEnabled.addEventListener('change', () => {
     settings.bedtimeReminderEnabled = bedtimeEnabled.checked
+    if (!settings.bedtimeReminderEnabled) {
+      bedtimeCompanion?.hide()
+      bedtimeModal?.dismiss()
+    }
     saveSettings()
     syncControls()
     checkBedtimeReminder()
@@ -4942,6 +5008,11 @@ export function setup(ctx) {
       checkBedtimeReminder()
     })
   }
+  bedtimeSnooze.addEventListener('change', () => {
+    settings.bedtimeSnoozeMinutes = Math.min(120, Math.max(1, Math.round(Number(bedtimeSnooze.value) || 15)))
+    saveSettings()
+    syncControls()
+  })
   document.addEventListener('visibilitychange', checkBedtimeReminder)
   window.addEventListener('focus', checkBedtimeReminder)
   scheduleBedtimeCheck()
@@ -6101,9 +6172,10 @@ export function setup(ctx) {
     bedtimeCompanion = null
     if (bedtimeModal) {
       try {
-        bedtimeModal.dismiss()
+        const modal = bedtimeModal
+        bedtimeModal = null
+        modal.dismiss()
       } catch {}
-      bedtimeModal = null
     }
 
     unwrap()

@@ -3658,8 +3658,9 @@ function createBedtimeGate(options) {
       const { enabled, bedtime, wakeTime } = options.config();
       if (!enabled || !options.hasOpenChat())
         return;
-      const night = bedtimeNight(options.now(), bedtime, wakeTime);
-      if (!night || options.shownNight() === night)
+      const now = options.now();
+      const night = bedtimeNight(now, bedtime, wakeTime);
+      if (!night || options.dismissedNight() === night || options.snoozedUntil() > now.getTime() || options.isVisible())
         return;
       options.show();
     }
@@ -3733,10 +3734,14 @@ var bunnyImage = `<img class="ken-bunny" src="${kenBunnyDataUrl}" alt="Sleepy bu
 var bunnyPugImage = `<img class="ken-duo" src="${kenBunnyPugDataUrl}" alt="Bunny resting one paw on the sleepy pug's head" draggable="false">`;
 var style = `
 .ken-bedtime{position:fixed;z-index:2147483000;pointer-events:none;display:flex;flex-direction:column;align-items:flex-start;max-width:min(280px,calc(100vw - 24px));filter:drop-shadow(0 6px 11px rgba(15,12,18,.17));animation:ken-arrive-left .8s cubic-bezier(.2,.9,.25,1) both}
-.ken-bedtime-bubble{position:relative;max-width:245px;min-width:150px;margin-left:22px;padding:11px 29px 11px 14px;border:2px solid #373037;border-radius:16px 19px 15px 6px;background:#fffefa;color:#302a30;font:600 14px/1.35 system-ui,sans-serif;pointer-events:auto}
+.ken-bedtime-bubble{position:relative;max-width:250px;min-width:190px;margin-left:22px;padding:11px 13px;border:2px solid #373037;border-radius:16px 19px 15px 6px;background:#fffefa;color:#302a30;font:600 14px/1.35 system-ui,sans-serif;pointer-events:auto}
 .ken-bedtime-bubble::after{content:"";position:absolute;left:20px;bottom:-8px;width:13px;height:13px;background:#fffefa;border-right:2px solid #373037;border-bottom:2px solid #373037;transform:rotate(45deg)}
-.ken-bedtime-close{position:absolute;right:5px;top:3px;border:0;background:transparent;color:#705361;font:700 20px/1 system-ui,sans-serif;cursor:pointer;padding:2px 5px}
-.ken-bedtime-close:focus-visible{outline:2px solid #705361;border-radius:4px}
+.ken-bedtime-actions{display:grid;gap:7px;margin-top:10px;font:500 12px/1.3 system-ui,sans-serif}
+.ken-bedtime-snooze-label{display:flex;align-items:center;gap:5px;white-space:nowrap}
+.ken-bedtime-minutes{width:45px;padding:3px 4px;border:1px solid #a897a2;border-radius:6px;background:#fff;color:#302a30;font:inherit;text-align:center}
+.ken-bedtime-actions button{padding:5px 7px;border:1px solid #ad9aa6;border-radius:7px;background:#f7e8ee;color:#302a30;font:600 12px/1.25 system-ui,sans-serif;cursor:pointer}
+.ken-bedtime-actions .ken-bedtime-dismiss{background:transparent}
+.ken-bedtime-actions button:focus-visible,.ken-bedtime-minutes:focus-visible{outline:2px solid #705361;outline-offset:2px}
 .ken-bedtime-friends{position:relative;display:flex;align-items:flex-end;flex:none;margin-top:2px}
 .ken-bunny{width:88px;height:90px;object-fit:contain;display:block;transform-origin:50% 85%;animation:ken-breathe 2.3s ease-in-out infinite alternate}
 .ken-duo{width:142px;height:99px;object-fit:contain;display:block;transform-origin:50% 85%;animation:ken-breathe 2.3s ease-in-out infinite alternate}
@@ -3750,7 +3755,6 @@ function createBedtimeCompanion(doc, options) {
   css.textContent = style;
   doc.head.append(css);
   let root = null;
-  let timer = null;
   const bags = { solo: [], pug: [] };
   const last = { solo: -1, pug: -1 };
   const nextLine = (withPug) => {
@@ -3783,9 +3787,6 @@ function createBedtimeCompanion(doc, options) {
     root.style.bottom = `${Math.max(16, rect ? height - rect.top - 19 : 80)}px`;
   };
   const remove = () => {
-    if (timer)
-      clearTimeout(timer);
-    timer = null;
     root?.remove();
     root = null;
     doc.defaultView?.removeEventListener("resize", position);
@@ -3800,11 +3801,20 @@ function createBedtimeCompanion(doc, options) {
       const line = nextLine(withPug);
       root = doc.createElement("aside");
       root.className = `ken-bedtime${withPug ? " ken-bedtime-with-pug" : ""}`;
-      root.setAttribute("role", "status");
+      root.setAttribute("role", "region");
+      root.setAttribute("aria-label", "Bedtime reminder");
       root.setAttribute("aria-live", "polite");
-      root.innerHTML = `<div class="ken-bedtime-bubble"><span class="ken-bedtime-line"></span><button type="button" class="ken-bedtime-close" aria-label="Dismiss bedtime reminder">×</button></div><div class="ken-bedtime-friends">${withPug ? bunnyPugImage : bunnyImage}</div>`;
+      root.innerHTML = `<div class="ken-bedtime-bubble"><span class="ken-bedtime-line"></span><div class="ken-bedtime-actions"><label class="ken-bedtime-snooze-label">Come back in <input class="ken-bedtime-minutes" type="number" min="1" max="120" step="1" aria-label="Minutes until bunny returns"> min</label><button type="button" class="ken-bedtime-snooze">Snooze</button><button type="button" class="ken-bedtime-dismiss">Dismiss tonight</button></div></div><div class="ken-bedtime-friends">${withPug ? bunnyPugImage : bunnyImage}</div>`;
       root.querySelector(".ken-bedtime-line").textContent = line;
-      root.querySelector(".ken-bedtime-close").addEventListener("click", () => {
+      const minutesInput = root.querySelector(".ken-bedtime-minutes");
+      minutesInput.value = String(Math.min(120, Math.max(1, Math.round(options.snoozeMinutes()))));
+      root.querySelector(".ken-bedtime-snooze").addEventListener("click", () => {
+        const minutes = Math.min(120, Math.max(1, Math.round(Number(minutesInput.value) || options.snoozeMinutes())));
+        if (!preview)
+          options.onSnooze(minutes);
+        remove();
+      });
+      root.querySelector(".ken-bedtime-dismiss").addEventListener("click", () => {
         if (!preview)
           options.onDismiss();
         remove();
@@ -3813,7 +3823,6 @@ function createBedtimeCompanion(doc, options) {
       position();
       doc.defaultView?.addEventListener("resize", position);
       doc.defaultView?.addEventListener("scroll", position, true);
-      timer = setTimeout(remove, 16000);
     },
     hide: remove,
     destroy() {
@@ -4049,7 +4058,9 @@ function setup(ctx) {
     bedtimeReminderEnabled: false,
     bedtimeReminderTime: DEFAULT_BEDTIME,
     bedtimeReminderUntil: DEFAULT_WAKE_TIME,
-    bedtimeLastShownNight: null,
+    bedtimeSnoozeMinutes: 15,
+    bedtimeSnoozedUntil: 0,
+    bedtimeDismissedNight: null,
     settingsPersistenceMode: "account",
     toolbarSpacing: 4,
     toolbarHidden: { ...DEFAULT_TOOLBAR_HIDDEN }
@@ -4193,7 +4204,9 @@ function setup(ctx) {
         bedtimeReminderEnabled: saved.bedtimeReminderEnabled === true,
         bedtimeReminderTime: validClockTime(saved.bedtimeReminderTime) ? saved.bedtimeReminderTime : DEFAULT_BEDTIME,
         bedtimeReminderUntil: validClockTime(saved.bedtimeReminderUntil) ? saved.bedtimeReminderUntil : DEFAULT_WAKE_TIME,
-        bedtimeLastShownNight: typeof saved.bedtimeLastShownNight === "string" && /^\d{4}-\d{2}-\d{2}$/.test(saved.bedtimeLastShownNight) ? saved.bedtimeLastShownNight : null,
+        bedtimeSnoozeMinutes: Math.round(clamp(saved.bedtimeSnoozeMinutes, 1, 120, 15)),
+        bedtimeSnoozedUntil: typeof saved.bedtimeSnoozedUntil === "number" && Number.isFinite(saved.bedtimeSnoozedUntil) && saved.bedtimeSnoozedUntil > 0 ? saved.bedtimeSnoozedUntil : 0,
+        bedtimeDismissedNight: typeof saved.bedtimeDismissedNight === "string" && /^\d{4}-\d{2}-\d{2}$/.test(saved.bedtimeDismissedNight) ? saved.bedtimeDismissedNight : null,
         settingsPersistenceMode: saved.settingsPersistenceMode === "browser" ? "browser" : "account",
         toolbarSpacing: clamp(saved.toolbarSpacing, 0, 16, DEFAULTS.toolbarSpacing),
         toolbarHidden: Object.fromEntries(TOOLBAR_BUTTONS.map((item) => [
@@ -4984,6 +4997,7 @@ function setup(ctx) {
     .lumibionic-settings select,
     .lumibionic-settings input[type="text"],
     .lumibionic-settings input[type="time"],
+    .lumibionic-settings input[type="number"],
     .lumibionic-settings input[type="file"],
     .lumibionic-settings textarea,
     .lumibionic-settings button {
@@ -4994,6 +5008,7 @@ function setup(ctx) {
     .lumibionic-settings select,
     .lumibionic-settings input[type="text"],
     .lumibionic-settings input[type="time"],
+    .lumibionic-settings input[type="number"],
     .lumibionic-settings textarea,
     .lumibionic-settings button {
       padding: 9px 10px;
@@ -6271,12 +6286,16 @@ function setup(ctx) {
                 <input id="lb-bedtime-time" type="time">
               </div>
               <div class="lumibionic-control">
-                <label for="lb-bedtime-until">Stop reminders at</label>
+                <label for="lb-bedtime-until">End bedtime hours</label>
                 <input id="lb-bedtime-until" type="time">
+              </div>
+              <div class="lumibionic-control">
+                <label for="lb-bedtime-snooze">Default snooze (minutes)</label>
+                <input id="lb-bedtime-snooze" type="number" min="1" max="120" step="1">
               </div>
             </div>
             <div class="lumibionic-muted" id="lb-bedtime-status">
-              Once each night while a chat is open. Uses this device’s clock.
+              The bunny stays until you snooze or dismiss it for tonight. Uses this device’s clock.
             </div>
           </div>
         </div>
@@ -6470,6 +6489,7 @@ function setup(ctx) {
   const bedtimeEnabled = $("#lb-bedtime-enabled");
   const bedtimeTime = $("#lb-bedtime-time");
   const bedtimeUntil = $("#lb-bedtime-until");
+  const bedtimeSnooze = $("#lb-bedtime-snooze");
   const bedtimeOptions = $("#lb-bedtime-options");
   const bedtimeStatus = $("#lb-bedtime-status");
   const settingsPersistence = $("#lb-settings-persistence");
@@ -6811,8 +6831,9 @@ function setup(ctx) {
     bedtimeEnabled.checked = settings.bedtimeReminderEnabled;
     bedtimeTime.value = settings.bedtimeReminderTime;
     bedtimeUntil.value = settings.bedtimeReminderUntil;
+    bedtimeSnooze.value = String(settings.bedtimeSnoozeMinutes);
     bedtimeOptions.classList.toggle("lumibionic-hidden", !settings.bedtimeReminderEnabled);
-    bedtimeStatus.textContent = settings.bedtimeReminderEnabled ? settings.bedtimeReminderTime === settings.bedtimeReminderUntil ? "Choose different bedtime and stop times." : "The bunny appears once each night while a chat is open. Uses this device’s clock." : "Off until you enable it.";
+    bedtimeStatus.textContent = settings.bedtimeReminderEnabled ? settings.bedtimeReminderTime === settings.bedtimeReminderUntil ? "Choose different bedtime and stop times." : "The bunny stays until you snooze or dismiss it for tonight. It returns after snooze while a chat is open and bedtime hours remain." : "Off until you enable it.";
     settingsPersistence.value = settings.settingsPersistenceMode;
     syncAutoRegenerateStatus();
     toolbarSpacing.value = String(settings.toolbarSpacing);
@@ -7291,36 +7312,76 @@ function setup(ctx) {
   let bedtimeSettingsReady = settings.settingsPersistenceMode !== "account";
   let bedtimeModal = null;
   let bedtimeCompanion = null;
-  function markBedtimeShown() {
+  function dismissBedtimeTonight() {
     const night = bedtimeNight(new Date, settings.bedtimeReminderTime, settings.bedtimeReminderUntil);
     if (!night)
       return;
-    settings.bedtimeLastShownNight = night;
+    settings.bedtimeDismissedNight = night;
+    settings.bedtimeSnoozedUntil = 0;
     saveSettings();
+  }
+  function snoozeBedtime(minutes) {
+    settings.bedtimeSnoozeMinutes = minutes;
+    settings.bedtimeSnoozedUntil = Date.now() + minutes * 60000;
+    saveSettings();
+    syncControls();
+    scheduleBedtimeCheck();
   }
   function showBedtimeReminder() {
     if (bedtimeModal || bedtimeCompanion?.isVisible())
       return;
     try {
-      bedtimeCompanion ||= createBedtimeCompanion(document, { onDismiss: () => {} });
+      bedtimeCompanion ||= createBedtimeCompanion(document, {
+        onDismiss: dismissBedtimeTonight,
+        onSnooze: snoozeBedtime,
+        snoozeMinutes: () => settings.bedtimeSnoozeMinutes
+      });
       bedtimeCompanion.show();
-      markBedtimeShown();
       return;
     } catch (error) {
       console.warn("[Lumi Toolkit] Bedtime bunny could not appear:", error);
     }
     try {
-      const modal = ctx.ui.showModal({ title: "Bedtime reminder", width: 380, maxHeight: 240, persistent: false });
+      const modal = ctx.ui.showModal({ title: "Bedtime reminder", width: 380, maxHeight: 280, persistent: false });
       const message = document.createElement("div");
       message.textContent = "I'm sleepy. You should go to bed too.";
       message.style.cssText = "padding:18px 8px;font-size:1.15rem;font-weight:700;line-height:1.45;text-align:center";
-      modal.root.appendChild(message);
+      const actions = document.createElement("div");
+      actions.style.cssText = "display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px";
+      const minutes = document.createElement("input");
+      minutes.type = "number";
+      minutes.min = "1";
+      minutes.max = "120";
+      minutes.value = String(settings.bedtimeSnoozeMinutes);
+      minutes.setAttribute("aria-label", "Minutes until bunny returns");
+      minutes.style.width = "55px";
+      const snoozeLabel = document.createElement("label");
+      snoozeLabel.textContent = "Come back in ";
+      snoozeLabel.append(minutes, document.createTextNode(" minutes"));
+      const snooze = document.createElement("button");
+      snooze.type = "button";
+      snooze.textContent = "Snooze";
+      const dismiss = document.createElement("button");
+      dismiss.type = "button";
+      dismiss.textContent = "Dismiss tonight";
+      actions.append(snoozeLabel, snooze, dismiss);
+      modal.root.append(message, actions);
       bedtimeModal = modal;
+      let snoozing = false;
       modal.onDismiss(() => {
-        if (bedtimeModal === modal)
-          bedtimeModal = null;
+        if (bedtimeModal !== modal)
+          return;
+        bedtimeModal = null;
+        if (!snoozing && settings.bedtimeReminderEnabled)
+          dismissBedtimeTonight();
       });
-      markBedtimeShown();
+      snooze.addEventListener("click", () => {
+        const delay = Math.min(120, Math.max(1, Math.round(Number(minutes.value) || settings.bedtimeSnoozeMinutes)));
+        snoozing = true;
+        snoozeBedtime(delay);
+        modal.dismiss();
+      });
+      dismiss.addEventListener("click", () => modal.dismiss());
     } catch (error) {
       console.warn("[Lumi Toolkit] Bedtime reminder failed:", error);
     }
@@ -7333,7 +7394,9 @@ function setup(ctx) {
       wakeTime: settings.bedtimeReminderUntil
     }),
     hasOpenChat: () => document.visibilityState !== "hidden" && Boolean(ctx.getActiveChat?.()?.chatId) && Boolean(document.querySelector('[data-component="InputArea"]')),
-    shownNight: () => settings.bedtimeLastShownNight,
+    dismissedNight: () => settings.bedtimeDismissedNight,
+    snoozedUntil: () => settings.bedtimeSnoozedUntil,
+    isVisible: () => Boolean(bedtimeModal || bedtimeCompanion?.isVisible()),
     show: showBedtimeReminder
   });
   let bedtimeCheckTimer = null;
@@ -7341,11 +7404,20 @@ function setup(ctx) {
     bedtimeGate.check();
   }
   function scheduleBedtimeCheck() {
+    if (bedtimeCheckTimer)
+      clearTimeout(bedtimeCheckTimer);
     checkBedtimeReminder();
-    bedtimeCheckTimer = setTimeout(scheduleBedtimeCheck, 60050 - Date.now() % 60000);
+    const now = Date.now();
+    const minuteDelay = 60050 - now % 60000;
+    const snoozeDelay = settings.bedtimeSnoozedUntil > now ? settings.bedtimeSnoozedUntil - now + 50 : Infinity;
+    bedtimeCheckTimer = setTimeout(scheduleBedtimeCheck, Math.min(minuteDelay, snoozeDelay));
   }
   bedtimeEnabled.addEventListener("change", () => {
     settings.bedtimeReminderEnabled = bedtimeEnabled.checked;
+    if (!settings.bedtimeReminderEnabled) {
+      bedtimeCompanion?.hide();
+      bedtimeModal?.dismiss();
+    }
     saveSettings();
     syncControls();
     checkBedtimeReminder();
@@ -7365,6 +7437,11 @@ function setup(ctx) {
       checkBedtimeReminder();
     });
   }
+  bedtimeSnooze.addEventListener("change", () => {
+    settings.bedtimeSnoozeMinutes = Math.min(120, Math.max(1, Math.round(Number(bedtimeSnooze.value) || 15)));
+    saveSettings();
+    syncControls();
+  });
   document.addEventListener("visibilitychange", checkBedtimeReminder);
   window.addEventListener("focus", checkBedtimeReminder);
   scheduleBedtimeCheck();
@@ -7992,9 +8069,10 @@ The current scan found no character card referencing it. This cannot be undone.`
     bedtimeCompanion = null;
     if (bedtimeModal) {
       try {
-        bedtimeModal.dismiss();
+        const modal = bedtimeModal;
+        bedtimeModal = null;
+        modal.dismiss();
       } catch {}
-      bedtimeModal = null;
     }
     unwrap();
     unloadLocalFont(false);
