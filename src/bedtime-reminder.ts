@@ -115,14 +115,12 @@ const bunnyPugImage = `<img class="ken-duo" src="${kenBunnyPugDataUrl}" alt="Bun
 
 const style = `
 .ken-bedtime{position:fixed;z-index:2147483000;pointer-events:none;display:flex;flex-direction:column;align-items:flex-start;max-width:min(280px,calc(100vw - 24px));filter:drop-shadow(0 6px 11px rgba(15,12,18,.17));animation:ken-arrive-left .8s cubic-bezier(.2,.9,.25,1) both}
-.ken-bedtime-bubble{position:relative;max-width:250px;min-width:190px;margin-left:22px;padding:11px 13px;border:2px solid #373037;border-radius:16px 19px 15px 6px;background:#fffefa;color:#302a30;font:600 14px/1.35 system-ui,sans-serif;pointer-events:auto}
+.ken-bedtime-bubble{position:relative;max-width:220px;min-width:155px;margin-left:22px;padding:9px 11px;border:2px solid #373037;border-radius:16px 19px 15px 6px;background:#fffefa;color:#302a30;font:600 13px/1.3 system-ui,sans-serif;pointer-events:auto}
 .ken-bedtime-bubble::after{content:"";position:absolute;left:20px;bottom:-8px;width:13px;height:13px;background:#fffefa;border-right:2px solid #373037;border-bottom:2px solid #373037;transform:rotate(45deg)}
-.ken-bedtime-actions{display:grid;gap:7px;margin-top:10px;font:500 12px/1.3 system-ui,sans-serif}
-.ken-bedtime-snooze-label{display:flex;align-items:center;gap:5px;white-space:nowrap}
-.ken-bedtime-minutes{width:45px;padding:3px 4px;border:1px solid #a897a2;border-radius:6px;background:#fff;color:#302a30;font:inherit;text-align:center}
-.ken-bedtime-actions button{padding:5px 7px;border:1px solid #ad9aa6;border-radius:7px;background:#f7e8ee;color:#302a30;font:600 12px/1.25 system-ui,sans-serif;cursor:pointer}
+.ken-bedtime-actions{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:7px}
+.ken-bedtime-actions button{padding:4px 6px;border:1px solid #ad9aa6;border-radius:7px;background:#f7e8ee;color:#302a30;font:600 11px/1.2 system-ui,sans-serif;cursor:pointer}
 .ken-bedtime-actions .ken-bedtime-dismiss{background:transparent}
-.ken-bedtime-actions button:focus-visible,.ken-bedtime-minutes:focus-visible{outline:2px solid #705361;outline-offset:2px}
+.ken-bedtime-actions button:focus-visible{outline:2px solid #705361;outline-offset:2px}
 .ken-bedtime-friends{position:relative;display:flex;align-items:flex-end;flex:none;margin-top:2px}
 .ken-bunny{width:88px;height:90px;object-fit:contain;display:block;transform-origin:50% 85%;animation:ken-breathe 2.3s ease-in-out infinite alternate}
 .ken-duo{width:142px;height:99px;object-fit:contain;display:block;transform-origin:50% 85%;animation:ken-breathe 2.3s ease-in-out infinite alternate}
@@ -189,12 +187,13 @@ export function createBedtimeCompanion(doc: Document, options: {
       root.setAttribute('role', 'region')
       root.setAttribute('aria-label', 'Bedtime reminder')
       root.setAttribute('aria-live', 'polite')
-      root.innerHTML = `<div class="ken-bedtime-bubble"><span class="ken-bedtime-line"></span><div class="ken-bedtime-actions"><label class="ken-bedtime-snooze-label">Come back in <input class="ken-bedtime-minutes" type="number" min="1" max="120" step="1" aria-label="Minutes until bunny returns"> min</label><button type="button" class="ken-bedtime-snooze">Snooze</button><button type="button" class="ken-bedtime-dismiss">Dismiss tonight</button></div></div><div class="ken-bedtime-friends">${withPug ? bunnyPugImage : bunnyImage}</div>`
+      root.innerHTML = `<div class="ken-bedtime-bubble"><span class="ken-bedtime-line"></span><div class="ken-bedtime-actions"><button type="button" class="ken-bedtime-snooze">Snooze</button><button type="button" class="ken-bedtime-dismiss" aria-label="Leave for tonight" title="Dismiss for tonight">Leave</button></div></div><div class="ken-bedtime-friends">${withPug ? bunnyPugImage : bunnyImage}</div>`
       root.querySelector('.ken-bedtime-line')!.textContent = line
-      const minutesInput = root.querySelector('.ken-bedtime-minutes') as HTMLInputElement
-      minutesInput.value = String(Math.min(120, Math.max(1, Math.round(options.snoozeMinutes()))))
-      root.querySelector('.ken-bedtime-snooze')!.addEventListener('click', () => {
-        const minutes = Math.min(120, Math.max(1, Math.round(Number(minutesInput.value) || options.snoozeMinutes())))
+      const snoozeButton = root.querySelector('.ken-bedtime-snooze') as HTMLButtonElement
+      const minutes = Math.min(120, Math.max(1, Math.round(options.snoozeMinutes())))
+      snoozeButton.setAttribute('aria-label', `Snooze for ${minutes} minutes`)
+      snoozeButton.title = `Come back in ${minutes} minutes`
+      snoozeButton.addEventListener('click', () => {
         if (!preview) options.onSnooze(minutes)
         remove()
       })

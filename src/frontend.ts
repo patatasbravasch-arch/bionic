@@ -3328,12 +3328,12 @@ export function setup(ctx) {
                 <input id="lb-bedtime-until" type="time">
               </div>
               <div class="lumibionic-control">
-                <label for="lb-bedtime-snooze">Default snooze (minutes)</label>
+                <label for="lb-bedtime-snooze">Snooze for (minutes)</label>
                 <input id="lb-bedtime-snooze" type="number" min="1" max="120" step="1">
               </div>
             </div>
             <div class="lumibionic-muted" id="lb-bedtime-status">
-              The bunny stays until you snooze or dismiss it for tonight. Uses this device’s clock.
+              The bunny stays until you choose Snooze or Leave. Uses this device’s clock.
             </div>
           </div>
         </div>
@@ -3992,7 +3992,7 @@ export function setup(ctx) {
     bedtimeStatus.textContent = settings.bedtimeReminderEnabled
       ? settings.bedtimeReminderTime === settings.bedtimeReminderUntil
         ? 'Choose different bedtime and stop times.'
-        : 'The bunny stays until you snooze or dismiss it for tonight. It returns after snooze while a chat is open and bedtime hours remain.'
+        : 'The bunny stays until you choose Snooze or Leave. Snooze uses the minutes above; Leave dismisses it for tonight.'
       : 'Off until you enable it.'
     settingsPersistence.value = settings.settingsPersistenceMode
     syncAutoRegenerateStatus()
@@ -4916,29 +4916,21 @@ export function setup(ctx) {
       console.warn('[Lumi Toolkit] Bedtime bunny could not appear:', error)
     }
     try {
-      const modal = ctx.ui.showModal({ title: 'Bedtime reminder', width: 380, maxHeight: 280, persistent: false })
+      const modal = ctx.ui.showModal({ title: 'Bedtime reminder', width: 280, maxHeight: 220, persistent: false })
       const message = document.createElement('div')
       message.textContent = "I'm sleepy. You should go to bed too."
-      message.style.cssText = 'padding:18px 8px;font-size:1.15rem;font-weight:700;line-height:1.45;text-align:center'
+      message.style.cssText = 'padding:10px 8px;font-size:1rem;font-weight:700;line-height:1.3;text-align:center'
       const actions = document.createElement('div')
-      actions.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px'
-      const minutes = document.createElement('input')
-      minutes.type = 'number'
-      minutes.min = '1'
-      minutes.max = '120'
-      minutes.value = String(settings.bedtimeSnoozeMinutes)
-      minutes.setAttribute('aria-label', 'Minutes until bunny returns')
-      minutes.style.width = '55px'
-      const snoozeLabel = document.createElement('label')
-      snoozeLabel.textContent = 'Come back in '
-      snoozeLabel.append(minutes, document.createTextNode(' minutes'))
+      actions.style.cssText = 'display:flex;gap:6px;padding:6px'
       const snooze = document.createElement('button')
       snooze.type = 'button'
       snooze.textContent = 'Snooze'
+      snooze.setAttribute('aria-label', `Snooze for ${settings.bedtimeSnoozeMinutes} minutes`)
       const dismiss = document.createElement('button')
       dismiss.type = 'button'
-      dismiss.textContent = 'Dismiss tonight'
-      actions.append(snoozeLabel, snooze, dismiss)
+      dismiss.textContent = 'Leave'
+      dismiss.setAttribute('aria-label', 'Leave for tonight')
+      actions.append(snooze, dismiss)
       modal.root.append(message, actions)
       bedtimeModal = modal
       let snoozing = false
@@ -4948,9 +4940,8 @@ export function setup(ctx) {
         if (!snoozing && settings.bedtimeReminderEnabled) dismissBedtimeTonight()
       })
       snooze.addEventListener('click', () => {
-        const delay = Math.min(120, Math.max(1, Math.round(Number(minutes.value) || settings.bedtimeSnoozeMinutes)))
         snoozing = true
-        snoozeBedtime(delay)
+        snoozeBedtime(settings.bedtimeSnoozeMinutes)
         modal.dismiss()
       })
       dismiss.addEventListener('click', () => modal.dismiss())
