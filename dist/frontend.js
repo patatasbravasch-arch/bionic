@@ -3902,6 +3902,29 @@ function saveReadingPreset(presets, name, settings, newId) {
   };
 }
 
+// src/font-override.ts
+var originalFonts = new WeakMap;
+function overrideFontFamily(element, font) {
+  if (!originalFonts.has(element)) {
+    originalFonts.set(element, {
+      value: element.style.getPropertyValue("font-family"),
+      priority: element.style.getPropertyPriority("font-family")
+    });
+  }
+  element.style.setProperty("font-family", font, "important");
+}
+function restoreFontFamily(element) {
+  const original = originalFonts.get(element);
+  if (!original)
+    return;
+  if (original.value) {
+    element.style.setProperty("font-family", original.value, original.priority);
+  } else {
+    element.style.removeProperty("font-family");
+  }
+  originalFonts.delete(element);
+}
+
 // src/frontend.ts
 var BIONIC_DRAWER_ICON_SVG = `
 <svg
@@ -5266,7 +5289,7 @@ function setup(ctx) {
       return node.nodeType === Node.TEXT_NODE && Boolean(node.textContent?.trim());
     });
   }
-  function applyFontLockToRoot(root, font, messageSize) {
+  function applyFontLockToRoot(root, font) {
     if (!root)
       return;
     const targets = new Set;
@@ -5285,15 +5308,12 @@ function setup(ctx) {
       if (element instanceof Element && isProtectedFontElement(element)) {
         continue;
       }
-      element.style.setProperty("font-family", font, "important");
-      if (messageSize) {
-        element.style.setProperty("font-size", messageSize, "important");
-      }
+      overrideFontFamily(element, font);
       element.setAttribute(LUMIREALM_FONT_LOCK_ATTR, "true");
     }
     root.querySelectorAll?.("*").forEach((element) => {
       if (element.shadowRoot) {
-        applyFontLockToRoot(element.shadowRoot, font, messageSize);
+        applyFontLockToRoot(element.shadowRoot, font);
       }
     });
   }
@@ -5301,16 +5321,13 @@ function setup(ctx) {
     if (!root || !shouldApplyMessageFontLock()) {
       return;
     }
-    const messageRoot = root instanceof Element && root.matches?.(MESSAGE_SELECTOR) ? root : root instanceof Element ? root.closest?.(MESSAGE_SELECTOR) : null;
-    const messageSize = messageRoot ? getComputedStyle(messageRoot).fontSize : null;
-    applyFontLockToRoot(root, currentFont(), messageSize);
+    applyFontLockToRoot(root, currentFont());
   }
   function clearFontLocksInRoot(root) {
     if (!root)
       return;
     root.querySelectorAll?.(`[${LUMIREALM_FONT_LOCK_ATTR}]`).forEach((element) => {
-      element.style.removeProperty("font-family");
-      element.style.removeProperty("font-size");
+      restoreFontFamily(element);
       element.removeAttribute(LUMIREALM_FONT_LOCK_ATTR);
     });
     root.querySelectorAll?.("*").forEach((element) => {

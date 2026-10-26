@@ -1,6 +1,7 @@
 import { installLorebookOrganizer } from './lorebook-organizer-frontend'
 import { bedtimeNight, createBedtimeCompanion, createBedtimeGate, DEFAULT_BEDTIME, DEFAULT_WAKE_TIME, validClockTime } from './bedtime-reminder'
 import { normalizeReadingPresets, readingPresetValues, saveReadingPreset } from './reading-presets'
+import { overrideFontFamily, restoreFontFamily } from './font-override'
 
 const BIONIC_DRAWER_ICON_SVG = `
 <svg
@@ -1617,8 +1618,7 @@ export function setup(ctx) {
 
   function applyFontLockToRoot(
     root,
-    font,
-    messageSize
+    font
   ) {
     if (!root) return
 
@@ -1663,25 +1663,9 @@ export function setup(ctx) {
         continue
       }
 
-      element.style.setProperty(
-        'font-family',
-        font,
-        'important'
-      )
-
-      /*
-        LumiRealm's shadow stylesheet also sets its own text sizes
-        (14px and smaller in the diagnostic). Match the normal Bionic
-        MessageContent size so the same reply does not shrink merely
-        because it crossed into the HTML-island shadow root.
-      */
-      if (messageSize) {
-        element.style.setProperty(
-          'font-size',
-          messageSize,
-          'important'
-        )
-      }
+      // Override the family only. Forcing the message size onto every
+      // descendant enlarges small text and flattens HTML-island headings.
+      overrideFontFamily(element, font)
 
       element.setAttribute(
         LUMIREALM_FONT_LOCK_ATTR,
@@ -1695,8 +1679,7 @@ export function setup(ctx) {
         if (element.shadowRoot) {
           applyFontLockToRoot(
             element.shadowRoot,
-            font,
-            messageSize
+            font
           )
         }
       })
@@ -1711,31 +1694,9 @@ export function setup(ctx) {
       return
     }
 
-    const messageRoot =
-      root instanceof Element &&
-      root.matches?.(
-        MESSAGE_SELECTOR
-      )
-        ? root
-        : (
-            root instanceof Element
-              ? root.closest?.(
-                  MESSAGE_SELECTOR
-                )
-              : null
-          )
-
-    const messageSize =
-      messageRoot
-        ? getComputedStyle(
-            messageRoot
-          ).fontSize
-        : null
-
     applyFontLockToRoot(
       root,
-      currentFont(),
-      messageSize
+      currentFont()
     )
   }
 
@@ -1747,12 +1708,7 @@ export function setup(ctx) {
         `[${LUMIREALM_FONT_LOCK_ATTR}]`
       )
       .forEach(element => {
-        element.style.removeProperty(
-          'font-family'
-        )
-        element.style.removeProperty(
-          'font-size'
-        )
+        restoreFontFamily(element)
 
         element.removeAttribute(
           LUMIREALM_FONT_LOCK_ATTR
