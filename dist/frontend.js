@@ -4391,7 +4391,9 @@ function setup(ctx) {
     }
 
     ${MESSAGE_SELECTOR} {
-      font-size: var(--lumibionic-text-size, 100%) !important;
+      /* Match Lumiverse's native chat baseline; percentages here would
+         instead scale the parent UI font and enlarge messages at 100%. */
+      font-size: calc(14px * var(--lumiverse-font-scale, 1) * var(--lumibionic-text-scale, 1)) !important;
       line-height: var(--lumibionic-line-height, 1.55) !important;
     }
 
@@ -5670,6 +5672,7 @@ function setup(ctx) {
     root.style.setProperty("--lumibionic-font-family", fontFamily);
     root.style.setProperty("--lumibionic-preview-font", settings.fontEnabled ? fontFamily : "inherit");
     root.style.setProperty("--lumibionic-text-size", `${settings.textSize}%`);
+    root.style.setProperty("--lumibionic-text-scale", String(settings.textSize / 100));
     root.style.setProperty("--lumibionic-line-height", String(settings.lineHeight));
     root.style.setProperty("--lumibionic-reading-width", settings.readingWidth === "full" ? "none" : settings.readingWidth);
     root.style.setProperty("--lumibionic-paragraph-spacing", `${settings.paragraphSpacing}em`);
@@ -8090,6 +8093,7 @@ The current scan found no character card referencing it. This cannot be undone.`
       "--lumibionic-font-family",
       "--lumibionic-preview-font",
       "--lumibionic-text-size",
+      "--lumibionic-text-scale",
       "--lumibionic-line-height",
       "--lumibionic-reading-width",
       "--lumibionic-paragraph-spacing",

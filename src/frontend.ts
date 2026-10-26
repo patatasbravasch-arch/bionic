@@ -684,7 +684,9 @@ export function setup(ctx) {
     }
 
     ${MESSAGE_SELECTOR} {
-      font-size: var(--lumibionic-text-size, 100%) !important;
+      /* Match Lumiverse's native chat baseline; percentages here would
+         instead scale the parent UI font and enlarge messages at 100%. */
+      font-size: calc(14px * var(--lumiverse-font-scale, 1) * var(--lumibionic-text-scale, 1)) !important;
       line-height: var(--lumibionic-line-height, 1.55) !important;
     }
 
@@ -2620,6 +2622,11 @@ export function setup(ctx) {
     root.style.setProperty(
       '--lumibionic-text-size',
       `${settings.textSize}%`
+    )
+
+    root.style.setProperty(
+      '--lumibionic-text-scale',
+      String(settings.textSize / 100)
     )
 
     root.style.setProperty(
@@ -6217,6 +6224,7 @@ export function setup(ctx) {
       '--lumibionic-font-family',
       '--lumibionic-preview-font',
       '--lumibionic-text-size',
+      '--lumibionic-text-scale',
       '--lumibionic-line-height',
       '--lumibionic-reading-width',
       '--lumibionic-paragraph-spacing',
